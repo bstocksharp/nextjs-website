@@ -2,32 +2,58 @@
 @tailwind components;
 @tailwind utilities;
 
+/* #F2F4F6 - Light shades - text and background */
+/* #D9767D - Light accent - attention */
+/* #668A4A - Main Brand Color - main identity */
+/* #034C3C - dark accent - attention */
+/* #201129 - dark shades - text and background (170C1D?)*/
+
+/* default */
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --text: #170c1d;
+  --accent: #d9767d;
+  --background: #f2f4f6;
+  --alt-accent: #034c3c;
+  --main: #668a4a;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --foreground-rgb: 255, 255, 255;
-    --background-start-rgb: 0, 0, 0;
-    --background-end-rgb: 0, 0, 0;
-  }
+/* dark mode */
+:root.dark-mode {
+  --text: #f2f4f6;
+  --accent: #034c3c;
+  --background: #170c1d;
+  --alt-accent: #d9767d;
+  --main: #668a4a;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  color: var(--text);
+  background: var(--background);
 }
 
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
+nav {
+  background: var(--main);
+  height: 65px;
+  min-width: 600px;
+  display: flex;
+  justify-content: center; /* Spreads items horizontally */
+  align-items: center; /* Vertically center */
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.darkToggle {
+  background: var(--accent);
+  display: inline-block;
+  position: absolute;
+  text-align: center;
+  width: 1.7em;
+  height: 1.7em;
+  border-radius: 50%;
+  margin-left: 95%;
+}
+
+.nav-link {
+  padding: 5px;
 }
