@@ -15,15 +15,24 @@ export default function NavBar({
   isMenuOpen,
   toggleMenu,
 }: NavBarProps) {
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [windowWidth, setWindowWidth] = useState(0);
 
   useEffect(() => {
     const handleResize = () => {
       setWindowWidth(window.innerWidth);
     };
-    window.addEventListener("resize", handleResize);
+
+    // Check if window object is defined (client-side)
+    if (typeof window !== "undefined") {
+      // Initialize windowWidth with current window width
+      setWindowWidth(window.innerWidth);
+      window.addEventListener("resize", handleResize);
+    }
+
     return () => {
-      window.removeEventListener("resize", handleResize);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("resize", handleResize);
+      }
     };
   }, []);
 
