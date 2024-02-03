@@ -33,27 +33,53 @@ body {
 
 nav {
   background: var(--main);
-  height: 65px;
-  min-width: 600px;
+  height: 56px;
+  font-size: clamp(1rem, 1.25vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
   align-items: center; /* Vertically center */
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
 }
 
-.darkToggle {
-  background: var(--accent);
-  display: inline-block;
+.nav-link-full {
+  padding: 0 10px;
+}
+
+.nav-right-icons {
+  margin-left: auto; /* Push the icons to the right */
+}
+
+.nav-hamburger {
+  border-radius: 16px;
+  padding: 0 32.5px;
+}
+
+.nav-darkToggle {
+  background-color: var(--accent);
+  border-radius: 16px;
+  width: 70px;
+  height: 30px;
+}
+
+.nav-small {
+  justify-content: right;
+  padding-right: 25px;
+}
+
+.nav-dropdown-content {
   position: absolute;
-  text-align: center;
-  width: 1.7em;
-  height: 1.7em;
-  border-radius: 50%;
-  margin-left: 95%;
+  top: 10%;
+  left: 10%; /* Align to the right side of the screen */
+  background-color: var(--main); /* Set background color */
 }
 
-.nav-link {
-  padding: 5px;
+.nav-dropdown-content a {
+  display: block;
+  padding: 10px;
+  text-align: left; /* Align text to the right */
+  color: var(--text-color); /* Set text color */
+  text-decoration: none; /* Remove underline */
+}
+
+.nav-dropdown-content a:hover {
+  color: var(--accent);
 }
