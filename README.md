@@ -1,4 +1,4 @@
-This is a [Next.js](https://nextjs.org/) 
+This is a [Next.js](https://nextjs.org/) project
 
 ## Getting Started
 
