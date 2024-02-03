@@ -1,7 +1,6 @@
 "use client";
 
 import "./globals.css";
-import Link from "next/link";
 import NavBar from "./nav";
 import React, { useState } from "react";
 
@@ -15,12 +14,23 @@ export default function RootLayout({
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
   };
+
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
   return (
     <html className={darkMode ? "dark-mode" : ""}>
       <body>
         <main>
-          <NavBar darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-          {children}
+          <NavBar
+            darkMode={darkMode}
+            toggleDarkMode={toggleDarkMode}
+            isMenuOpen={isMenuOpen}
+            toggleMenu={toggleMenu}
+          />
+          {!isMenuOpen && children}
         </main>
       </body>
     </html>

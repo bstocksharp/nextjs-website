@@ -34,7 +34,7 @@ body {
 nav {
   background: var(--main);
   height: 56px;
-  font-size: clamp(1rem, 1.25vw, 1.25rem); /* fix this probably */
+  font-size: clamp(0.75rem, 1.25vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
   align-items: center; /* Vertically center */
@@ -45,12 +45,16 @@ nav {
 }
 
 .nav-right-icons {
-  margin-left: auto; /* Push the icons to the right */
+  position: absolute;
+  font-size: 1.25rem;
+  right: 0;
+  top: 17px;
 }
 
 .nav-hamburger {
   border-radius: 16px;
-  padding: 0 32.5px;
+  padding: 0 28px;
+  color: var(--text);
 }
 
 .nav-darkToggle {
@@ -60,24 +64,22 @@ nav {
   height: 30px;
 }
 
-.nav-small {
-  justify-content: right;
-  padding-right: 25px;
+.hidden {
+  display: none;
 }
 
 .nav-dropdown-content {
   position: absolute;
   top: 10%;
-  left: 10%; /* Align to the right side of the screen */
-  background-color: var(--main); /* Set background color */
+  left: 10%;
+  background-color: var(--main);
+  font-size: clamp(2rem, 2.25vw, 2.5rem);
+  text-align: left;
 }
 
 .nav-dropdown-content a {
   display: block;
   padding: 10px;
-  text-align: left; /* Align text to the right */
-  color: var(--text-color); /* Set text color */
-  text-decoration: none; /* Remove underline */
 }
 
 .nav-dropdown-content a:hover {
