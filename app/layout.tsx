@@ -2,6 +2,7 @@
 
 import "./globals.css";
 import NavBar from "./nav";
+import Footer from "./footer";
 import React, { useState } from "react";
 
 export default function RootLayout({
@@ -31,6 +32,8 @@ export default function RootLayout({
             toggleMenu={toggleMenu}
           />
           {!isMenuOpen && children}
+
+          <Footer />
         </main>
       </body>
     </html>

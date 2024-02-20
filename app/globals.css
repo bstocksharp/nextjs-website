@@ -29,12 +29,28 @@
 body {
   color: var(--text);
   background: var(--background);
+
+  position: relative;
+  min-height: 100vh;
+
+  display: block;
+  text-align: center;
 }
 
+.hidden {
+  display: none;
+}
+
+.center-image {
+  display: flex;
+  justify-content: center;
+}
+
+/* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ NAVBAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 nav {
   background: var(--main);
   height: 56px;
-  font-size: clamp(0.75rem, 1.25vw, 1.25rem); /* fix this probably */
+  font-size: clamp(0.85rem, 1.25vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
   align-items: center; /* Vertically center */
@@ -51,12 +67,6 @@ nav {
   top: 17px;
 }
 
-.nav-hamburger {
-  border-radius: 16px;
-  padding: 0 28px;
-  color: var(--text);
-}
-
 .nav-darkToggle {
   background-color: var(--accent);
   border-radius: 16px;
@@ -64,8 +74,15 @@ nav {
   height: 30px;
 }
 
-.hidden {
-  display: none;
+.nav-hamburger {
+  border-radius: 16px;
+  padding: 0 28px;
+  color: var(--text);
+}
+
+.nav-active-tab {
+  color: var(--accent);
+  font-size: 1.25rem;
 }
 
 .nav-dropdown-content {
@@ -85,3 +102,43 @@ nav {
 .nav-dropdown-content a:hover {
   color: var(--accent);
 }
+
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ NAVBAR CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ FOOTER CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
+.foot {
+  position: absolute;
+  bottom: 0;
+  width: 100%;
+  height: 5rem;
+
+  background-color: #034c3c;
+  color: var(--background);
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.footer-logos {
+  display: flex;
+  justify-content: center;
+}
+
+.show-email-tooltip {
+  width: 210px;
+  background-color: var(--text);
+  color: var(--background);
+  text-align: center;
+  border-radius: 6px;
+  padding: 5px 0;
+  position: absolute;
+  z-index: 1;
+  bottom: 75%;
+  left: 50%;
+  margin-left: -35px;
+}
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ FOOTER CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ MAINPAGE CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
+
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ MAINPAGE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
