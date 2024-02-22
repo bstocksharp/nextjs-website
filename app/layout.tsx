@@ -24,17 +24,15 @@ export default function RootLayout({
   return (
     <html className={darkMode ? "dark-mode" : ""}>
       <body>
-        <main>
-          <NavBar
-            darkMode={darkMode}
-            toggleDarkMode={toggleDarkMode}
-            isMenuOpen={isMenuOpen}
-            toggleMenu={toggleMenu}
-          />
-          {!isMenuOpen && children}
+        <NavBar
+          darkMode={darkMode}
+          toggleDarkMode={toggleDarkMode}
+          isMenuOpen={isMenuOpen}
+          toggleMenu={toggleMenu}
+        />
+        {!isMenuOpen && children}
 
-          <Footer />
-        </main>
+        {!isMenuOpen && <Footer />}
       </body>
     </html>
   );

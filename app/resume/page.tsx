@@ -1,7 +1,14 @@
+import "./resume.css";
+import React from "react";
+
 export default function ResumePage() {
   return (
-    <div>
-      <h1>Resume here</h1>
-    </div>
+    <main>
+      <iframe
+        src={"/resume.pdf"}
+        style={{ width: "100%", height: "100%", border: "none" }}
+        title="PDF Viewer"
+      />
+    </main>
   );
 }

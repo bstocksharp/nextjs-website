@@ -28,7 +28,7 @@ export default function Footer() {
   };
 
   return (
-    <footer className="foot">
+    <footer>
       <div className="footer-logos">
         <a
           href="https://www.linkedin.com/in/bryce-sharp/"

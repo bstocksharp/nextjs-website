@@ -37,6 +37,11 @@ body {
   text-align: center;
 }
 
+main {
+  /*100% minus the header and footer*/
+  height: calc(100vh - 9rem);
+}
+
 .hidden {
   display: none;
 }
@@ -49,7 +54,6 @@ body {
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ NAVBAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 nav {
   background: var(--main);
-  height: 56px;
   font-size: clamp(0.8rem, 1.5vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
@@ -109,7 +113,7 @@ nav {
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ NAVBAR CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ FOOTER CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
-.foot {
+footer {
   position: absolute;
   bottom: 0;
   width: 100%;

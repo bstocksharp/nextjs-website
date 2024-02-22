@@ -49,58 +49,56 @@ export default function NavBar({
   ];
 
   return (
-    <div>
-      <nav style={{ height: isMenuOpen ? "100vh" : "65px" }}>
-        {!isMenuOpen && windowWidth > 600 ? (
-          // layout for full page
-          <div>
-            {navItems.map((item) => (
-              <>
-                <Link
-                  href={item.href}
-                  className={`nav-link-full ${
-                    pathname === item.href ? "nav-active-tab" : ""
-                  }`}
-                >
-                  {item.label}
-                </Link>
-                {
-                  item !== navItems[navItems.length - 1] &&
-                    "|" /* Add separator if it's not the last item */
-                }
-              </>
-            ))}
-          </div>
-        ) : (
-          // layout for when menu is toggled or small screen size
-          <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
-            {navItems.map((item) => (
+    <nav style={{ height: isMenuOpen ? "100vh" : "4rem" }}>
+      {!isMenuOpen && windowWidth > 600 ? (
+        // layout for full page
+        <div>
+          {navItems.map((item) => (
+            <>
               <Link
                 href={item.href}
-                // allows the current active tab to be shown even when small
                 className={`nav-link-full ${
-                  pathname === item.href ? "nav-active-tab" : "hidden" // hides the non-active nav items when < 600 px
-                } ${
-                  windowWidth < 600 && !isMenuOpen ? "nav-active-tab-small" : ""
+                  pathname === item.href ? "nav-active-tab" : ""
                 }`}
-                onClick={toggleMenu}
-                key={item.href}
               >
                 {item.label}
               </Link>
-            ))}
-          </div>
-        )}
-
-        <div className="nav-right-icons">
-          <button className="nav-darkToggle" onClick={toggleDarkMode}>
-            {darkMode ? "🔆" : "🌒"}
-          </button>
-          <button className="nav-hamburger" onClick={toggleMenu}>
-            {isMenuOpen ? "X" : "☰"}
-          </button>
+              {
+                item !== navItems[navItems.length - 1] &&
+                  "|" /* Add separator if it's not the last item */
+              }
+            </>
+          ))}
         </div>
-      </nav>
-    </div>
+      ) : (
+        // layout for when menu is toggled or small screen size
+        <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
+          {navItems.map((item) => (
+            <Link
+              href={item.href}
+              // allows the current active tab to be shown even when small
+              className={`nav-link-full ${
+                pathname === item.href ? "nav-active-tab" : "hidden" // hides the non-active nav items when < 600 px
+              } ${
+                windowWidth < 600 && !isMenuOpen ? "nav-active-tab-small" : ""
+              }`}
+              onClick={toggleMenu}
+              key={item.href}
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="nav-right-icons">
+        <button className="nav-darkToggle" onClick={toggleDarkMode}>
+          {darkMode ? "🔆" : "🌒"}
+        </button>
+        <button className="nav-hamburger" onClick={toggleMenu}>
+          {isMenuOpen ? "X" : "☰"}
+        </button>
+      </div>
+    </nav>
   );
 }
