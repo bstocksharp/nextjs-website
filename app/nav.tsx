@@ -55,7 +55,7 @@ export default function NavBar({
           // layout for full page
           <div>
             {navItems.map((item) => (
-              <React.Fragment key={item.href}>
+              <>
                 <Link
                   href={item.href}
                   className={`nav-link-full ${
@@ -68,17 +68,20 @@ export default function NavBar({
                   item !== navItems[navItems.length - 1] &&
                     "|" /* Add separator if it's not the last item */
                 }
-              </React.Fragment>
+              </>
             ))}
           </div>
         ) : (
-          /* layout for when menu is toggled or small screen size*/
+          // layout for when menu is toggled or small screen size
           <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
             {navItems.map((item) => (
               <Link
                 href={item.href}
+                // allows the current active tab to be shown even when small
                 className={`nav-link-full ${
-                  pathname === item.href ? "nav-active-tab" : "hidden"
+                  pathname === item.href ? "nav-active-tab" : "hidden" // hides the non-active nav items when < 600 px
+                } ${
+                  windowWidth < 600 && !isMenuOpen ? "nav-active-tab-small" : ""
                 }`}
                 onClick={toggleMenu}
                 key={item.href}
