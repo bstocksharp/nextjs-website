@@ -58,7 +58,7 @@ export default function NavBar({
               <Link
                 href={item.href}
                 className={`nav-link-full ${
-                  pathname === item.href ? "nav-active-tab" : ""
+                  pathname === item.href && "nav-active-highlight"
                 }`}
               >
                 {item.label}
@@ -78,12 +78,9 @@ export default function NavBar({
               href={item.href}
               // allows the current active tab to be shown even when small
               className={`nav-link-full ${
-                pathname === item.href ? "nav-active-tab" : "hidden" // hides the non-active nav items when < 600 px
-              } ${
-                windowWidth < 600 && !isMenuOpen ? "nav-active-tab-small" : ""
-              }`}
+                pathname === item.href ? "nav-active-highlight" : "hidden" // hides the non-active nav items when < 600 px
+              } ${windowWidth < 600 && !isMenuOpen && "nav-active-tab-small"}`}
               onClick={toggleMenu}
-              key={item.href}
             >
               {item.label}
             </Link>
@@ -92,7 +89,7 @@ export default function NavBar({
       )}
 
       <div className="nav-right-icons">
-        <button className="nav-darkToggle" onClick={toggleDarkMode}>
+        <button className="nav-darkToggle-button" onClick={toggleDarkMode}>
           {darkMode ? "🔆" : "🌒"}
         </button>
         <button className="nav-hamburger" onClick={toggleMenu}>

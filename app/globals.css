@@ -39,7 +39,7 @@ body {
 
 main {
   /*100% minus the header and footer*/
-  height: calc(100vh - 9rem);
+  height: calc(100vh - 9rem); /* dont love fixed height */
 }
 
 .hidden {
@@ -53,7 +53,7 @@ main {
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ NAVBAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 nav {
-  background: var(--main);
+  background: var(--background);
   font-size: clamp(0.8rem, 1.5vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
@@ -71,10 +71,7 @@ nav {
   top: 17px;
 }
 
-.nav-darkToggle {
-  background-color: var(--accent);
-  border-radius: 16px;
-  width: 70px;
+.nav-darkToggle-button {
   height: 30px;
 }
 
@@ -84,7 +81,7 @@ nav {
   color: var(--text);
 }
 
-.nav-active-tab {
+.nav-active-highlight {
   color: var(--accent);
 }
 
@@ -96,7 +93,6 @@ nav {
   position: absolute;
   top: 10%;
   left: 10%;
-  background-color: var(--main);
   font-size: clamp(2rem, 2.25vw, 2.5rem);
   text-align: left;
 }
@@ -119,7 +115,7 @@ footer {
   width: 100%;
   height: 5rem;
 
-  background-color: #034c3c;
+  background-color: var(--accent);
   color: var(--background);
 
   display: flex;
@@ -148,4 +144,36 @@ footer {
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ MAINPAGE CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 
+.home-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.pic-and-words-wrapper {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  justify-content: center;
+  align-items: center;
+}
+
+.words-wrapper h2 {
+  display: inline;
+}
+
+.words-box-wrapper {
+  display: inline-block; /* Make sure the words box is displayed inline */
+  background-color: var(--accent);
+  width: 130px;
+  text-align: left;
+  margin-left: 2px;
+  padding-left: 3px;
+}
+
+@media (max-width: 600px) {
+  .pic-and-words-wrapper {
+    flex-direction: column;
+  }
+}
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ MAINPAGE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */

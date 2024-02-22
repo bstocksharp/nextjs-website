@@ -10,7 +10,7 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(true);
 
   const toggleDarkMode = () => {
     setDarkMode(!darkMode);
@@ -24,7 +24,8 @@ export default function RootLayout({
   return (
     <html className={darkMode ? "dark-mode" : ""}>
       <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />{" "}
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Bryce Sharp Website</title>
       </head>
       <body>
         <NavBar
