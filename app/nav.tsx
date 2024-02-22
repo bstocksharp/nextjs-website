@@ -75,6 +75,7 @@ export default function NavBar({
         <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
           {navItems.map((item) => (
             <Link
+              key={item.href}
               href={item.href}
               // allows the current active tab to be shown even when small
               className={`nav-link-full ${

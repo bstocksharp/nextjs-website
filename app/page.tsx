@@ -23,8 +23,8 @@ export default function Home() {
     <div className="home-wrapper">
       <div className="pic-and-words-wrapper">
         <div className="words-wrapper">
-          <h1>H!! I'm Bryce. </h1>
-          <h2>I'm a </h2>
+          <h1>H!! I&apos;m Bryce. </h1>
+          <h2>I&apos;m a </h2>
           <h2 className="words-box-wrapper">{myTitle}</h2>
         </div>
         <div className="center-image">
