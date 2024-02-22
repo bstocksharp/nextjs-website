@@ -6,8 +6,13 @@ export default function ResumePage() {
     <main>
       <iframe
         src={"/resume.pdf"}
-        style={{ width: "100%", height: "100%", border: "none" }}
-        title="PDF Viewer"
+        style={{
+          width: "100%",
+          height: "100%",
+          border: "none",
+          overflow: "auto",
+        }}
+        title="Bryce Sharp Resume"
       />
     </main>
   );
