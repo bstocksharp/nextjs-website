@@ -148,7 +148,9 @@ footer {
   display: flex;
   justify-content: center;
   align-items: center;
-  margin: 100px;
+  margin-left: 100px;
+  margin-right: 100px;
+  min-width: 150px;
 }
 
 .pic-and-words-wrapper {
@@ -160,13 +162,38 @@ footer {
 }
 
 .words-wrapper {
-  font-size: clamp(1.6rem, 3vw, 3rem);
+  font-size: clamp(1rem, 2.5vw, 3rem);
   width: 100%;
   margin-right: 5%;
+  text-align: right;
 }
 
-.words-wrapper h2 {
-  display: inline;
+.words-single-line {
+  display: flex;
+  justify-content: right;
+}
+
+.title-box-wrapper {
+  background-color: var(--accent);
+  display: flex;
+  margin-left: 6px;
+  padding: 0 3px;
+  align-items: center;
+}
+
+@keyframes cursor-blink {
+  0% {
+    opacity: 0;
+  }
+}
+
+.title-box-wrapper::after {
+  content: "";
+  width: 2px;
+  height: 90%;
+  background: var(--alt-accent);
+  display: inline-block;
+  animation: cursor-blink 1.5s steps(2) infinite;
 }
 
 .profile-image {
@@ -176,16 +203,11 @@ footer {
   margin-left: 5%;
 }
 
-.title-box-wrapper {
-  background-color: var(--accent);
-  text-align: left;
-  padding: 3px;
-}
-
 @media (max-width: 600px) {
   .pic-and-words-wrapper {
     flex-direction: column;
     text-align: center;
+    align-items: center;
   }
   .profile-image {
     padding: 0px;
@@ -194,6 +216,12 @@ footer {
   .words-wrapper {
     padding: 0px;
     margin: 0px;
+    text-align: center;
+    align-items: center;
+  }
+
+  .words-single-line {
+    justify-content: center;
   }
 }
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ MAINPAGE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
