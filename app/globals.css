@@ -54,7 +54,7 @@ main {
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ NAVBAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 nav {
   background: var(--background);
-  font-size: clamp(0.8rem, 1.5vw, 1.25rem); /* fix this probably */
+  font-size: clamp(1.05rem, 1.5vw, 1.25rem); /* fix this probably */
   display: flex;
   justify-content: center; /* Spreads items horizontally */
   align-items: center; /* Vertically center */
@@ -148,32 +148,52 @@ footer {
   display: flex;
   justify-content: center;
   align-items: center;
+  margin: 100px;
 }
 
 .pic-and-words-wrapper {
   display: flex;
   flex-direction: row;
+  align-items: center; /* keep vertically aligned */
+  text-align: right;
   width: 100%;
-  justify-content: center;
-  align-items: center;
+}
+
+.words-wrapper {
+  font-size: clamp(1.6rem, 3vw, 3rem);
+  width: 100%;
+  margin-right: 5%;
 }
 
 .words-wrapper h2 {
   display: inline;
 }
 
-.words-box-wrapper {
-  display: inline-block; /* Make sure the words box is displayed inline */
+.profile-image {
+  display: flex;
+  width: 100%;
+  justify-content: left;
+  margin-left: 5%;
+}
+
+.title-box-wrapper {
   background-color: var(--accent);
-  width: 130px;
   text-align: left;
-  margin-left: 2px;
-  padding-left: 3px;
+  padding: 3px;
 }
 
 @media (max-width: 600px) {
   .pic-and-words-wrapper {
     flex-direction: column;
+    text-align: center;
+  }
+  .profile-image {
+    padding: 0px;
+    margin: 0px;
+  }
+  .words-wrapper {
+    padding: 0px;
+    margin: 0px;
   }
 }
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ MAINPAGE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */

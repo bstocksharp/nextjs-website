@@ -9,7 +9,7 @@ export default function Home() {
   useEffect(() => {
     const timeouts = [
       setTimeout(() => setMyTitle("UI/UX Designer."), 4000),
-      setTimeout(() => setMyTitle("Father."), 8000),
+      setTimeout(() => setMyTitle("Software Engineer."), 8000),
       // If you want the third thing to stay permanently
       // you don't need to set another timeout
     ];
@@ -23,16 +23,16 @@ export default function Home() {
     <div className="home-wrapper">
       <div className="pic-and-words-wrapper">
         <div className="words-wrapper">
-          <h1>H!! I&apos;m Bryce. </h1>
+          <h1>Hi! I&apos;m Bryce. </h1>
           <h2>I&apos;m a </h2>
-          <h2 className="words-box-wrapper">{myTitle}</h2>
+          <h2 className="title-box-wrapper">{myTitle}</h2>
         </div>
-        <div className="center-image">
+        <div className="profile-image">
           <Image
             src="/profile_pic_2_removed.png"
             alt="Profile Picture"
-            width={300}
-            height={300}
+            width={400}
+            height={400}
             style={{ borderRadius: "100%" }}
           />
         </div>
