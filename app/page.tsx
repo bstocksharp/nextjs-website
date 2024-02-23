@@ -4,7 +4,7 @@ import Image from "next/image";
 import React, { useState, useEffect } from "react";
 
 export default function Home() {
-  const [myTitle, setMyTitle] = useState("Software Egineer.");
+  const [myTitle, setMyTitle] = useState("Software Engineer.");
 
   useEffect(() => {
     const timeouts = [
