@@ -1,9 +1,9 @@
 "use client";
 import React, { useState } from "react";
-import { CreateDinner } from "@/app/calendar/addDinners";
+import { CreateDinner } from "@/app/calendar/createDinner";
 import { useRouter } from "next/navigation";
 
-export default function addDinner() {
+export default function AddDinner() {
   const [isAddDinnerOpen, setIsAddDinnerOpen] = useState(false);
   const [createdBy, setCreatedBy] = useState("");
   const [dinnerItem, setDinnerItem] = useState("");

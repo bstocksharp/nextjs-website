@@ -3,7 +3,7 @@ import { sql } from "@vercel/postgres";
 import { unstable_noStore as noStore } from "next/cache";
 import AddDinner from "./addDinner";
 
-export async function fetchDinners() {
+export async function FetchDinners() {
   try {
     const data = await sql`SELECT * from dinner_table`;
     noStore();
@@ -15,7 +15,7 @@ export async function fetchDinners() {
 }
 
 export default async function CalendarPage() {
-  const dinners = await fetchDinners();
+  const dinners = await FetchDinners();
 
   return (
     <main>

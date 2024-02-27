@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 // Define the Server Action function to create a new dinner
-export async function createDinner(formData: FormData) {
+export async function CreateDinner(formData: FormData) {
   const { createdBy, dinnerItem, mealDate } = {
     createdBy: formData.get("createdBy"),
     dinnerItem: formData.get("dinnerItem"),
