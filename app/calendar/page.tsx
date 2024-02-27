@@ -1,12 +1,10 @@
 "use server";
 import { sql } from "@vercel/postgres";
-import { unstable_noStore as noStore } from "next/cache";
 import AddDinner from "./addDinner";
 
 async function FetchDinners() {
   try {
     const data = await sql`SELECT * from dinner_table`;
-    noStore();
     return data.rows;
   } catch (error) {
     console.error("Database Error:", error);
