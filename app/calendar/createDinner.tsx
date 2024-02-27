@@ -7,9 +7,9 @@ import { redirect } from "next/navigation";
 // Define the Server Action function to create a new dinner
 export async function CreateDinner(formData: FormData) {
   const { createdBy, dinnerItem, mealDate } = {
-    createdBy: formData.get("createdBy"),
-    dinnerItem: formData.get("dinnerItem"),
-    mealDate: formData.get("mealDate"),
+    createdBy: formData.get("createdBy") as string | null,
+    dinnerItem: formData.get("dinnerItem") as string | null,
+    mealDate: formData.get("mealDate") as string | null,
   };
 
   //   Insert the new dinner into the database
