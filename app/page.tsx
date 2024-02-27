@@ -49,6 +49,7 @@ export default function Home() {
           <Image
             src="/profile_pic_2_removed.png"
             alt="Profile Picture"
+            priority
             width={350}
             height={350}
             style={{ borderRadius: "100%" }}

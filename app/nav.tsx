@@ -2,6 +2,8 @@ import Link from "next/link";
 import React, { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 
+//TODO : look into loading.tsx
+
 interface NavBarProps {
   darkMode: boolean;
   toggleDarkMode: () => void;
@@ -51,25 +53,22 @@ export default function NavBar({
   return (
     <nav style={{ height: isMenuOpen ? "100vh" : "4rem" }}>
       {!isMenuOpen && windowWidth > 600 ? (
-        // layout for full page
-        <div>
+        // layout for large screens
+        <>
           {navItems.map((item) => (
-            <>
+            <React.Fragment key={item.href}>
               <Link
                 href={item.href}
                 className={`nav-link-full ${
-                  pathname === item.href && "nav-active-highlight"
+                  pathname === item.href ? "nav-active-highlight" : ""
                 }`}
               >
                 {item.label}
               </Link>
-              {
-                item !== navItems[navItems.length - 1] &&
-                  "|" /* Add separator if it's not the last item */
-              }
-            </>
+              {item !== navItems[navItems.length - 1] && "|"}
+            </React.Fragment>
           ))}
-        </div>
+        </>
       ) : (
         // layout for when menu is toggled or small screen size
         <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
@@ -78,9 +77,9 @@ export default function NavBar({
               key={item.href}
               href={item.href}
               // allows the current active tab to be shown even when small
-              className={`nav-link-full ${
-                pathname === item.href ? "nav-active-highlight" : "hidden" // hides the non-active nav items when < 600 px
-              } ${windowWidth < 600 && !isMenuOpen && "nav-active-tab-small"}`}
+              className={`${
+                pathname != item.href ? "hidden" : "nav-active-highlight"
+              } ${windowWidth < 600 && !isMenuOpen ? "nav-active-small" : ""}`}
               onClick={toggleMenu}
             >
               {item.label}

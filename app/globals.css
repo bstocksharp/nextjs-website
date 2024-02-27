@@ -40,6 +40,7 @@ body {
 main {
   /*100% minus the header and footer*/
   height: calc(100vh - 9rem); /* dont love fixed height */
+  justify-content: center;
 }
 
 .hidden {
@@ -85,7 +86,7 @@ nav {
   color: var(--accent);
 }
 
-.nav-active-tab-small {
+.nav-active-small {
   font-size: 1.25rem;
 }
 
@@ -225,3 +226,86 @@ footer {
   }
 }
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ MAINPAGE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ CALENDAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
+
+.add-dinner-button-center {
+  display: flex;
+  justify-content: center;
+}
+
+.add-dinner-button {
+  height: 50px;
+  width: 200px;
+  background-color: var(--accent);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 25px;
+  transition: filter 0.2s ease;
+}
+
+.add-dinner-button:active {
+  filter: brightness(70%); /* Reduce brightness when active */
+}
+
+.add-dinner-overlay {
+  position: fixed;
+  top: 4rem;
+  left: 0;
+  width: 100%;
+  height: calc(100vh - 9rem);
+  background-color: rgba(0, 0, 0, 0.5);
+}
+
+.add-dinner-popup {
+  position: fixed;
+  background-color: var(--background);
+  padding: 10px 30px 15px 30px;
+  border-radius: 10px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+input {
+  color: #170c1d;
+}
+
+.overlay_form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.overlay_form label {
+  text-align: left;
+  display: flex;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.overlay_form input {
+  display: flex;
+}
+
+.dinner-submit-button {
+  margin-top: 20px;
+  height: 25px;
+  width: 100px;
+  background-color: var(--accent);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border-radius: 25px;
+  transition: filter 0.2s ease;
+}
+
+.calendar-wrapper {
+  background-color: var(--alt-accent);
+}
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ CALENDAR CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
+
+/* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ PUZZKE CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
+
+/* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ PUZZLE CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
