@@ -1,6 +1,6 @@
 "use client";
 import React, { useState } from "react";
-import { createDinner } from "@/app/calendar/addDinners";
+import { CreateDinner } from "@/app/calendar/addDinners";
 import { useRouter } from "next/navigation";
 
 export default function addDinner() {
@@ -21,7 +21,7 @@ export default function addDinner() {
     toggleMenu();
 
     try {
-      await createDinner(new FormData(e.target)); // Call the Server Action with FormData
+      await CreateDinner(new FormData(e.target)); // Call the Server Action with FormData
       console.log("Dinner added successfully");
 
       router.refresh();
