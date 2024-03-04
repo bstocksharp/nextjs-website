@@ -12,7 +12,7 @@ I had an old website : bstocksharp.github.io but sadly i only pushed the build t
 Will start as a way to display the dinner items my wife and I will have over the next 2 weeks so i don't ask "what's for dinner" every day.
 Next to impliment will be a way to display tasks due on a certain date (ie : send email to X by Friday) 
 Next to impliment will be recurring tasks (ie : trash every tuesday)
-Hopefulyl will have a way to display this in a clean and easy manner to add new tasks/events.
+Hopefully will have a way to display this in a clean and easy manner to add new tasks/events.
 
 
 ## Puzzle a Day
