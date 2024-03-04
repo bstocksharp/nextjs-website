@@ -5,11 +5,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 // Define the Server Action function to create a new dinner
-export async function CreateDinner(formData: FormData) {
+export async function InsertDinner(formData: FormData) {
   const { createdBy, dinnerItem, mealDate } = {
-    createdBy: formData.get("createdBy") as string | null,
-    dinnerItem: formData.get("dinnerItem") as string | null,
-    mealDate: formData.get("mealDate") as string | null,
+    createdBy: formData.get("createdBy") as string,
+    dinnerItem: formData.get("dinnerItem") as string,
+    mealDate: formData.get("mealDate") as string,
   };
 
   //   Insert the new dinner into the database

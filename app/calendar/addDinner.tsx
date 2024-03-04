@@ -1,28 +1,56 @@
 "use client";
 import React, { useState } from "react";
-import { CreateDinner } from "@/app/calendar/createDinner";
+import { InsertDinner } from "@/app/calendar/insertDinner";
 import { useRouter } from "next/navigation";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 export default function AddDinner() {
   const [isAddDinnerOpen, setIsAddDinnerOpen] = useState(false);
-  const [createdBy, setCreatedBy] = useState("");
-  const [dinnerItem, setDinnerItem] = useState("");
-  const [mealDate, setMealDate] = useState("");
+  const [dinner, setDinner] = useState({
+    createdBy: "",
+    dinnerItem: "",
+    mealDate: new Date(),
+  });
 
-  const router = useRouter();
+  const handleDinner = (e: any) => {
+    setDinner({
+      ...dinner,
+      [e.target.name]: e.target.value,
+    });
+  };
+
+  const handleDateChange = (date: Date) => {
+    setDinner({
+      ...dinner,
+      mealDate: date,
+    });
+  };
 
   const toggleMenu = () => {
     setIsAddDinnerOpen(!isAddDinnerOpen);
   };
 
+  const isFormValid = () => {
+    return Object.values(dinner).every(
+      (value) => value !== null && value !== ""
+    );
+  };
+
+  const router = useRouter();
   const create = async (e: any) => {
     e.preventDefault(); // Prevent the default form submission behavior
-    console.log(new FormData(e.target));
     toggleMenu();
 
     try {
-      await CreateDinner(new FormData(e.target)); // Call the Server Action with FormData
+      await InsertDinner(new FormData(e.target)); // Call the Server Action with FormData
       console.log("Dinner added successfully");
+
+      setDinner({
+        createdBy: "",
+        dinnerItem: "",
+        mealDate: new Date(),
+      });
 
       router.refresh();
     } catch (error) {
@@ -35,6 +63,7 @@ export default function AddDinner() {
       <button className="add-dinner-button" onClick={toggleMenu}>
         <div>Add a Dinner</div>
       </button>
+
       {isAddDinnerOpen && (
         <>
           <div className="add-dinner-overlay" onClick={toggleMenu} />
@@ -45,26 +74,30 @@ export default function AddDinner() {
                 type="text"
                 placeholder="Created By"
                 name="createdBy"
-                value={createdBy}
-                onChange={(e) => setCreatedBy(e.target.value)}
+                value={dinner.createdBy}
+                onChange={handleDinner}
               />
               <label>Dinner Item</label>
               <input
                 type="text"
                 placeholder="Dinner Item"
                 name="dinnerItem"
-                value={dinnerItem}
-                onChange={(e) => setDinnerItem(e.target.value)}
+                value={dinner.dinnerItem}
+                onChange={handleDinner}
               />
               <label>Date of Meal</label>
-              <input
-                type="text"
-                placeholder="mm/dd/yyyy"
+              <DatePicker
+                selected={dinner.mealDate}
+                onChange={handleDateChange}
                 name="mealDate"
-                value={mealDate}
-                onChange={(e) => setMealDate(e.target.value)}
+                dateFormat="MM/dd/yyyy"
+                placeholderText="mm/dd/yyyy"
               />
-              <button type="submit" className="dinner-submit-button">
+              <button
+                type="submit"
+                className="dinner-submit-button"
+                disabled={!isFormValid()}
+              >
                 Submit
               </button>
             </form>

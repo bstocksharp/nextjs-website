@@ -301,6 +301,11 @@ input {
   transition: filter 0.2s ease;
 }
 
+.dinner-submit-button:disabled {
+  opacity: 0.5; /* Reduce opacity when button is disabled */
+  cursor: not-allowed; /* Change cursor style to indicate button is inactive */
+}
+
 .calendar-wrapper {
   background-color: var(--alt-accent);
 }

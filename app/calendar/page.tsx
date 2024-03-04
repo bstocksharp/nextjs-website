@@ -1,19 +1,10 @@
 "use server";
 import { sql } from "@vercel/postgres";
 import AddDinner from "./addDinner";
-
-async function FetchDinners() {
-  try {
-    const data = await sql`SELECT * from dinner_table`;
-    return data.rows;
-  } catch (error) {
-    console.error("Database Error:", error);
-    throw new Error("Failed to fetch revenue data.");
-  }
-}
+import { fetchDinners } from "./calendarDB";
 
 export default async function CalendarPage() {
-  const dinners = await FetchDinners();
+  const dinners = await fetchDinners();
 
   return (
     <main>
@@ -21,7 +12,7 @@ export default async function CalendarPage() {
         {dinners.map((row) => (
           <div key={row.id}>
             {row.created_by} - {row.dinner_item} -{" "}
-            {row.date_of_meal.toISOString().split("T")[0]}
+            {row.date_of_meal?.toISOString().split("T")[0]}
           </div>
         ))}
       </div>
