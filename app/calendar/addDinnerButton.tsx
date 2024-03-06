@@ -1,7 +1,6 @@
 "use client";
 import React, { useState } from "react";
 import { InsertDinner } from "@/app/calendar/insertDinner";
-import { useRouter } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -25,6 +24,8 @@ export default function AddDinnerButton({
   };
 
   const handleDateChange = (date: Date) => {
+    date.setHours(12, 0, 0, 0);
+    console.log(date);
     setDinner({
       ...dinner,
       mealDate: date,
@@ -41,15 +42,30 @@ export default function AddDinnerButton({
     );
   };
 
-  const router = useRouter();
   const create = async (e: any) => {
     e.preventDefault();
     toggleMenu();
 
     try {
-      await InsertDinner(new FormData(e.target));
+      // Set the mealDate to noon before submitting
+      const noonDate = new Date(dinner.mealDate);
+      noonDate.setHours(12, 0, 0, 0);
+      setDinner({
+        ...dinner,
+        mealDate: noonDate,
+      });
+
+      // Format the mealDate to remove the time portion and adjust to the desired timezone
+      const formattedDate = noonDate.toISOString();
+      console.log(formattedDate);
+      // Create a new FormData object with the updated mealDate
+      const formData = new FormData(e.target);
+      formData.set("mealDate", formattedDate);
+      // Insert dinner with the updated FormData object
+      await InsertDinner(formData);
       console.log("Dinner added successfully");
 
+      // Reset dinner state after successful submission
       setDinner({
         createdBy: "",
         dinnerItem: "",
