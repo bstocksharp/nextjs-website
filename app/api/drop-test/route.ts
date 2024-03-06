@@ -5,7 +5,7 @@ export async function GET(request: Request) {
   try {
     // Drop the table if it exists
     // await sql`DROP TABLE dinner_table;`;
-    await sql`DELETE FROM dinner_table WHERE date_of_meal is null or created_by is null ;`;
+    await sql`DELETE FROM dinner_table ;`;
 
     return NextResponse.json(
       { message: "Table dropped successfully" },

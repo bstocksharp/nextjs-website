@@ -40,7 +40,10 @@ body {
 main {
   /*100% minus the header and footer*/
   height: calc(100vh - 9rem); /* dont love fixed height */
-  justify-content: center;
+
+  align-items: center;
+  display: flex;
+  flex-direction: column;
 }
 
 .hidden {
@@ -306,9 +309,53 @@ input {
   cursor: not-allowed; /* Change cursor style to indicate button is inactive */
 }
 
-.calendar-wrapper {
-  background-color: var(--alt-accent);
+.main-calendar-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
+
+.calendar-wrapper {
+  /* background-color: var(--accent); */
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  width: 80vw;
+}
+
+.calendar-day {
+  flex-basis: calc(13% - 2px);
+  flex-grow: 1;
+  height: 100px;
+  margin: 1px;
+  border: 1px solid var(--alt-accent);
+  padding: 1px 5px 5px 5px;
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+}
+
+.calendar-date {
+  font-weight: bold;
+  text-align: right;
+}
+
+.day-of-week {
+  text-transform: uppercase;
+  font-size: smaller;
+}
+
+.calendar-dinner-item {
+  text-align: center;
+  overflow: hidden;
+  font-size: smaller;
+  text-overflow: ellipsis;
+  height: 100%;
+  display: flex; /* Add flex display */
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically */
+}
+
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ CALENDAR CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ PUZZKE CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */

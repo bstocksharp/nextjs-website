@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
-export default function AddDinner() {
+export default function AddDinnerButton({
+  afterUpdate,
+}: {
+  afterUpdate: VoidFunction;
+}) {
   const [isAddDinnerOpen, setIsAddDinnerOpen] = useState(false);
   const [dinner, setDinner] = useState({
     createdBy: "",
@@ -39,11 +43,11 @@ export default function AddDinner() {
 
   const router = useRouter();
   const create = async (e: any) => {
-    e.preventDefault(); // Prevent the default form submission behavior
+    e.preventDefault();
     toggleMenu();
 
     try {
-      await InsertDinner(new FormData(e.target)); // Call the Server Action with FormData
+      await InsertDinner(new FormData(e.target));
       console.log("Dinner added successfully");
 
       setDinner({
@@ -52,7 +56,7 @@ export default function AddDinner() {
         mealDate: new Date(),
       });
 
-      router.refresh();
+      afterUpdate?.();
     } catch (error) {
       console.error("Error adding dinner:", error);
     }
