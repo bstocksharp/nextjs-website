@@ -335,6 +335,10 @@ input {
   min-width: 100px;
 }
 
+.calendar-day:hover {
+  background-color: var(--alt-accent);
+}
+
 .calendar-date {
   font-weight: bold;
   text-align: right;

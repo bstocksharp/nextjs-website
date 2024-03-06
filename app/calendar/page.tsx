@@ -25,7 +25,12 @@ export default function CalendarPage() {
 
   useEffect(() => {
     // Get the date range for the next two weeks
-    const closestSunday = new Date();
+    const today = new Date();
+    const todayAtNoon = new Date(today);
+    todayAtNoon.setHours(12, 0, 0, 0); // Set time to noon (12:00 PM)
+
+    // Get the date range for the next two weeks
+    const closestSunday = new Date(todayAtNoon);
     closestSunday.setDate(closestSunday.getDate() - closestSunday.getDay()); // Get the closest Sunday in the past
 
     const twoWeeksLater = new Date(closestSunday);
@@ -55,6 +60,7 @@ export default function CalendarPage() {
 
     setCalendarDays(calendarData);
   }, [dinners]);
+  console.log(dinners);
 
   return (
     <div className="main-calendar-wrapper">

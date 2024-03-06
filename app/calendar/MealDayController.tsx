@@ -5,8 +5,15 @@ export default function MealDayController({
 }: {
   calendarDay: CalendarDay;
 }) {
+  const moreDateData = () => {
+    console.log("clicked me", calendarDay.date);
+  };
   return (
-    <div key={calendarDay.date.toString()} className="calendar-day">
+    <div
+      key={calendarDay.date.toString()}
+      className="calendar-day"
+      onClick={moreDateData}
+    >
       <div className="calendar-date">
         {calendarDay.date.toLocaleDateString(undefined, { day: "numeric" })}
       </div>
