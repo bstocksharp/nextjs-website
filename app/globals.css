@@ -232,12 +232,36 @@ footer {
 
 /* ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ CALENDAR CSS ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼ */
 
-.add-dinner-button-center {
+.main-calendar-wrapper {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
 }
 
-.add-dinner-button {
+.calendar-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  width: 80vw;
+}
+
+.calendar-day {
+  flex-basis: calc(13% - 2px);
+  flex-grow: 1;
+  height: 100px;
+  margin: 1px;
+  border: 1px solid var(--alt-accent);
+  padding: 1px 5px 5px 5px;
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+}
+
+.calendar-day:hover {
+  background-color: var(--alt-accent);
+}
+
+/* .add-dinner-button {
   height: 50px;
   width: 200px;
   background-color: var(--accent);
@@ -246,13 +270,13 @@ footer {
   align-items: center;
   border-radius: 25px;
   transition: filter 0.2s ease;
-}
+} */
 
-.add-dinner-button:active {
-  filter: brightness(70%); /* Reduce brightness when active */
-}
+/* .add-dinner-button:active {
+  filter: brightness(70%); 
+} */
 
-.add-dinner-overlay {
+.calendar-day-overlay {
   position: fixed;
   top: 4rem;
   left: 0;
@@ -261,14 +285,57 @@ footer {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-.add-dinner-popup {
+.calendar-day-popup {
   position: fixed;
-  background-color: var(--background);
-  padding: 10px 30px 15px 30px;
+  width: 30vw;
+  min-width: 250px;
+  background-color: var(--alt-accent);
   border-radius: 10px;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+
+  top: 100px;
+  left: 30px;
+}
+
+.calendar-day-popup-head {
+  display: flex;
+  background-color: var(--accent);
+  width: 100%;
+  border-radius: 10px 10px 0 0;
+  padding: 5px;
+  top: 10%;
+  left: 20%;
+}
+
+.calendar_popup_close_button {
+  margin-left: 0px; /* Pushes buttons to the right */
+}
+
+.calendar_popup_edit_button {
+  margin-left: auto; /* Pushes buttons to the right */
+  margin-right: 5px;
+}
+
+.calendar-dinner-item {
+  text-align: center;
+  overflow: hidden;
+  font-size: smaller;
+  text-overflow: ellipsis;
+  height: 100%;
+  display: flex; /* Add flex display */
+  justify-content: center; /* Center horizontally */
+  align-items: center; /* Center vertically */
+}
+
+.calender-popup-editmode-buttons {
+  display: flex;
+}
+
+.calender-popup-editmode-button-cancel {
+  margin-left: 0px;
+}
+.calender-popup-editmode-button-save {
+  margin-left: auto;
+  margin-right: 5px;
 }
 
 input {
@@ -309,55 +376,9 @@ input {
   cursor: not-allowed; /* Change cursor style to indicate button is inactive */
 }
 
-.main-calendar-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.calendar-wrapper {
-  /* background-color: var(--accent); */
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-around;
-  width: 80vw;
-}
-
-.calendar-day {
-  flex-basis: calc(13% - 2px);
-  flex-grow: 1;
-  height: 100px;
-  margin: 1px;
-  border: 1px solid var(--alt-accent);
-  padding: 1px 5px 5px 5px;
-  display: flex;
-  flex-direction: column;
-  min-width: 100px;
-}
-
-.calendar-day:hover {
-  background-color: var(--alt-accent);
-}
-
 .calendar-date {
   font-weight: bold;
   text-align: right;
-}
-
-.day-of-week {
-  text-transform: uppercase;
-  font-size: smaller;
-}
-
-.calendar-dinner-item {
-  text-align: center;
-  overflow: hidden;
-  font-size: smaller;
-  text-overflow: ellipsis;
-  height: 100%;
-  display: flex; /* Add flex display */
-  justify-content: center; /* Center horizontally */
-  align-items: center; /* Center vertically */
 }
 
 /* ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ CALENDAR CSS ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲ */

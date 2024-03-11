@@ -60,7 +60,6 @@ export default function CalendarPage() {
 
     setCalendarDays(calendarData);
   }, [dinners]);
-  console.log(dinners);
 
   return (
     <div className="main-calendar-wrapper">
