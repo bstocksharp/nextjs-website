@@ -70,7 +70,7 @@ export default function MealDayController({
                   </button>
                   <button
                     className="calender-popup-editmode-button-cancel"
-                    onClick={toggleCalendarMenu}
+                    onClick={toggleEditMode}
                   >
                     cancel
                   </button>
@@ -78,12 +78,26 @@ export default function MealDayController({
               </>
             ) : (
               <>
-                <div>Dinner</div>
-                <div className="calendar-dinner-item">
-                  {calendarDay.dinnerItem}
-                </div>
-                <div>Link</div>
-                <div className="calendar-dinner-item">{calendarDay.link}</div>
+                {calendarDay.dinnerItem && (
+                  <div className="calendar-dinner-item">
+                    Dinner : {calendarDay.dinnerItem}
+                  </div>
+                )}
+                {calendarDay.link && (
+                  <a
+                    className="calendar-dinner-item"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    href={
+                      calendarDay.link.startsWith("http://") ||
+                      calendarDay.link.startsWith("https://")
+                        ? calendarDay.link
+                        : "https://" + calendarDay.link
+                    }
+                  >
+                    Link to Recipe
+                  </a>
+                )}
               </>
             )}
           </div>

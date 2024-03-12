@@ -5,7 +5,13 @@ import { Meal } from "./sharedTypes";
 
 export async function fetchDinners() {
   try {
-    const data = await sql`SELECT * from dinner_table`;
+    //TODO maybe add dynamic date ranges so we could have non-static-size calendar
+    const data = await sql` 
+    SELECT *
+    FROM dinner_table
+    WHERE date_of_meal >= CURRENT_DATE - EXTRACT(DOW FROM CURRENT_DATE) * INTERVAL '1 day'
+      AND date_of_meal <= CURRENT_DATE + INTERVAL '14 days';
+    `;
     return selectDinners(data.rows);
   } catch (error) {
     console.error("Database Error:", error);

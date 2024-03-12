@@ -9,5 +9,5 @@ export type Meal = {
 export type CalendarDay = {
   date: Date;
   dinnerItem: string;
-  link: string | undefined;
+  link?: string;
 };

@@ -13,6 +13,7 @@ export default function AddDinnerButton({
   const [dinner, setDinner] = useState({
     createdBy: "",
     dinnerItem: "",
+    dinnerLink: "",
     mealDate: new Date(),
   });
 
@@ -57,7 +58,7 @@ export default function AddDinnerButton({
 
       // Format the mealDate to remove the time portion and adjust to the desired timezone
       const formattedDate = noonDate.toISOString();
-      console.log(formattedDate);
+
       // Create a new FormData object with the updated mealDate
       const formData = new FormData(e.target);
       formData.set("mealDate", formattedDate);
@@ -69,6 +70,7 @@ export default function AddDinnerButton({
       setDinner({
         createdBy: "",
         dinnerItem: "",
+        dinnerLink: "",
         mealDate: new Date(),
       });
 
@@ -112,6 +114,14 @@ export default function AddDinnerButton({
                 name="mealDate"
                 dateFormat="MM/dd/yyyy"
                 placeholderText="mm/dd/yyyy"
+              />
+              <label>Link to Recipe</label>
+              <input
+                type="text"
+                placeholder="Link"
+                name="dinnerLink"
+                value={dinner.dinnerLink}
+                onChange={handleDinner}
               />
               <button
                 type="submit"
