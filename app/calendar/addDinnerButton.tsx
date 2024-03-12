@@ -108,6 +108,9 @@ export default function AddDinnerButton({
                 onChange={handleDinner}
               />
               <label>Date of Meal</label>
+              <p>
+                Note : Dinners will appear 1 day before desired date... sorry
+              </p>
               <DatePicker
                 selected={dinner.mealDate}
                 onChange={handleDateChange}
