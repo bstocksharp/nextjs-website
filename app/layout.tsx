@@ -1,6 +1,5 @@
 "use client";
 
-import "./globals.css";
 import NavBar from "./nav";
 import Footer from "./footer";
 import React, { useState } from "react";
