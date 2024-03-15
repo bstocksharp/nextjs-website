@@ -257,25 +257,24 @@ footer {
   min-width: 100px;
 }
 
+.calendar-day-placeholder {
+  flex-basis: calc(13% - 2px);
+  flex-grow: 1;
+  height: 100px;
+  margin: 1px;
+  border: 1px solid gray;
+  background-color: rgba(0, 0, 0, 0.1);
+  padding: 1px 5px 5px 5px;
+  display: flex;
+  flex-direction: column;
+  min-width: 100px;
+}
+
 .calendar-day:hover {
   background-color: var(--alt-accent);
   color: var(--background);
   cursor: pointer;
 }
-
-/* .add-dinner-button {
-  height: 50px;
-  width: 200px;
-  background-color: var(--accent);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  border-radius: 25px;
-  transition: filter 0.2s ease;
-}
-.add-dinner-button:active {
-  filter: brightness(70%);
-} */
 
 .calendar-day-overlay {
   position: fixed;

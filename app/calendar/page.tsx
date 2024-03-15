@@ -12,9 +12,9 @@ export default function CalendarPage() {
 
   const runFetchDinners = async () => {
     setIsLoaded(false);
-
     const dinnerData = await fetchDinners();
     setDinners(dinnerData);
+    runSetCalendarDays();
     setIsLoaded(true);
   };
 
@@ -22,13 +22,9 @@ export default function CalendarPage() {
     runFetchDinners();
   }, []);
 
-  useEffect(() => {
+  const runSetCalendarDays = () => {
     // Get the date range for the next two weeks
-    const today = new Date();
-    const todayAtNoon = new Date(today);
-
-    // Get the date range for the next two weeks
-    const closestSunday = new Date(todayAtNoon);
+    const closestSunday = new Date();
     closestSunday.setDate(closestSunday.getDate() - closestSunday.getDay()); // Get the closest Sunday in the past
 
     const twoWeeksLater = new Date(closestSunday);
@@ -50,19 +46,27 @@ export default function CalendarPage() {
         return dinnerDate.toDateString() === date.toDateString();
       });
 
-      calendarDays[date.toDateString()] = {
+      calendarDays[date.toISOString()] = {
         meal: dinnerForDay,
         tasks: [],
       };
     });
 
     setCalendarDays(calendarDays);
+  };
+
+  useEffect(() => {
+    runSetCalendarDays();
   }, [dinners]);
+
+  const placeholderDays = Array.from({ length: 14 }).map((_, index) => (
+    <div key={index} className="calendar-day-placeholder"></div>
+  ));
 
   return (
     <div className="main-calendar-wrapper">
       {!isLoaded ? (
-        <div> Cool Loading Screen TBD </div>
+        <div className="calendar-wrapper">{placeholderDays}</div>
       ) : (
         <>
           <div className="calendar-wrapper">

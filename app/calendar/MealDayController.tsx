@@ -34,23 +34,30 @@ export default function MealDayController({
   const toggleCalendarMenu = () => {
     setIsCalendarDetailsOpen(!isCalendarDetailsOpen);
     setIsEditMode(false);
+    consoleLogger();
   };
 
   const toggleEditMode = () => {
     setIsEditMode(!isEditMode);
   };
 
-  const handleDinneritemChange = (e: any) => {
+  const handleDinneritemChange = (e: {
+    target: { name: string; value: string };
+  }) => {
     setEditedMeal({
       ...editedMeal,
       [e.target.name]: e.target.value,
     });
   };
 
+  const consoleLogger = () => {
+    console.log(meal);
+  };
+
   return (
     <>
       <div className="calendar-day" onClick={toggleCalendarMenu}>
-        <div className="calendar-date">
+        <div className="calendar-date" onClick={consoleLogger}>
           {date.toLocaleDateString(undefined, { day: "numeric" })}
         </div>
 
