@@ -1,7 +1,7 @@
 "use server";
 
 import { QueryResultRow, sql } from "@vercel/postgres";
-import { Meal } from "./sharedTypes";
+import { Meal } from "./sharedTypes/sharedTypes";
 
 export async function fetchDinners() {
   try {
@@ -21,7 +21,6 @@ export async function fetchDinners() {
 
 function selectDinners(data: QueryResultRow[]): Meal[] {
   return data.map((item) => ({
-    id: item.id,
     date: item.date_of_meal,
     dinnerItem: item.dinner_item,
     createdBy: item.created_by,

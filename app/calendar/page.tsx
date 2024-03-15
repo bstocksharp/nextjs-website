@@ -1,17 +1,16 @@
 "use client";
 
-import AddDinnerButton from "./addDinnerButton";
 import { fetchDinners } from "./fetchDinners";
 import { useState, useEffect, Key } from "react";
-import { Meal, CalendarDay } from "./sharedTypes";
+import { Meal, CalendarDays } from "./sharedTypes/sharedTypes";
 import MealDayController from "./MealDayController";
 
 export default function CalendarPage() {
   const [dinners, setDinners] = useState<Meal[]>([]);
-  const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
+  const [calendarDays, setCalendarDays] = useState<CalendarDays>({});
   const [isLoaded, setIsLoaded] = useState(false);
 
-  const getFetchDinners = async () => {
+  const runFetchDinners = async () => {
     setIsLoaded(false);
 
     const dinnerData = await fetchDinners();
@@ -20,14 +19,13 @@ export default function CalendarPage() {
   };
 
   useEffect(() => {
-    getFetchDinners();
+    runFetchDinners();
   }, []);
 
   useEffect(() => {
     // Get the date range for the next two weeks
     const today = new Date();
     const todayAtNoon = new Date(today);
-    todayAtNoon.setHours(12, 0, 0, 0); // Set time to noon (12:00 PM)
 
     // Get the date range for the next two weeks
     const closestSunday = new Date(todayAtNoon);
@@ -44,21 +42,21 @@ export default function CalendarPage() {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
+    let calendarDays: CalendarDays = {};
     // Populate the calendar days with dinner items
-    const calendarData = dates.map((date) => {
+    dates.forEach((date) => {
       const dinnerForDay = dinners.find((dinner) => {
         const dinnerDate = new Date(dinner.date);
         return dinnerDate.toDateString() === date.toDateString();
       });
 
-      return {
-        date,
-        dinnerItem: dinnerForDay ? dinnerForDay.dinnerItem : "",
-        link: dinnerForDay ? dinnerForDay.link : "",
+      calendarDays[date.toDateString()] = {
+        meal: dinnerForDay,
+        tasks: [],
       };
     });
 
-    setCalendarDays(calendarData);
+    setCalendarDays(calendarDays);
   }, [dinners]);
 
   return (
@@ -68,16 +66,15 @@ export default function CalendarPage() {
       ) : (
         <>
           <div className="calendar-wrapper">
-            {calendarDays.map((calendarDay: CalendarDay) => (
+            {Object.keys(calendarDays).map((dateString) => (
               <MealDayController
-                key={calendarDay.date.toString()}
-                calendarDay={calendarDay}
+                tasks={calendarDays[dateString].tasks}
+                meal={calendarDays[dateString].meal}
+                key={dateString}
+                dateString={dateString}
+                afterUpdate={runFetchDinners}
               />
             ))}
-          </div>
-
-          <div className="add-dinner-button-center">
-            <AddDinnerButton afterUpdate={getFetchDinners} />
           </div>
         </>
       )}

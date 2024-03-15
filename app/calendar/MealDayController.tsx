@@ -1,14 +1,35 @@
-import { CalendarDay } from "./sharedTypes";
+import { Meal, Task } from "./sharedTypes/sharedTypes";
 import { useState } from "react";
-import GetFullDateFormat from "./helpers/GetFullDateFormat";
+import GetFullDateFormat from "./components/GetFullDateFormat";
+import { useUpdateOrInsertMeal } from "./hooks/useUpdateOrInsertMeal";
 
 export default function MealDayController({
-  calendarDay,
+  dateString,
+  meal,
+  tasks,
+  afterUpdate,
 }: {
-  calendarDay: CalendarDay;
+  dateString: string;
+  meal?: Meal;
+  tasks: Task[];
+  afterUpdate: VoidFunction;
 }) {
   const [isCalendarDetailsOpen, setIsCalendarDetailsOpen] = useState(false);
+  const date = new Date(dateString);
+  const defaultMeal: Meal = {
+    date: date,
+    createdBy: "",
+    dinnerItem: "",
+    link: "",
+  };
   const [isEditMode, setIsEditMode] = useState(false);
+  const [editedMeal, setEditedMeal] = useState<Meal>(meal || defaultMeal);
+  const doesDinnerExist = !!meal;
+
+  const { saveMealChanges } = useUpdateOrInsertMeal({
+    doesDinnerExist,
+    afterUpdate,
+  });
 
   const toggleCalendarMenu = () => {
     setIsCalendarDetailsOpen(!isCalendarDetailsOpen);
@@ -19,19 +40,22 @@ export default function MealDayController({
     setIsEditMode(!isEditMode);
   };
 
+  const handleDinneritemChange = (e: any) => {
+    setEditedMeal({
+      ...editedMeal,
+      [e.target.name]: e.target.value,
+    });
+  };
+
   return (
     <>
-      <div
-        key={calendarDay.date.toString()}
-        className="calendar-day"
-        onClick={toggleCalendarMenu}
-      >
+      <div className="calendar-day" onClick={toggleCalendarMenu}>
         <div className="calendar-date">
-          {calendarDay.date.toLocaleDateString(undefined, { day: "numeric" })}
+          {date.toLocaleDateString(undefined, { day: "numeric" })}
         </div>
 
         <div className="calendar-dinner-item">
-          {truncateText(calendarDay.dinnerItem, 50)}
+          {truncateText(meal?.dinnerItem || "", 10)}
         </div>
       </div>
 
@@ -40,18 +64,18 @@ export default function MealDayController({
           <div className="calendar-day-overlay" onClick={toggleCalendarMenu} />
           <div className="calendar-day-popup">
             <div className="calendar-day-popup-head">
-              <GetFullDateFormat calendarDate={calendarDay.date} />
+              <GetFullDateFormat calendarDate={date} />
               <button
                 className="calendar_popup_edit_button"
                 onClick={toggleEditMode}
               >
-                <text>{!isEditMode && "✎"}</text>
+                <p>{!isEditMode && "✎"}</p>
               </button>
               <button
                 className="calendar_popup_close_button"
                 onClick={toggleCalendarMenu}
               >
-                <text>🗙</text>
+                <p>🗙</p>
               </button>
             </div>
             {isEditMode ? (
@@ -60,12 +84,21 @@ export default function MealDayController({
                 <input
                   type="text"
                   name="dinnerItem"
-                  value={calendarDay.dinnerItem}
+                  value={editedMeal?.dinnerItem}
+                  onChange={handleDinneritemChange}
                 />
                 <div>Link</div>
-                <input type="text" name="link" value={calendarDay.link} />
+                <input
+                  type="text"
+                  name="link"
+                  value={editedMeal?.link}
+                  onChange={handleDinneritemChange}
+                />
                 <div className="calender-popup-editmode-buttons">
-                  <button className="calender-popup-editmode-button-save">
+                  <button
+                    onClick={() => saveMealChanges(editedMeal)}
+                    className="calender-popup-editmode-button-save"
+                  >
                     save
                   </button>
                   <button
@@ -78,21 +111,21 @@ export default function MealDayController({
               </>
             ) : (
               <>
-                {calendarDay.dinnerItem && (
+                {editedMeal?.dinnerItem && (
                   <div className="calendar-dinner-item">
-                    Dinner : {calendarDay.dinnerItem}
+                    Dinner : {editedMeal?.dinnerItem}
                   </div>
                 )}
-                {calendarDay.link && (
+                {editedMeal?.link && (
                   <a
                     className="calendar-dinner-item"
                     target="_blank"
                     rel="noopener noreferrer"
                     href={
-                      calendarDay.link.startsWith("http://") ||
-                      calendarDay.link.startsWith("https://")
-                        ? calendarDay.link
-                        : "https://" + calendarDay.link
+                      editedMeal?.link.startsWith("http://") ||
+                      editedMeal?.link.startsWith("https://")
+                        ? editedMeal?.link
+                        : "https://" + editedMeal?.link
                     }
                   >
                     Link to Recipe
@@ -110,9 +143,5 @@ export default function MealDayController({
 function truncateText(text: string, maxLength: number) {
   return text.length > maxLength ? text.substring(0, maxLength) + "..." : text;
 }
-
-// {calendarDay.date.toLocaleDateString(undefined, {
-//    weekday: "short",
-//})}
 
 // ⊗ ↺ ↻ ⊠ ⌀ ✎ 🖉
