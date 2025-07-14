@@ -1,8 +1,16 @@
 import Link from "next/link";
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { usePathname } from "next/navigation";
+import SunnyIcon from "@mui/icons-material/Sunny";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import CloseIcon from "@mui/icons-material/Close";
+import MenuIcon from "@mui/icons-material/Menu";
 
-//TODO : look into loading.tsx
+const navItems = [
+  { label: "Home", href: "/" },
+  { label: "Resume", href: "/resume" },
+  { label: "TTT", href: "/TikTakToe" },
+];
 
 interface NavBarProps {
   darkMode: boolean;
@@ -11,91 +19,89 @@ interface NavBarProps {
   toggleMenu: () => void;
 }
 
-interface NavItem {
-  label: string;
-  href: string;
-}
-
 export default function NavBar({
   darkMode,
   toggleDarkMode,
   isMenuOpen,
   toggleMenu,
 }: NavBarProps) {
-  const [windowWidth, setWindowWidth] = useState(0);
   const pathname = usePathname();
 
-  // used to get the windowsize of the application
+  const activeItem = navItems.find((item) => item.href === pathname);
+
   useEffect(() => {
+    console.log("NavBar mounted");
     const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-    // Check if window object is defined (client-side)
-    if (typeof window !== "undefined") {
-      // Initialize windowWidth with current window width
-      setWindowWidth(window.innerWidth);
-      window.addEventListener("resize", handleResize);
-    }
-    return () => {
-      if (typeof window !== "undefined") {
-        window.removeEventListener("resize", handleResize);
+      if (window.innerWidth >= 600 && isMenuOpen) {
+        console.log("Resizing to desktop view, closing menu");
+        toggleMenu();
       }
     };
-  }, []);
-
-  const navItems: NavItem[] = [
-    { label: "Home", href: "/" },
-    { label: "Resume", href: "/resume" },
-    { label: "Calendar", href: "/calendar" },
-    { label: "Puzzle of the Day", href: "/puzzle" },
-  ];
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [isMenuOpen, toggleMenu]);
 
   return (
-    <nav style={{ height: isMenuOpen ? "100vh" : "4rem" }}>
-      {!isMenuOpen && windowWidth > 600 ? (
-        // layout for large screens
-        <>
-          {navItems.map((item) => (
-            <React.Fragment key={item.href}>
+    <>
+      <nav className="flex items-center justify-between h-16 w-full px-4">
+        <div className="flex gap-8 items-center">
+          <div className="block sm:hidden">
+            {activeItem && (
+              <Link href={activeItem.href} className="text-accent font-bold">
+                {activeItem.label}
+              </Link>
+            )}
+          </div>
+          <div className="hidden sm:flex gap-8 items-center">
+            {navItems.map((item) => (
               <Link
+                key={item.href}
                 href={item.href}
-                className={`nav-link-full ${
-                  pathname === item.href ? "nav-active-highlight" : ""
+                className={`${
+                  pathname === item.href
+                    ? "text-accent font-bold"
+                    : "hover:text-accent"
                 }`}
               >
                 {item.label}
               </Link>
-              {item !== navItems[navItems.length - 1] && "|"}
-            </React.Fragment>
-          ))}
-        </>
-      ) : (
-        // layout for when menu is toggled or small screen size
-        <div className={isMenuOpen ? "nav-dropdown-content" : ""}>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-4">
+          <button
+            className="px-2 py-1 rounded hover:bg-accent"
+            onClick={toggleDarkMode}
+          >
+            {darkMode ? <SunnyIcon /> : <DarkModeIcon />}
+          </button>
+          <button
+            className="px-2 py-1 rounded hover:bg-accent sm:hidden"
+            onClick={toggleMenu}
+          >
+            {isMenuOpen ? <CloseIcon /> : <MenuIcon />}
+          </button>
+        </div>
+      </nav>
+      {/* Mobile full-screen menu */}
+      {isMenuOpen && (
+        <div className="fixed top-16 z-50 flex flex-col items-center justify-center gap-8 sm:hidden">
           {navItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              // allows the current active tab to be shown even when small
-              className={`${
-                pathname != item.href ? "hidden" : "nav-active-highlight"
-              } ${windowWidth < 600 && !isMenuOpen ? "nav-active-small" : ""}`}
               onClick={toggleMenu}
+              className={`text-2xl px-6 py-3 rounded  ${
+                pathname === item.href
+                  ? "text-accent font-bold"
+                  : "hover:text-accent"
+              }`}
             >
               {item.label}
             </Link>
           ))}
         </div>
       )}
-
-      <div className="nav-right-icons">
-        <button className="nav-darkToggle-button" onClick={toggleDarkMode}>
-          {darkMode ? "🔆" : "🌒"}
-        </button>
-        <button className="nav-hamburger" onClick={toggleMenu}>
-          {isMenuOpen ? "X" : "☰"}
-        </button>
-      </div>
-    </nav>
+    </>
   );
 }

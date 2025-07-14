@@ -1,8 +1,10 @@
 "use client";
 
+import { Button } from "@mui/material";
 import NavBar from "./nav";
-import Footer from "./footer";
 import React, { useState } from "react";
+import ThemeContext from "./ThemeContext";
+import "./globals.css";
 
 export default function RootLayout({
   children,
@@ -21,22 +23,29 @@ export default function RootLayout({
     setIsMenuOpen(!isMenuOpen);
   };
   return (
-    <html className={darkMode ? "dark-mode" : ""}>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Bryce Sharp Website</title>
-      </head>
-      <body>
-        <NavBar
-          darkMode={darkMode}
-          toggleDarkMode={toggleDarkMode}
-          isMenuOpen={isMenuOpen}
-          toggleMenu={toggleMenu}
-        />
-        {!isMenuOpen && children}
-
-        {!isMenuOpen && <Footer />}
-      </body>
-    </html>
+    <ThemeContext darkMode={darkMode}>
+      <html className={darkMode ? "dark" : ""}>
+        <head>
+          <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0"
+          />
+          <title>Bryce Sharp Website</title>
+        </head>
+        <body>
+          <div className="min-h-screen w-full bg-background text-text flex flex-col items-center">
+            <NavBar
+              darkMode={darkMode}
+              toggleDarkMode={toggleDarkMode}
+              isMenuOpen={isMenuOpen}
+              toggleMenu={toggleMenu}
+            />
+            <div className="flex flex-col items-center justify-center w-full ">
+              {!isMenuOpen && children}
+            </div>
+          </div>
+        </body>
+      </html>
+    </ThemeContext>
   );
 }
