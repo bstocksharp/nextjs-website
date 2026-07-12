@@ -1,42 +1,15 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-/* #F2F4F6 - Light shades - text and background */
-/* #D9767D - Light accent - attention */
-/* #668A4A - Main Brand Color - main identity */
-/* #034C3C - dark accent - attention */
-/* #201129 - dark shades - text and background (170C1D?)*/
-
-/* default */
-:root {
-  --text: #170c1d;
-  --accent: #d9767d;
-  --background: #f2f4f6;
-  --alt-accent: #034c3c;
-  --main: #668a4a;
+* {
+  box-sizing: border-box;
 }
 
-/* dark mode */
-:root.dark {
-  --text: #f2f4f6;
-  --accent: #034c3c;
-  --background: #170c1d;
-  --alt-accent: #d9767d;
-  --main: #668a4a;
+html,
+body {
+  padding: 0;
+  margin: 0;
+  min-height: 100%;
 }
 
-@keyframes cursor-blink {
-  0% {
-    opacity: 0;
-  }
-}
-
-.title-box-wrapper::after {
-  content: "";
-  width: 2px;
-  height: 90%;
-  background: var(--alt-accent);
-  display: inline-block;
-  animation: cursor-blink 1.5s steps(2) infinite;
+a {
+  color: inherit;
+  text-decoration: none;
 }
