@@ -22,9 +22,11 @@ const STATUS_COLOR: Record<
 export default function VehicleCard({
   vehicle,
   editor,
+  reminder,
 }: {
   vehicle: Vehicle;
   editor: boolean;
+  reminder?: "overdue" | "soon";
 }) {
   const subtitle = [vehicle.year, vehicle.make, vehicle.model]
     .filter(Boolean)
@@ -52,13 +54,23 @@ export default function VehicleCard({
             <Typography variant="body2" color="text.secondary">
               {formatMiles(vehicle.currentMileage)}
             </Typography>
-            <Chip
-              label={vehicle.status}
-              size="small"
-              color={STATUS_COLOR[vehicle.status] ?? "default"}
-              variant="outlined"
-              sx={{ textTransform: "capitalize" }}
-            />
+            <Stack direction="row" spacing={0.5} alignItems="center">
+              {reminder ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  color={reminder === "overdue" ? "error" : "warning"}
+                  label={reminder === "overdue" ? "Overdue" : "Service soon"}
+                />
+              ) : null}
+              <Chip
+                label={vehicle.status}
+                size="small"
+                color={STATUS_COLOR[vehicle.status] ?? "default"}
+                variant="outlined"
+                sx={{ textTransform: "capitalize" }}
+              />
+            </Stack>
           </Stack>
         </CardContent>
       </CardActionArea>

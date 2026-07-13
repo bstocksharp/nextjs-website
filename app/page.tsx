@@ -8,11 +8,30 @@ import Paper from "@mui/material/Paper";
 import AddIcon from "@mui/icons-material/Add";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import { listVehicles } from "@/lib/queries/vehicles";
+import { listAllDueRecords } from "@/lib/queries/summaries";
 import { isEditor } from "@/lib/auth";
+import { recordDueStatus, worstStatus, type DueStatus } from "@/lib/reminders";
 import VehicleCard from "@/components/VehicleCard";
 
 export default async function HomePage() {
-  const [vehicles, editor] = await Promise.all([listVehicles(), isEditor()]);
+  const [vehicles, editor, dueRecords] = await Promise.all([
+    listVehicles(),
+    isEditor(),
+    listAllDueRecords(),
+  ]);
+
+  // Compute a "due soon / overdue" badge per vehicle from its next-due records.
+  const now = new Date();
+  const mileageById = new Map(vehicles.map((v) => [v.id, v.currentMileage]));
+  const statusesByVehicle = new Map<number, DueStatus[]>();
+  for (const d of dueRecords) {
+    const status = recordDueStatus(d, mileageById.get(d.vehicleId) ?? null, now);
+    const arr = statusesByVehicle.get(d.vehicleId) ?? [];
+    arr.push(status);
+    statusesByVehicle.set(d.vehicleId, arr);
+  }
+  const reminderFor = (id: number) =>
+    worstStatus(statusesByVehicle.get(id) ?? []) ?? undefined;
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 4, md: 6 } }}>
@@ -84,7 +103,12 @@ export default async function HomePage() {
           }}
         >
           {vehicles.map((v) => (
-            <VehicleCard key={v.id} vehicle={v} editor={editor} />
+            <VehicleCard
+              key={v.id}
+              vehicle={v}
+              editor={editor}
+              reminder={reminderFor(v.id)}
+            />
           ))}
         </Box>
       )}

@@ -16,6 +16,7 @@ import VehicleTabs from "@/components/VehicleTabs";
 import VehicleOverview from "@/components/VehicleOverview";
 import MaintenanceSection from "@/components/MaintenanceSection";
 import FuelSection from "@/components/FuelSection";
+import PartsSection from "@/components/PartsSection";
 
 export default async function VehiclePage({
   params,
@@ -29,7 +30,10 @@ export default async function VehiclePage({
   if (!Number.isInteger(id)) notFound();
 
   const { tab } = await searchParams;
-  const active = tab === "maintenance" || tab === "fuel" ? tab : "overview";
+  const active =
+    tab === "maintenance" || tab === "fuel" || tab === "parts"
+      ? tab
+      : "overview";
 
   const [vehicle, editor] = await Promise.all([getVehicle(id), isEditor()]);
   if (!vehicle) notFound();
@@ -99,6 +103,8 @@ export default async function VehiclePage({
         <MaintenanceSection vehicleId={id} editor={editor} />
       ) : active === "fuel" ? (
         <FuelSection vehicleId={id} editor={editor} />
+      ) : active === "parts" ? (
+        <PartsSection vehicleId={id} editor={editor} />
       ) : (
         <VehicleOverview vehicle={vehicle} />
       )}
