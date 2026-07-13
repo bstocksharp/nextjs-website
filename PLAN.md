@@ -183,7 +183,7 @@ _(We'll check off phases here as we go.)_
 
 - [x] Phase 0 — Node 24 installed ✅
 - [x] Phase 1 — Scaffolding ✅ (Next 15.5, React 19.2, MUI 7.3, Drizzle; build green, styled SSR)
-- [ ] Phase 2 — Data layer + auth
+- [x] Phase 2 — Data layer + auth ✅ (Neon driver + Drizzle, 11 tables live, password-to-edit)
 - [ ] Phase 3 — Garage core
 - [ ] Phase 4 — Tracking
 - [ ] Phase 5 — The Build

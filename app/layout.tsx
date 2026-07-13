@@ -4,6 +4,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import Providers from "./providers";
 import SiteHeader from "@/components/SiteHeader";
+import EditControl from "@/components/EditControl";
 
 const bodyFont = Inter({
   subsets: ["latin"],
@@ -40,7 +41,7 @@ export default function RootLayout({
       <body>
         <InitColorSchemeScript attribute="class" defaultMode="dark" />
         <Providers>
-          <SiteHeader />
+          <SiteHeader editControl={<EditControl />} />
           {children}
         </Providers>
       </body>
