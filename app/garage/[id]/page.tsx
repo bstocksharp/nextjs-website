@@ -19,6 +19,7 @@ import FuelSection from "@/components/FuelSection";
 import PartsSection from "@/components/PartsSection";
 import BuildSection from "@/components/BuildSection";
 import WishlistSection from "@/components/WishlistSection";
+import JournalSection from "@/components/JournalSection";
 
 export default async function VehiclePage({
   params,
@@ -37,7 +38,8 @@ export default async function VehiclePage({
     tab === "fuel" ||
     tab === "parts" ||
     tab === "build" ||
-    tab === "wishlist"
+    tab === "wishlist" ||
+    tab === "journal"
       ? tab
       : "overview";
 
@@ -115,6 +117,8 @@ export default async function VehiclePage({
         <BuildSection vehicleId={id} editor={editor} />
       ) : active === "wishlist" ? (
         <WishlistSection vehicleId={id} editor={editor} />
+      ) : active === "journal" ? (
+        <JournalSection vehicleId={id} editor={editor} />
       ) : (
         <VehicleOverview vehicle={vehicle} />
       )}

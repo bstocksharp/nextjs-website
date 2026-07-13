@@ -55,6 +55,12 @@ export default function VehicleTabs({
         component={Link}
         href={`${base}?tab=wishlist`}
       />
+      <Tab
+        label="Journal"
+        value="journal"
+        component={Link}
+        href={`${base}?tab=journal`}
+      />
     </Tabs>
   );
 }

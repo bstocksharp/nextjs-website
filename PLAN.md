@@ -186,7 +186,7 @@ _(We'll check off phases here as we go.)_
 - [x] Phase 2 — Data layer + auth ✅ (Neon driver + Drizzle, 11 tables live, password-to-edit)
 - [x] Phase 3 — Garage core ✅ (vehicle CRUD, loading states, formatted form fields)
 - [x] Phase 4 — Tracking ✅ (maintenance · fuel/MPG · parts · spend summaries + due-soon reminders)
-- [ ] Phase 5 — The Build (5a build plan ✅ · 5b wishlist ✅ · 5c journal)
+- [x] Phase 5 — The Build ✅ (build plan · wishlist · journal — with optimistic toggles)
 - [ ] Phase 6 — The Bible
 - [ ] Phase 7 — Photos
 - [ ] Phase 8 — Polish + deploy
