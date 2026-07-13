@@ -1,0 +1,81 @@
+"use server";
+
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { fuelLogs } from "@/lib/db/schema";
+import { requireEditor } from "@/lib/auth";
+
+function parseFuel(formData: FormData) {
+  const str = (k: string) => {
+    const v = String(formData.get(k) ?? "").trim();
+    return v === "" ? null : v;
+  };
+  const int = (k: string) => {
+    const v = str(k);
+    if (v === null) return null;
+    const n = Number.parseInt(v, 10);
+    return Number.isNaN(n) ? null : n;
+  };
+
+  return {
+    fillDate: str("fillDate"),
+    odometer: int("odometer"),
+    gallons: str("gallons"),
+    pricePerGallon: str("pricePerGallon"),
+    totalCost: str("totalCost"),
+    isFullTank: formData.get("isFullTank") != null,
+    notes: str("notes"),
+  };
+}
+
+const back = (vehicleId: number) => `/garage/${vehicleId}?tab=fuel`;
+
+export async function addFuel(
+  vehicleId: number,
+  formData: FormData,
+): Promise<void> {
+  await requireEditor();
+  const data = parseFuel(formData);
+  if (!data.fillDate) throw new Error("Fill date is required.");
+
+  await db.insert(fuelLogs).values({
+    ...data,
+    vehicleId,
+    fillDate: data.fillDate,
+  });
+
+  revalidatePath(`/garage/${vehicleId}`);
+  redirect(back(vehicleId));
+}
+
+export async function updateFuel(
+  id: number,
+  vehicleId: number,
+  formData: FormData,
+): Promise<void> {
+  await requireEditor();
+  const data = parseFuel(formData);
+  if (!data.fillDate) throw new Error("Fill date is required.");
+
+  await db
+    .update(fuelLogs)
+    .set({ ...data, fillDate: data.fillDate })
+    .where(eq(fuelLogs.id, id));
+
+  revalidatePath(`/garage/${vehicleId}`);
+  redirect(back(vehicleId));
+}
+
+export async function deleteFuel(
+  id: number,
+  vehicleId: number,
+  _formData: FormData,
+): Promise<void> {
+  await requireEditor();
+  await db.delete(fuelLogs).where(eq(fuelLogs.id, id));
+
+  revalidatePath(`/garage/${vehicleId}`);
+  redirect(back(vehicleId));
+}

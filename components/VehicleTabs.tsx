@@ -31,6 +31,12 @@ export default function VehicleTabs({
         component={Link}
         href={`${base}?tab=maintenance`}
       />
+      <Tab
+        label="Fuel"
+        value="fuel"
+        component={Link}
+        href={`${base}?tab=fuel`}
+      />
     </Tabs>
   );
 }
