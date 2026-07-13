@@ -4,7 +4,6 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import Providers from "./providers";
 import SiteHeader from "@/components/SiteHeader";
-import "./globals.css";
 
 const bodyFont = Inter({
   subsets: ["latin"],

@@ -1,56 +1,53 @@
 "use client";
 
 import { createTheme } from "@mui/material/styles";
+import { color, font, radius, spacing } from "./tokens";
 
-// Font CSS variables are provided by next/font in app/layout.tsx.
-const display = "var(--font-display), system-ui, sans-serif";
-const body =
-  "var(--font-body), system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif";
-
-// Brand tokens — British Racing Green + tan, tuned per color scheme for contrast.
-const brand = {
-  greenDark: "#4caf7d",
-  greenLight: "#2e7d55",
-  tanDark: "#d8b384",
-  tanLight: "#a97c43",
-};
-
+// The theme is built entirely from tokens (app/tokens.ts). It carries no
+// literal colors of its own — the one `var(--mui-palette-divider)` below is a
+// token MUI generates from color.darkDivider / color.lightDivider.
 const theme = createTheme({
   cssVariables: { colorSchemeSelector: "class" },
+  spacing: spacing.unit,
+  shape: { borderRadius: radius.base },
   colorSchemes: {
     dark: {
       palette: {
-        primary: { main: brand.greenDark },
-        secondary: { main: brand.tanDark },
-        background: { default: "#0e1214", paper: "#161b1e" },
-        divider: "rgba(255,255,255,0.09)",
+        primary: { main: color.brandGreen },
+        secondary: { main: color.brandTan },
+        background: { default: color.darkBg, paper: color.darkSurface },
+        divider: color.darkDivider,
       },
     },
     light: {
       palette: {
-        primary: { main: brand.greenLight },
-        secondary: { main: brand.tanLight },
-        background: { default: "#f5f4ef", paper: "#ffffff" },
-        divider: "rgba(0,0,0,0.10)",
+        primary: { main: color.brandGreenDeep },
+        secondary: { main: color.brandTanDeep },
+        background: { default: color.lightBg, paper: color.lightSurface },
+        divider: color.lightDivider,
       },
     },
   },
-  shape: { borderRadius: 12 },
   typography: {
-    fontFamily: body,
-    h1: { fontFamily: display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h2: { fontFamily: display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h3: { fontFamily: display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h4: { fontFamily: display, fontWeight: 600, letterSpacing: "-0.01em" },
-    h5: { fontFamily: display, fontWeight: 600 },
-    h6: { fontFamily: display, fontWeight: 600 },
+    fontFamily: font.body,
+    h1: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+    h2: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+    h3: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+    h4: { fontFamily: font.display, fontWeight: 600, letterSpacing: "-0.01em" },
+    h5: { fontFamily: font.display, fontWeight: 600 },
+    h6: { fontFamily: font.display, fontWeight: 600 },
     button: { textTransform: "none", fontWeight: 600 },
   },
   components: {
+    MuiCssBaseline: {
+      styleOverrides: {
+        a: { color: "inherit", textDecoration: "none" },
+      },
+    },
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { borderRadius: 10, paddingInline: 18, paddingBlock: 8 },
+        root: { borderRadius: radius.button, paddingInline: 18, paddingBlock: 8 },
       },
     },
     MuiPaper: {
