@@ -6,6 +6,7 @@ import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
 import { formatMiles } from "@/lib/format";
+import VehicleCardMenu from "./VehicleCardMenu";
 import type { Vehicle } from "@/lib/db/schema";
 
 const STATUS_COLOR: Record<
@@ -18,41 +19,46 @@ const STATUS_COLOR: Record<
   sold: "default",
 };
 
-export default function VehicleCard({ vehicle }: { vehicle: Vehicle }) {
+export default function VehicleCard({
+  vehicle,
+  editor,
+}: {
+  vehicle: Vehicle;
+  editor: boolean;
+}) {
   const subtitle = [vehicle.year, vehicle.make, vehicle.model]
     .filter(Boolean)
     .join(" ");
 
   return (
-    <Card variant="outlined">
+    <Card variant="outlined" sx={{ position: "relative" }}>
+      {editor ? <VehicleCardMenu vehicleId={vehicle.id} /> : null}
       <CardActionArea component={Link} href={`/garage/${vehicle.id}`}>
-        <CardContent>
-          <Stack spacing={1}>
-            <Stack
-              direction="row"
-              justifyContent="space-between"
-              alignItems="flex-start"
-              spacing={1}
-            >
-              <Typography variant="h6" component="h2">
-                {vehicle.name}
-              </Typography>
-              <Chip
-                label={vehicle.status}
-                size="small"
-                color={STATUS_COLOR[vehicle.status] ?? "default"}
-                variant="outlined"
-                sx={{ textTransform: "capitalize" }}
-              />
-            </Stack>
-            {subtitle ? (
-              <Typography variant="body2" color="text.secondary">
-                {subtitle}
-              </Typography>
-            ) : null}
+        <CardContent sx={{ pr: editor ? 5 : 2 }}>
+          <Typography variant="h6" component="h2" noWrap>
+            {vehicle.name}
+          </Typography>
+          {subtitle ? (
+            <Typography variant="body2" color="text.secondary" noWrap>
+              {subtitle}
+            </Typography>
+          ) : null}
+          <Stack
+            direction="row"
+            justifyContent="space-between"
+            alignItems="center"
+            sx={{ mt: 1.5 }}
+          >
             <Typography variant="body2" color="text.secondary">
               {formatMiles(vehicle.currentMileage)}
             </Typography>
+            <Chip
+              label={vehicle.status}
+              size="small"
+              color={STATUS_COLOR[vehicle.status] ?? "default"}
+              variant="outlined"
+              sx={{ textTransform: "capitalize" }}
+            />
           </Stack>
         </CardContent>
       </CardActionArea>

@@ -84,7 +84,7 @@ export default async function HomePage() {
           }}
         >
           {vehicles.map((v) => (
-            <VehicleCard key={v.id} vehicle={v} />
+            <VehicleCard key={v.id} vehicle={v} editor={editor} />
           ))}
         </Box>
       )}
