@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
@@ -25,14 +26,27 @@ export default function SiteHeader({
       }}
     >
       <Toolbar sx={{ gap: 1 }}>
-        <GarageIcon sx={{ mr: 1, color: "primary.main" }} />
-        <Typography
-          variant="h6"
-          component="div"
-          sx={{ fontWeight: 700, letterSpacing: "-0.01em" }}
+        <Box
+          component={Link}
+          href="/"
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            color: "inherit",
+            textDecoration: "none",
+            "&:hover": { opacity: 0.85 },
+          }}
         >
-          Bryce&apos;s Garage
-        </Typography>
+          <GarageIcon sx={{ color: "primary.main" }} />
+          <Typography
+            variant="h6"
+            component="span"
+            sx={{ fontWeight: 700, letterSpacing: "-0.01em" }}
+          >
+            Bryce&apos;s Garage
+          </Typography>
+        </Box>
         <Box sx={{ flexGrow: 1 }} />
         <ColorModeToggle />
         {editControl}

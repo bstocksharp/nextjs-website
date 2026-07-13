@@ -4,8 +4,8 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
+import SubmitButton from "@/components/SubmitButton";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { isEditor } from "@/lib/auth";
 import { unlockAction } from "@/app/actions/auth";
@@ -44,9 +44,9 @@ export default async function UnlockPage({
               required
               fullWidth
             />
-            <Button type="submit" variant="contained" size="large">
+            <SubmitButton variant="contained" size="large" pendingLabel="Unlocking…">
               Unlock
-            </Button>
+            </SubmitButton>
           </Stack>
         </form>
       </Paper>
