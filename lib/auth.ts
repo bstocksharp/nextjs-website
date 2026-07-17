@@ -33,14 +33,16 @@ function editorToken(): string {
 /** True when the request carries a valid editor cookie. */
 export async function isEditor(): Promise<boolean> {
   const value = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!value) return false;
+  // No cookie, or no configured secret → treat as a public (read-only) visitor
+  // rather than throwing and crashing every page.
+  if (!value || !process.env.COOKIE_SECRET) return false;
   return safeEqual(value, editorToken());
 }
 
 /** Does the submitted password match EDIT_PASSWORD? */
 export function checkPassword(input: string): boolean {
   const expected = process.env.EDIT_PASSWORD;
-  if (!expected) throw new Error("EDIT_PASSWORD is not set (check .env.local)");
+  if (!expected) return false; // not configured → nothing can unlock
   return safeEqual(input, expected);
 }
 
