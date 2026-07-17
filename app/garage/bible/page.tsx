@@ -16,25 +16,25 @@ export const metadata = { title: "The Miata Bible — Bryce's Garage" };
 
 const sections = [
   {
-    href: "/bible/buying-guide",
+    href: "/garage/bible/buying-guide",
     title: "Buying guide",
     desc: "What to inspect and the questions to ask when you go look at an NA. Pull it up on your phone in the driveway.",
     icon: <FactCheckOutlinedIcon fontSize="large" color="primary" />,
   },
   {
-    href: "/bible/build-plan",
+    href: "/garage/bible/build-plan",
     title: "Build philosophy",
     desc: "Reliability → Safety → Handling → Power. The right order to do things, phase by phase.",
     icon: <TuneOutlinedIcon fontSize="large" color="primary" />,
   },
   {
-    href: "/bible/dream-spec",
+    href: "/garage/bible/dream-spec",
     title: "Dream spec",
     desc: "The tasteful OEM+ target — BRG or white, tan interior, 15×7s, roll bar. Not slammed.",
     icon: <AutoAwesomeOutlinedIcon fontSize="large" color="primary" />,
   },
   {
-    href: "/bible/resources",
+    href: "/garage/bible/resources",
     title: "Resources",
     desc: "Channels, forums, and the specs worth keeping handy once you own it.",
     icon: <MenuBookOutlinedIcon fontSize="large" color="primary" />,

@@ -41,7 +41,7 @@ export default function ResourcesPage() {
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
       <Button
         component={Link}
-        href="/bible"
+        href="/garage/bible"
         size="small"
         color="inherit"
         startIcon={<ArrowBackIcon />}

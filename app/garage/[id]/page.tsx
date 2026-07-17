@@ -54,7 +54,7 @@ export default async function VehiclePage({
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
       <Button
         component={Link}
-        href="/"
+        href="/garage"
         size="small"
         color="inherit"
         startIcon={<ArrowBackIcon />}

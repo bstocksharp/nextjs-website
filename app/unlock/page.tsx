@@ -16,7 +16,7 @@ export default async function UnlockPage({
   searchParams: Promise<{ error?: string }>;
 }) {
   // Already unlocked? Nothing to do here.
-  if (await isEditor()) redirect("/");
+  if (await isEditor()) redirect("/garage");
 
   const { error } = await searchParams;
 

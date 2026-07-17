@@ -18,12 +18,12 @@ export async function unlockAction(formData: FormData): Promise<void> {
 
   await setEditorCookie();
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/garage");
 }
 
 /** Clear the editor cookie (lock editing). */
 export async function lockAction(): Promise<void> {
   await clearEditorCookie();
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/garage");
 }

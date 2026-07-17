@@ -15,7 +15,7 @@ export default async function NewVehiclePage() {
         Add vehicle
       </Typography>
       <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 4 } }}>
-        <VehicleForm action={addVehicle} submitLabel="Add vehicle" cancelHref="/" />
+        <VehicleForm action={addVehicle} submitLabel="Add vehicle" cancelHref="/garage" />
       </Paper>
     </Container>
   );

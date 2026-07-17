@@ -116,7 +116,7 @@ export default function BuyingGuidePage() {
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
       <Button
         component={Link}
-        href="/bible"
+        href="/garage/bible"
         size="small"
         color="inherit"
         startIcon={<ArrowBackIcon />}

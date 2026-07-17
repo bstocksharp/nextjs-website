@@ -50,7 +50,7 @@ export async function addVehicle(formData: FormData): Promise<void> {
     .values(data)
     .returning({ id: vehicles.id });
 
-  revalidatePath("/");
+  revalidatePath("/garage");
   redirect(`/garage/${row.id}`);
 }
 
@@ -64,7 +64,7 @@ export async function updateVehicle(
 
   await db.update(vehicles).set(data).where(eq(vehicles.id, id));
 
-  revalidatePath("/");
+  revalidatePath("/garage");
   revalidatePath(`/garage/${id}`);
   redirect(`/garage/${id}`);
 }
@@ -76,6 +76,6 @@ export async function deleteVehicle(
   await requireEditor();
   await db.delete(vehicles).where(eq(vehicles.id, id));
 
-  revalidatePath("/");
-  redirect("/");
+  revalidatePath("/garage");
+  redirect("/garage");
 }

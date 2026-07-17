@@ -3,8 +3,6 @@ import * as React from "react";
 import { Inter, Space_Grotesk } from "next/font/google";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import Providers from "./providers";
-import SiteHeader from "@/components/SiteHeader";
-import EditControl from "@/components/EditControl";
 
 const bodyFont = Inter({
   subsets: ["latin"],
@@ -19,9 +17,8 @@ const displayFont = Space_Grotesk({
 });
 
 export const metadata: Metadata = {
-  title: "Bryce's Garage",
-  description:
-    "A garage tracker for the daily drivers and a build bible for the dream NA Miata.",
+  title: "Bryce",
+  description: "Bryce's apps — a garage tracker, the Miata Bible, and more.",
 };
 
 export const viewport: Viewport = {
@@ -29,6 +26,8 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// App-agnostic root shell: fonts, color-scheme init, and providers only.
+// Each sub-app supplies its own header (and, later, its own theme) in its layout.
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -40,10 +39,7 @@ export default function RootLayout({
     >
       <body>
         <InitColorSchemeScript attribute="class" defaultMode="dark" />
-        <Providers>
-          <SiteHeader editControl={<EditControl />} />
-          {children}
-        </Providers>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

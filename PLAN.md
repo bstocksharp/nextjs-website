@@ -188,5 +188,6 @@ _(We'll check off phases here as we go.)_
 - [x] Phase 4 — Tracking ✅ (maintenance · fuel/MPG · parts · spend summaries + due-soon reminders)
 - [x] Phase 5 — The Build ✅ (build plan · wishlist · journal — with optimistic toggles)
 - [x] Phase 6 — The Bible ✅ (buying guide · build philosophy · dream spec · resources)
+- [x] Hub restructure ✅ (multi-app shell: Garage → /garage, hub launcher at /, app-switcher, error boundaries). Exercise app + per-app theme still to build.
 - [ ] Phase 7 — Photos — SKIPPED for now (per Bryce, 2026-07-13)
 - [ ] Phase 8 — Polish + deploy  ← only thing left
