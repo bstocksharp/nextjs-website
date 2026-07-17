@@ -187,6 +187,6 @@ _(We'll check off phases here as we go.)_
 - [x] Phase 3 — Garage core ✅ (vehicle CRUD, loading states, formatted form fields)
 - [x] Phase 4 — Tracking ✅ (maintenance · fuel/MPG · parts · spend summaries + due-soon reminders)
 - [x] Phase 5 — The Build ✅ (build plan · wishlist · journal — with optimistic toggles)
-- [ ] Phase 6 — The Bible
+- [x] Phase 6 — The Bible ✅ (buying guide · build philosophy · dream spec · resources)
 - [ ] Phase 7 — Photos
 - [ ] Phase 8 — Polish + deploy

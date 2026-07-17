@@ -6,6 +6,7 @@ import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import GarageIcon from "@mui/icons-material/Garage";
 import ColorModeToggle from "./ColorModeToggle";
 
@@ -47,6 +48,15 @@ export default function SiteHeader({
             Bryce&apos;s Garage
           </Typography>
         </Box>
+        <Button
+          component={Link}
+          href="/bible"
+          color="inherit"
+          size="small"
+          sx={{ ml: 0.5 }}
+        >
+          Bible
+        </Button>
         <Box sx={{ flexGrow: 1 }} />
         <ColorModeToggle />
         {editControl}
