@@ -14,9 +14,9 @@ import { isEditor } from "@/lib/auth";
 import {
   getWorkout,
   getWorkoutItemsWithExercises,
-  listProfiles,
   listExercises,
 } from "@/lib/queries/workout";
+import { listProfiles } from "@/lib/queries/profiles";
 import {
   updateWorkout,
   deleteWorkout,

@@ -15,10 +15,12 @@ import AppSwitcher from "@/components/shared/AppSwitcher";
 export default function AppHeader({
   current,
   nav = [],
+  profileControl,
   editControl,
 }: {
   current: string;
   nav?: { label: string; href: string }[];
+  profileControl?: React.ReactNode;
   editControl?: React.ReactNode;
 }) {
   return (
@@ -33,19 +35,23 @@ export default function AppHeader({
       }}
     >
       <Toolbar sx={{ gap: 0.5 }}>
-        <AppSwitcher current={current} />
-        {nav.map((n) => (
-          <Button
-            key={n.href}
-            component={Link}
-            href={n.href}
-            color="inherit"
-            size="small"
-          >
-            {n.label}
-          </Button>
-        ))}
+        <AppSwitcher current={current} nav={nav} />
+        {/* Inline nav on desktop; on mobile it lives in the switcher menu. */}
+        <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 0.5 }}>
+          {nav.map((n) => (
+            <Button
+              key={n.href}
+              component={Link}
+              href={n.href}
+              color="inherit"
+              size="small"
+            >
+              {n.label}
+            </Button>
+          ))}
+        </Box>
         <Box sx={{ flexGrow: 1 }} />
+        {profileControl}
         <ColorModeToggle />
         {editControl}
       </Toolbar>

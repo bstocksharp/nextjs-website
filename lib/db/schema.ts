@@ -45,6 +45,13 @@ export const vehicles = pgTable("vehicles", {
   currentMileage: integer("current_mileage"),
   heroPhotoUrl: text("hero_photo_url"),
   notes: text("notes"),
+  // Owner + visibility — see ARCHITECTURE "Profiles, visibility & access". Profiles
+  // aren't a security boundary; visibility is organization, not permission. A
+  // `shared` car shows in everyone's garage, a `private` one only in its owner's.
+  profileId: integer("profile_id").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  visibility: varchar("visibility", { length: 20 }).notNull().default("shared"), // shared | private
   createdAt: createdAt(),
 });
 
@@ -227,17 +234,25 @@ export const resources = pgTable("resources", {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WORKOUT APP — nightly exercise companion (profiles, catalog, routines, items)
+// PROFILES — the hub-wide people (Bryce, Lauren). Data, not accounts. NOT a
+// security boundary (no passwords, free switching) — see ARCHITECTURE. First used
+// by the workout app; now hub-wide (vehicles.profile_id, active_profile cookie).
 // ─────────────────────────────────────────────────────────────────────────────
-
-// ── Workout profiles (people using the app: Bryce, spouse, …) ─────────────────
-export const workoutProfiles = pgTable("workout_profiles", {
+export const profiles = pgTable("profiles", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 80 }).notNull(),
-  color: varchar("color", { length: 20 }), // tile accent
+  color: varchar("color", { length: 20 }), // tile accent / avatar color
   sortOrder: integer("sort_order").default(0),
+  // Soft-delete: "Deactivate" sets this (hidden from the switcher, can't be
+  // active) but keeps all their data. "Delete forever" removes the row after
+  // reassigning shared cars/workouts. null = active.
+  archivedAt: timestamp("archived_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WORKOUT APP — nightly exercise companion (catalog, routines, items, schedule)
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Exercise catalog (shared across profiles; carries recommended defaults) ───
 // mode: 'reps' (manual "Done → Next") | 'timed' (countdown). reps/weight are text
@@ -269,9 +284,12 @@ export const workouts = pgTable(
   {
     id: serial("id").primaryKey(),
     // Column stays `profile_id`; semantics are "saved by" (creator), not owner.
+    // RESTRICT (not cascade): workouts are a SHARED library, so a profile can't be
+    // deleted while it still authors any — deleteProfileForever() reassigns them to
+    // an heir first. Prevents a profile delete from nuking others' shared routines.
     createdByProfileId: integer("profile_id")
       .notNull()
-      .references(() => workoutProfiles.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "restrict" }),
     name: varchar("name", { length: 120 }).notNull(),
     rounds: integer("rounds").notNull().default(1), // times to rotate the MAIN circuit
     restBetweenRounds: integer("rest_between_rounds").notNull().default(60), // seconds
@@ -291,7 +309,7 @@ export const workoutAssignments = pgTable(
     id: serial("id").primaryKey(),
     profileId: integer("profile_id")
       .notNull()
-      .references(() => workoutProfiles.id, { onDelete: "cascade" }),
+      .references(() => profiles.id, { onDelete: "cascade" }),
     weekday: integer("weekday").notNull(), // 0..6 (Sun..Sat)
     workoutId: integer("workout_id")
       .notNull()
@@ -350,8 +368,8 @@ export type Attachment = typeof attachments.$inferSelect;
 export type NewAttachment = typeof attachments.$inferInsert;
 export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;
-export type WorkoutProfile = typeof workoutProfiles.$inferSelect;
-export type NewWorkoutProfile = typeof workoutProfiles.$inferInsert;
+export type Profile = typeof profiles.$inferSelect;
+export type NewProfile = typeof profiles.$inferInsert;
 export type Exercise = typeof exercises.$inferSelect;
 export type NewExercise = typeof exercises.$inferInsert;
 export type Workout = typeof workouts.$inferSelect;

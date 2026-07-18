@@ -10,16 +10,20 @@ import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import { listVehicles } from "@/lib/queries/vehicles";
 import { listAllDueRecords } from "@/lib/queries/summaries";
 import { isEditor } from "@/lib/auth";
+import { getActiveProfile } from "@/lib/profile";
 import { recordDueStatus, worstStatus, type DueStatus } from "@/lib/reminders";
 import VehicleCard from "@/components/garage/VehicleCard";
 
 export const metadata = { title: "Bryce's Garage" };
 
 export default async function GaragePage() {
+  const active = await getActiveProfile();
+  // -1 matches no real owner, so with no active profile only shared cars show.
+  const pid = active?.id ?? -1;
   const [vehicles, editor, dueRecords] = await Promise.all([
-    listVehicles(),
+    listVehicles(pid),
     isEditor(),
-    listAllDueRecords(),
+    listAllDueRecords(pid),
   ]);
 
   // Compute a "due soon / overdue" badge per vehicle from its next-due records.

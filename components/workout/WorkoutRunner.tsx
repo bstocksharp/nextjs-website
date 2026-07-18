@@ -109,10 +109,10 @@ function Dial({
     <Box
       onClick={onClick}
       sx={{
-        width: size,
-        height: size,
-        maxWidth: "80vw",
-        maxHeight: "80vw",
+        // Square, but sized to fit both width and remaining height so the
+        // runner never scrolls. viewBox stays 260 (just a coordinate space).
+        width: "min(72vw, 42vh, 320px)",
+        height: "min(72vw, 42vh, 320px)",
         position: "relative",
         cursor: onClick ? "pointer" : "default",
         userSelect: "none",
@@ -564,16 +564,29 @@ export default function WorkoutRunner({
   const featured = isPrep && nextWork ? nextWork.item : item;
 
   return (
+    // Full-viewport overlay (covers the app header) so the active workout fills
+    // the screen and never scrolls.
     <Box
       sx={{
-        minHeight: "100dvh",
+        position: "fixed",
+        inset: 0,
+        zIndex: 1300,
+        bgcolor: "background.default",
+        overflow: "hidden",
         display: "flex",
-        flexDirection: "column",
-        p: { xs: 2, sm: 3 },
-        maxWidth: 520,
-        mx: "auto",
+        justifyContent: "center",
       }}
     >
+      <Box
+        sx={{
+          width: "100%",
+          maxWidth: 520,
+          height: "100dvh",
+          display: "flex",
+          flexDirection: "column",
+          p: { xs: 2, sm: 3 },
+        }}
+      >
       {/* Top bar */}
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <FormControlLabel
@@ -738,6 +751,7 @@ export default function WorkoutRunner({
           <SkipNextIcon />
         </IconButton>
       </Stack>
+      </Box>
     </Box>
   );
 }
@@ -746,7 +760,10 @@ function Screen({ children }: { children: React.ReactNode }) {
   return (
     <Box
       sx={{
-        minHeight: "100dvh",
+        position: "fixed",
+        inset: 0,
+        zIndex: 1300,
+        bgcolor: "background.default",
         display: "flex",
         flexDirection: "column",
         alignItems: "center",

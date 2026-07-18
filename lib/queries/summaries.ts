@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, isNotNull, or, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { maintenanceRecords, fuelLogs } from "@/lib/db/schema";
+import { maintenanceRecords, fuelLogs, vehicles } from "@/lib/db/schema";
 
 /** Total spend for a vehicle, split maintenance vs fuel. */
 export async function vehicleSpend(vehicleId: number) {
@@ -40,8 +40,11 @@ export function listVehicleDueRecords(vehicleId: number) {
     );
 }
 
-/** All next-due records across vehicles (for garage-grid badges). */
-export function listAllDueRecords() {
+/**
+ * Next-due records for the vehicles a profile can see (for garage-grid badges).
+ * Joins vehicles so badges match the same shared-OR-owned scope as the grid.
+ */
+export function listAllDueRecords(profileId: number) {
   return db
     .select({
       vehicleId: maintenanceRecords.vehicleId,
@@ -49,10 +52,14 @@ export function listAllDueRecords() {
       nextDueMileage: maintenanceRecords.nextDueMileage,
     })
     .from(maintenanceRecords)
+    .innerJoin(vehicles, eq(maintenanceRecords.vehicleId, vehicles.id))
     .where(
-      or(
-        isNotNull(maintenanceRecords.nextDueDate),
-        isNotNull(maintenanceRecords.nextDueMileage),
+      and(
+        or(eq(vehicles.visibility, "shared"), eq(vehicles.profileId, profileId)),
+        or(
+          isNotNull(maintenanceRecords.nextDueDate),
+          isNotNull(maintenanceRecords.nextDueMileage),
+        ),
       ),
     );
 }

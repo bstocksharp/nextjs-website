@@ -1,11 +1,19 @@
 import "server-only";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { vehicles } from "@/lib/db/schema";
 
-/** All vehicles, newest first. */
-export function listVehicles() {
-  return db.select().from(vehicles).orderBy(desc(vehicles.createdAt));
+/**
+ * Vehicles visible to a profile, newest first: anything shared, plus the
+ * profile's own (incl. private) cars. Visibility is organization, not security —
+ * see ARCHITECTURE "Profiles, visibility & access".
+ */
+export function listVehicles(profileId: number) {
+  return db
+    .select()
+    .from(vehicles)
+    .where(or(eq(vehicles.visibility, "shared"), eq(vehicles.profileId, profileId)))
+    .orderBy(desc(vehicles.createdAt));
 }
 
 /** A single vehicle by id, or null. */

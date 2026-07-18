@@ -260,7 +260,7 @@ async function main() {
     await sql`DELETE FROM workout_items`;
     await sql`DELETE FROM workouts`;
     await sql`DELETE FROM exercises`;
-    await sql`DELETE FROM workout_profiles`;
+    await sql`DELETE FROM profiles`;
     console.log("• reset: cleared workout tables");
   }
 
@@ -275,10 +275,10 @@ async function main() {
 
   // Profiles
   const [bryce] = await sql`
-    INSERT INTO workout_profiles (name, color, sort_order)
+    INSERT INTO profiles (name, color, sort_order)
     VALUES ('Bryce', '#4caf7d', 0) RETURNING id`;
   await sql`
-    INSERT INTO workout_profiles (name, color, sort_order)
+    INSERT INTO profiles (name, color, sort_order)
     VALUES ('Lauren', '#d8b384', 1) RETURNING id`;
   console.log("• seeded 2 profiles (Bryce, Lauren)");
 

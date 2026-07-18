@@ -13,9 +13,11 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import EditCalendarIcon from "@mui/icons-material/EditCalendar";
 import LoopIcon from "@mui/icons-material/Loop";
 import { isEditor } from "@/lib/auth";
-import { listProfiles, getAssignments } from "@/lib/queries/workout";
+import { getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
+import { getActiveProfile } from "@/lib/profile";
 import { WEEKDAYS } from "@/lib/workout";
 import Pill from "@/components/shared/Pill";
+import QuickStartList from "@/components/workout/QuickStartList";
 
 export const metadata = { title: "Day — Workout" };
 
@@ -31,13 +33,18 @@ export default async function DayPage({
   if (!Number.isInteger(wd) || wd < 0 || wd > 6) notFound();
 
   const { profile } = await searchParams;
-  const [profiles, editor] = await Promise.all([listProfiles(), isEditor()]);
-  const activeProfile =
-    profiles.find((p) => String(p.id) === profile) ?? profiles[0] ?? null;
+  const [activeProfile, editor] = await Promise.all([
+    getActiveProfile(profile),
+    isEditor(),
+  ]);
   if (!activeProfile) redirect("/workout");
 
   const assignments = await getAssignments(activeProfile.id);
   const a = assignments.find((x) => x.weekday === wd) ?? null;
+
+  // On a rest day we offer an ad-hoc option: start any saved workout now,
+  // without touching the schedule. Only needed when nothing's assigned.
+  const library = a ? [] : await listWorkoutsWithCreator();
 
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
@@ -111,36 +118,61 @@ export default async function DayPage({
           </Stack>
         </Paper>
       ) : (
-        <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 } }}>
-          <Typography variant="h6" sx={{ mb: 0.5 }}>
-            Rest day
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Nothing scheduled for this day yet.
-          </Typography>
-          {editor ? (
-            <Stack spacing={1.5}>
-              <Button
-                component={Link}
-                href={`/workout/new?profile=${activeProfile.id}&weekday=${wd}`}
-                variant="contained"
-                startIcon={<AddIcon />}
+        <>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 } }}>
+            <Typography variant="h6" sx={{ mb: 0.5 }}>
+              Rest day
+            </Typography>
+            <Typography
+              variant="body2"
+              color="text.secondary"
+              sx={{ mb: editor ? 2 : 0 }}
+            >
+              Nothing scheduled for this day yet.
+            </Typography>
+            {editor ? (
+              <Stack spacing={1.5}>
+                <Button
+                  component={Link}
+                  href={`/workout/new?profile=${activeProfile.id}&weekday=${wd}`}
+                  variant="contained"
+                  startIcon={<AddIcon />}
+                >
+                  Build a workout for this day
+                </Button>
+                <Button
+                  component={Link}
+                  href={`/workout/schedule?profile=${activeProfile.id}`}
+                  variant="outlined"
+                  startIcon={<EditCalendarIcon />}
+                >
+                  Assign an existing workout
+                </Button>
+              </Stack>
+            ) : null}
+          </Paper>
+
+          {/* Ad-hoc: start any saved workout now, no scheduling involved. */}
+          {library.length > 0 ? (
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" sx={{ mb: 0.5 }}>
+                Just do one now
+              </Typography>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ mb: 1.5 }}
               >
-                Build a workout for this day
-              </Button>
-              <Button
-                component={Link}
-                href={`/workout/schedule?profile=${activeProfile.id}`}
-                variant="outlined"
-                startIcon={<EditCalendarIcon />}
-              >
-                Assign an existing workout
-              </Button>
-            </Stack>
+                Start any saved workout — this won&apos;t change your schedule.
+              </Typography>
+              <QuickStartList workouts={library} />
+            </Box>
           ) : (
-            <Typography color="text.secondary">Enjoy the rest day. 💤</Typography>
+            <Typography color="text.secondary" sx={{ mt: 2 }}>
+              Enjoy the rest day. 💤
+            </Typography>
           )}
-        </Paper>
+        </>
       )}
     </Container>
   );

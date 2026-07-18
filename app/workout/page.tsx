@@ -3,20 +3,15 @@ import Box from "@mui/material/Box";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Button from "@mui/material/Button";
 import LoopIcon from "@mui/icons-material/Loop";
 import AddIcon from "@mui/icons-material/Add";
-import EditCalendarIcon from "@mui/icons-material/EditCalendar";
 import { isEditor } from "@/lib/auth";
-import {
-  listProfiles,
-  getAssignments,
-  listWorkoutsWithCreator,
-} from "@/lib/queries/workout";
+import { getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
+import { getActiveProfile } from "@/lib/profile";
 import WeekSchedule from "@/components/workout/WeekSchedule";
 import Pill from "@/components/shared/Pill";
 
@@ -28,9 +23,7 @@ export default async function WorkoutDashboard({
   searchParams: Promise<{ profile?: string }>;
 }) {
   const { profile } = await searchParams;
-  const profiles = await listProfiles();
-  const activeProfile =
-    profiles.find((p) => String(p.id) === profile) ?? profiles[0] ?? null;
+  const activeProfile = await getActiveProfile(profile);
 
   const [assignments, library, editor] = await Promise.all([
     activeProfile ? getAssignments(activeProfile.id) : Promise.resolve([]),
@@ -54,32 +47,7 @@ export default async function WorkoutDashboard({
         </Typography>
       </Stack>
 
-      {/* Profile selector */}
-      {profiles.length > 0 ? (
-        <Stack
-          direction="row"
-          spacing={1}
-          sx={{ mb: 4, flexWrap: "wrap", gap: 1 }}
-        >
-          {profiles.map((p) => {
-            const active = activeProfile?.id === p.id;
-            return (
-              <Chip
-                key={p.id}
-                label={p.name}
-                clickable
-                component={Link}
-                href={`/workout?profile=${p.id}`}
-                color={active ? "primary" : "default"}
-                variant={active ? "filled" : "outlined"}
-                sx={p.color && !active ? { borderColor: p.color } : undefined}
-              />
-            );
-          })}
-        </Stack>
-      ) : null}
-
-      {/* Today + this profile's week */}
+      {/* Today + this profile's week (switch people via the header) */}
       {activeProfile ? (
         <Box sx={{ mb: 5 }}>
           <WeekSchedule
