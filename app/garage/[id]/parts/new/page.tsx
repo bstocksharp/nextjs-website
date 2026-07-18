@@ -5,7 +5,7 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { addPart } from "@/app/actions/parts";
-import PartForm from "@/components/PartForm";
+import PartForm from "@/components/garage/PartForm";
 
 export default async function NewPartPage({
   params,

@@ -288,11 +288,10 @@ async function main() {
     const tips = Array.isArray(e.tips) ? e.tips.join("\n") : (e.tips ?? null);
     const [row] = await sql`
       INSERT INTO exercises
-        (name, category, default_mode, default_sets, default_reps,
-         default_duration, default_weight, default_rest, description, tips)
+        (name, category, default_reps, default_duration, default_weight, description, tips)
       VALUES
-        (${e.name}, ${e.category}, ${e.mode}, ${e.sets ?? 3}, ${e.reps ?? null},
-         ${e.duration ?? null}, ${e.weight ?? null}, ${e.rest ?? null},
+        (${e.name}, ${e.category}, ${e.reps ?? null},
+         ${e.duration ?? null}, ${e.weight ?? null},
          ${e.description ?? null}, ${tips})
       RETURNING id`;
     byName[e.name] = row.id;
@@ -314,11 +313,10 @@ async function main() {
       if (!exId) throw new Error(`Unknown exercise "${it.name}" in ${def.name}`);
       await sql`
         INSERT INTO workout_items
-          (workout_id, exercise_id, section, mode, reps, duration, weight, rest, note, sort_order)
+          (workout_id, exercise_id, section, reps, duration, weight, note, sort_order)
         VALUES
-          (${workout.id}, ${exId}, ${it.section},
-           ${it.mode ?? null}, ${it.reps ?? null}, ${it.duration ?? null},
-           ${it.weight ?? null}, ${it.rest ?? null}, ${it.note ?? null}, ${i})`;
+          (${workout.id}, ${exId}, ${it.section}, ${it.reps ?? null},
+           ${it.duration ?? null}, ${it.weight ?? null}, ${it.note ?? null}, ${i})`;
     }
     console.log(`• seeded workout "${def.name}" (${def.items.length} items)`);
   }

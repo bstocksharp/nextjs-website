@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { listAllServiceTypes } from "@/lib/queries/maintenance";
 import { addMaintenance } from "@/app/actions/maintenance";
-import MaintenanceForm from "@/components/MaintenanceForm";
+import MaintenanceForm from "@/components/garage/MaintenanceForm";
 
 export default async function NewMaintenancePage({
   params,

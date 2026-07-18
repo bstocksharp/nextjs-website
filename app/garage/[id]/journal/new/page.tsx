@@ -5,7 +5,7 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { addJournal } from "@/app/actions/journal";
-import JournalForm from "@/components/JournalForm";
+import JournalForm from "@/components/garage/JournalForm";
 
 export default async function NewJournalPage({
   params,

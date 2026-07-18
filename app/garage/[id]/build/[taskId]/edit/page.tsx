@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { getBuildTask } from "@/lib/queries/build";
 import { updateBuildTask } from "@/app/actions/build";
-import BuildTaskForm from "@/components/BuildTaskForm";
+import BuildTaskForm from "@/components/garage/BuildTaskForm";
 
 export default async function EditBuildTaskPage({
   params,

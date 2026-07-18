@@ -115,17 +115,16 @@ export async function getWorkoutWithItems(
   };
 }
 
-/** A single workout item with its catalog exercise (for the override editor). */
-export async function getWorkoutItemWithExercise(
-  itemId: number,
-): Promise<{ item: WorkoutItem; exercise: Exercise } | null> {
-  const rows = await db
+/** All items of a workout with their catalog exercises, in order (for the builder). */
+export function getWorkoutItemsWithExercises(
+  workoutId: number,
+): Promise<{ item: WorkoutItem; exercise: Exercise }[]> {
+  return db
     .select({ item: workoutItems, exercise: exercises })
     .from(workoutItems)
     .innerJoin(exercises, eq(workoutItems.exerciseId, exercises.id))
-    .where(eq(workoutItems.id, itemId))
-    .limit(1);
-  return rows[0] ?? null;
+    .where(eq(workoutItems.workoutId, workoutId))
+    .orderBy(asc(workoutItems.sortOrder), asc(workoutItems.id));
 }
 
 // ── Scheduling (per-profile weekday → workout) ────────────────────────────────

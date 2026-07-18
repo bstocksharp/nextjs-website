@@ -246,12 +246,13 @@ export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
   category: varchar("category", { length: 40 }), // warmup|legs|push|pull|core|cardio|carry|mobility
-  defaultMode: varchar("default_mode", { length: 20 }).notNull().default("reps"), // reps | timed
-  defaultSets: integer("default_sets").default(3),
+  // Recommended defaults; a workout item can override reps/time/weight. Mode is
+  // derived (reps present → rep-based; else timed). reps/weight are text on
+  // purpose — real workouts say "10-12", "8 each leg", "15s", "5 or 8s".
   defaultReps: varchar("default_reps", { length: 40 }), // "10-12", "8 each leg"
-  defaultDuration: integer("default_duration"), // seconds (timed)
+  defaultDuration: integer("default_duration"), // seconds; per-rep when reps set, else total hold
   defaultWeight: varchar("default_weight", { length: 40 }), // "25 lb", "15s", "bodyweight"
-  defaultRest: integer("default_rest"), // seconds between sets
+  holdLast: boolean("hold_last").notNull().default(false), // hold the final rep (needs per-rep time)
   description: text("description"),
   tips: text("tips"),
   createdAt: createdAt(),
@@ -272,8 +273,8 @@ export const workouts = pgTable(
       .notNull()
       .references(() => workoutProfiles.id, { onDelete: "cascade" }),
     name: varchar("name", { length: 120 }).notNull(),
-    weekday: integer("weekday"), // legacy — scheduling moved to workout_assignments
     rounds: integer("rounds").notNull().default(1), // times to rotate the MAIN circuit
+    restBetweenRounds: integer("rest_between_rounds").notNull().default(60), // seconds
     notes: text("notes"),
     sortOrder: integer("sort_order").default(0),
     createdAt: createdAt(),
@@ -302,9 +303,9 @@ export const workoutAssignments = pgTable(
 );
 
 // ── Workout items (ordered exercises in a workout; null override = use default) ─
-// `section` places the item in warmup | main | cooldown. Reps/duration are the
-// per-item target; "how many times" is the workout's `rounds` (main only), not a
-// per-item value. (`sets` is legacy/unused, kept to avoid a destructive migration.)
+// `section` places the item in warmup | main | cooldown. Reps/duration/weight are
+// per-item overrides (null = inherit the exercise). "How many times" is the
+// workout's `rounds` (main only), not a per-item value.
 export const workoutItems = pgTable(
   "workout_items",
   {
@@ -316,12 +317,10 @@ export const workoutItems = pgTable(
       .notNull()
       .references(() => exercises.id, { onDelete: "restrict" }),
     section: varchar("section", { length: 20 }).notNull().default("main"), // warmup | main | cooldown
-    mode: varchar("mode", { length: 20 }), // override: reps | timed
-    sets: integer("sets"), // legacy — superseded by workouts.rounds
     reps: varchar("reps", { length: 40 }),
-    duration: integer("duration"), // seconds (timed)
+    duration: integer("duration"), // seconds; per-rep when reps set, else total hold
     weight: varchar("weight", { length: 40 }),
-    rest: integer("rest"), // seconds of rest after this item
+    holdLast: boolean("hold_last"), // override; null = inherit the exercise's default
     note: text("note"),
     sortOrder: integer("sort_order").notNull().default(0),
   },

@@ -4,7 +4,7 @@ import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { addVehicle } from "@/app/actions/vehicles";
-import VehicleForm from "@/components/VehicleForm";
+import VehicleForm from "@/components/garage/VehicleForm";
 
 export default async function NewVehiclePage() {
   if (!(await isEditor())) redirect("/unlock");

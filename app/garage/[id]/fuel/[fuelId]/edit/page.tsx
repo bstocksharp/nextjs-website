@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { getFuelLog } from "@/lib/queries/fuel";
 import { updateFuel } from "@/app/actions/fuel";
-import FuelForm from "@/components/FuelForm";
+import FuelForm from "@/components/garage/FuelForm";
 
 export default async function EditFuelPage({
   params,

@@ -12,8 +12,13 @@ import LoopIcon from "@mui/icons-material/Loop";
 import AddIcon from "@mui/icons-material/Add";
 import EditCalendarIcon from "@mui/icons-material/EditCalendar";
 import { isEditor } from "@/lib/auth";
-import { listProfiles, getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
-import WeekSchedule from "@/components/WeekSchedule";
+import {
+  listProfiles,
+  getAssignments,
+  listWorkoutsWithCreator,
+} from "@/lib/queries/workout";
+import WeekSchedule from "@/components/workout/WeekSchedule";
+import Pill from "@/components/shared/Pill";
 
 export const metadata = { title: "Workout" };
 
@@ -39,14 +44,23 @@ export default async function WorkoutDashboard({
         <Typography variant="h3" component="h1">
           Workout
         </Typography>
-        <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
+        <Typography
+          variant="h6"
+          component="p"
+          color="text.secondary"
+          fontWeight={400}
+        >
           Tonight&apos;s exercises — pick a day and press start.
         </Typography>
       </Stack>
 
       {/* Profile selector */}
       {profiles.length > 0 ? (
-        <Stack direction="row" spacing={1} sx={{ mb: 4, flexWrap: "wrap", gap: 1 }}>
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ mb: 4, flexWrap: "wrap", gap: 1 }}
+        >
           {profiles.map((p) => {
             const active = activeProfile?.id === p.id;
             return (
@@ -68,18 +82,12 @@ export default async function WorkoutDashboard({
       {/* Today + this profile's week */}
       {activeProfile ? (
         <Box sx={{ mb: 5 }}>
-          <WeekSchedule assignments={assignments} profileName={activeProfile.name} />
-          {editor ? (
-            <Button
-              component={Link}
-              href={`/workout/schedule?profile=${activeProfile.id}`}
-              startIcon={<EditCalendarIcon />}
-              size="small"
-              sx={{ mt: 1.5 }}
-            >
-              Edit schedule
-            </Button>
-          ) : null}
+          <WeekSchedule
+            assignments={assignments}
+            profileName={activeProfile.name}
+            profileId={activeProfile.id}
+            editor={editor}
+          />
         </Box>
       ) : null}
 
@@ -128,11 +136,14 @@ export default async function WorkoutDashboard({
                     <Typography variant="h6" component="h3">
                       {w.name}
                     </Typography>
-                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                    <Stack
+                      direction="row"
+                      spacing={1}
+                      alignItems="center"
+                      flexWrap="wrap"
+                    >
                       {w.rounds > 1 ? (
-                        <Chip
-                          size="small"
-                          variant="outlined"
+                        <Pill
                           icon={<LoopIcon />}
                           label={`${w.rounds} rounds`}
                         />

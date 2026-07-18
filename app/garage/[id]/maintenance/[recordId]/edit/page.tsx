@@ -9,7 +9,7 @@ import {
   listAllServiceTypes,
 } from "@/lib/queries/maintenance";
 import { updateMaintenance } from "@/app/actions/maintenance";
-import MaintenanceForm from "@/components/MaintenanceForm";
+import MaintenanceForm from "@/components/garage/MaintenanceForm";
 
 export default async function EditMaintenancePage({
   params,

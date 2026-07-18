@@ -5,7 +5,7 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { addFuel } from "@/app/actions/fuel";
-import FuelForm from "@/components/FuelForm";
+import FuelForm from "@/components/garage/FuelForm";
 
 export default async function NewFuelPage({
   params,

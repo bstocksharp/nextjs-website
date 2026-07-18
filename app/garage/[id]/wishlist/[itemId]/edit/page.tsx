@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { getWishlistItem } from "@/lib/queries/wishlist";
 import { updateWishlistItem } from "@/app/actions/wishlist";
-import WishlistForm from "@/components/WishlistForm";
+import WishlistForm from "@/components/garage/WishlistForm";
 
 export default async function EditWishlistPage({
   params,
