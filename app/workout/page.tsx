@@ -1,0 +1,155 @@
+import Link from "next/link";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Chip from "@mui/material/Chip";
+import Card from "@mui/material/Card";
+import CardActionArea from "@mui/material/CardActionArea";
+import CardContent from "@mui/material/CardContent";
+import Button from "@mui/material/Button";
+import LoopIcon from "@mui/icons-material/Loop";
+import AddIcon from "@mui/icons-material/Add";
+import EditCalendarIcon from "@mui/icons-material/EditCalendar";
+import { isEditor } from "@/lib/auth";
+import { listProfiles, getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
+import WeekSchedule from "@/components/WeekSchedule";
+
+export const metadata = { title: "Workout" };
+
+export default async function WorkoutDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ profile?: string }>;
+}) {
+  const { profile } = await searchParams;
+  const profiles = await listProfiles();
+  const activeProfile =
+    profiles.find((p) => String(p.id) === profile) ?? profiles[0] ?? null;
+
+  const [assignments, library, editor] = await Promise.all([
+    activeProfile ? getAssignments(activeProfile.id) : Promise.resolve([]),
+    listWorkoutsWithCreator(),
+    isEditor(),
+  ]);
+
+  return (
+    <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
+      <Stack spacing={1} sx={{ mb: 3 }}>
+        <Typography variant="h3" component="h1">
+          Workout
+        </Typography>
+        <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
+          Tonight&apos;s exercises — pick a day and press start.
+        </Typography>
+      </Stack>
+
+      {/* Profile selector */}
+      {profiles.length > 0 ? (
+        <Stack direction="row" spacing={1} sx={{ mb: 4, flexWrap: "wrap", gap: 1 }}>
+          {profiles.map((p) => {
+            const active = activeProfile?.id === p.id;
+            return (
+              <Chip
+                key={p.id}
+                label={p.name}
+                clickable
+                component={Link}
+                href={`/workout?profile=${p.id}`}
+                color={active ? "primary" : "default"}
+                variant={active ? "filled" : "outlined"}
+                sx={p.color && !active ? { borderColor: p.color } : undefined}
+              />
+            );
+          })}
+        </Stack>
+      ) : null}
+
+      {/* Today + this profile's week */}
+      {activeProfile ? (
+        <Box sx={{ mb: 5 }}>
+          <WeekSchedule assignments={assignments} profileName={activeProfile.name} />
+          {editor ? (
+            <Button
+              component={Link}
+              href={`/workout/schedule?profile=${activeProfile.id}`}
+              startIcon={<EditCalendarIcon />}
+              size="small"
+              sx={{ mt: 1.5 }}
+            >
+              Edit schedule
+            </Button>
+          ) : null}
+        </Box>
+      ) : null}
+
+      {/* Shared workout library */}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        spacing={2}
+        sx={{ mb: 2 }}
+      >
+        <Typography variant="h5" component="h2">
+          Workout library
+        </Typography>
+        {editor ? (
+          <Button
+            component={Link}
+            href={`/workout/new${activeProfile ? `?profile=${activeProfile.id}` : ""}`}
+            variant="contained"
+            startIcon={<AddIcon />}
+            sx={{ flexShrink: 0 }}
+          >
+            New
+          </Button>
+        ) : null}
+      </Stack>
+      {library.length === 0 ? (
+        <Typography color="text.secondary">No workouts saved yet.</Typography>
+      ) : (
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+          }}
+        >
+          {library.map((w) => (
+            <Card key={w.id} variant="outlined">
+              <CardActionArea
+                component={Link}
+                href={`/workout/${w.id}`}
+                sx={{ height: "100%" }}
+              >
+                <CardContent>
+                  <Stack spacing={1}>
+                    <Typography variant="h6" component="h3">
+                      {w.name}
+                    </Typography>
+                    <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+                      {w.rounds > 1 ? (
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          icon={<LoopIcon />}
+                          label={`${w.rounds} rounds`}
+                        />
+                      ) : null}
+                      {w.createdByName ? (
+                        <Typography variant="caption" color="text.secondary">
+                          saved by {w.createdByName}
+                        </Typography>
+                      ) : null}
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </CardActionArea>
+            </Card>
+          ))}
+        </Box>
+      )}
+    </Container>
+  );
+}

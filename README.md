@@ -22,9 +22,6 @@ Everything for the dream NA Miata in one place: buying guide, build philosophy
 ## Coming next / ideas
 
 - **Exercise companion** — a weekly workout schedule I can interact with (next up).
-- **Calendar** — dinner plans for the next couple weeks (so I stop asking
-  "what's for dinner"), plus dated tasks and recurring reminders.
-- **Puzzle a Day** — the month/day puzzle idea.
 
 The root (`/`) is a launcher; a header switcher hops between apps. Adding a new
 app = a folder under `app/` + one entry in [`lib/apps.tsx`](lib/apps.tsx).
@@ -47,15 +44,6 @@ npm run db:push        # sync lib/db/schema.ts to the database
 npm run db:studio      # browse/edit the DB in a GUI (local.drizzle.studio)
 node scripts/inspect-db.mjs   # quick: list the DB tables
 ```
-
-## Environment (`.env.local`, gitignored)
-
-- `POSTGRES_*` — from the Vercel/Neon integration (`vercel env pull` to refresh)
-- `EDIT_PASSWORD` — the password to unlock editing
-- `COOKIE_SECRET` — a long random string that signs the editor cookie
-
-On Vercel these live in **Settings → Environment Variables** (Postgres comes
-from the integration automatically).
 
 ## Layout
 

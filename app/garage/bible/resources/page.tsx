@@ -13,8 +13,17 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 import ForumOutlinedIcon from "@mui/icons-material/ForumOutlined";
 import BuildOutlinedIcon from "@mui/icons-material/BuildOutlined";
+import ArticleOutlinedIcon from "@mui/icons-material/ArticleOutlined";
 
 export const metadata = { title: "Resources — The Miata Bible" };
+
+const GUIDES: { name: string; href: string; meta?: string }[] = [
+  {
+    name: "Checking Out a Used NA or NB Miata",
+    href: "https://www.miata.net/garage/Checking%20Out%20a%20Used%20Miata%20-%20Update%202018.pdf",
+    meta: "Miata.net community · Aug 2018 — the full-length article our buying guide is condensed from.",
+  },
+];
 
 const CHANNELS: { name: string; href?: string }[] = [
   { name: "Flyin' Miata", href: "https://www.flyinmiata.com" },
@@ -55,6 +64,33 @@ export default function ResourcesPage() {
       </Typography>
 
       <Stack spacing={2} sx={{ mt: 2 }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
+          <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+            Guides
+          </Typography>
+          <List dense disablePadding>
+            {GUIDES.map((g) => (
+              <ListItem
+                key={g.name}
+                disableGutters
+                sx={{ py: 0.25, alignItems: "flex-start" }}
+              >
+                <ListItemIcon sx={{ minWidth: 32, mt: 0.5 }}>
+                  <ArticleOutlinedIcon fontSize="small" color="primary" />
+                </ListItemIcon>
+                <ListItemText
+                  primary={
+                    <MuiLink href={g.href} target="_blank" rel="noopener noreferrer">
+                      {g.name}
+                    </MuiLink>
+                  }
+                  secondary={g.meta}
+                />
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+
         <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 } }}>
           <Typography variant="subtitle1" fontWeight={700} gutterBottom>
             YouTube
