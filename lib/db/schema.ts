@@ -18,6 +18,7 @@ import {
   date,
   timestamp,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 
 const createdAt = () =>
@@ -225,6 +226,108 @@ export const resources = pgTable("resources", {
   createdAt: createdAt(),
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WORKOUT APP — nightly exercise companion (profiles, catalog, routines, items)
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Workout profiles (people using the app: Bryce, spouse, …) ─────────────────
+export const workoutProfiles = pgTable("workout_profiles", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 80 }).notNull(),
+  color: varchar("color", { length: 20 }), // tile accent
+  sortOrder: integer("sort_order").default(0),
+  createdAt: createdAt(),
+});
+
+// ── Exercise catalog (shared across profiles; carries recommended defaults) ───
+// mode: 'reps' (manual "Done → Next") | 'timed' (countdown). reps/weight are text
+// on purpose — real workouts say "10-12", "8 each leg", "15s", "5 or 8s".
+export const exercises = pgTable("exercises", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  category: varchar("category", { length: 40 }), // warmup|legs|push|pull|core|cardio|carry|mobility
+  defaultMode: varchar("default_mode", { length: 20 }).notNull().default("reps"), // reps | timed
+  defaultSets: integer("default_sets").default(3),
+  defaultReps: varchar("default_reps", { length: 40 }), // "10-12", "8 each leg"
+  defaultDuration: integer("default_duration"), // seconds (timed)
+  defaultWeight: varchar("default_weight", { length: 40 }), // "25 lb", "15s", "bodyweight"
+  defaultRest: integer("default_rest"), // seconds between sets
+  description: text("description"),
+  tips: text("tips"),
+  createdAt: createdAt(),
+});
+
+// ── Workouts (a saved routine / "day") — a SHARED library ─────────────────────
+// Every profile can see every workout; `createdByProfileId` is just "saved by"
+// (which profile authored it). A workout has three sections (warmup / main /
+// cooldown). MAIN is a circuit: `rounds` = how many times to rotate the main
+// items; warmup + cooldown run once. Scheduling is separate — see
+// `workout_assignments` (a workout can be assigned to many days/profiles).
+export const workouts = pgTable(
+  "workouts",
+  {
+    id: serial("id").primaryKey(),
+    // Column stays `profile_id`; semantics are "saved by" (creator), not owner.
+    createdByProfileId: integer("profile_id")
+      .notNull()
+      .references(() => workoutProfiles.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    weekday: integer("weekday"), // legacy — scheduling moved to workout_assignments
+    rounds: integer("rounds").notNull().default(1), // times to rotate the MAIN circuit
+    notes: text("notes"),
+    sortOrder: integer("sort_order").default(0),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_workouts_profile").on(t.createdByProfileId)],
+);
+
+// ── Workout assignments — each profile maps their own week ─────────────────────
+// (profileId, weekday) → workoutId. Unique per profile+weekday, so a profile has
+// at most one workout per day; the same workout can be reused across days/profiles.
+export const workoutAssignments = pgTable(
+  "workout_assignments",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => workoutProfiles.id, { onDelete: "cascade" }),
+    weekday: integer("weekday").notNull(), // 0..6 (Sun..Sat)
+    workoutId: integer("workout_id")
+      .notNull()
+      .references(() => workouts.id, { onDelete: "cascade" }),
+  },
+  (t) => [
+    uniqueIndex("uniq_assignment_profile_weekday").on(t.profileId, t.weekday),
+  ],
+);
+
+// ── Workout items (ordered exercises in a workout; null override = use default) ─
+// `section` places the item in warmup | main | cooldown. Reps/duration are the
+// per-item target; "how many times" is the workout's `rounds` (main only), not a
+// per-item value. (`sets` is legacy/unused, kept to avoid a destructive migration.)
+export const workoutItems = pgTable(
+  "workout_items",
+  {
+    id: serial("id").primaryKey(),
+    workoutId: integer("workout_id")
+      .notNull()
+      .references(() => workouts.id, { onDelete: "cascade" }),
+    exerciseId: integer("exercise_id")
+      .notNull()
+      .references(() => exercises.id, { onDelete: "restrict" }),
+    section: varchar("section", { length: 20 }).notNull().default("main"), // warmup | main | cooldown
+    mode: varchar("mode", { length: 20 }), // override: reps | timed
+    sets: integer("sets"), // legacy — superseded by workouts.rounds
+    reps: varchar("reps", { length: 40 }),
+    duration: integer("duration"), // seconds (timed)
+    weight: varchar("weight", { length: 40 }),
+    rest: integer("rest"), // seconds of rest after this item
+    note: text("note"),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (t) => [index("idx_workout_items_workout").on(t.workoutId)],
+);
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
@@ -248,3 +351,13 @@ export type Attachment = typeof attachments.$inferSelect;
 export type NewAttachment = typeof attachments.$inferInsert;
 export type Resource = typeof resources.$inferSelect;
 export type NewResource = typeof resources.$inferInsert;
+export type WorkoutProfile = typeof workoutProfiles.$inferSelect;
+export type NewWorkoutProfile = typeof workoutProfiles.$inferInsert;
+export type Exercise = typeof exercises.$inferSelect;
+export type NewExercise = typeof exercises.$inferInsert;
+export type Workout = typeof workouts.$inferSelect;
+export type NewWorkout = typeof workouts.$inferInsert;
+export type WorkoutItem = typeof workoutItems.$inferSelect;
+export type NewWorkoutItem = typeof workoutItems.$inferInsert;
+export type WorkoutAssignment = typeof workoutAssignments.$inferSelect;
+export type NewWorkoutAssignment = typeof workoutAssignments.$inferInsert;
