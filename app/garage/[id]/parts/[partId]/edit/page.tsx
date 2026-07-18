@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { getPart } from "@/lib/queries/parts";
 import { updatePart } from "@/app/actions/parts";
-import PartForm from "@/components/PartForm";
+import PartForm from "@/components/garage/PartForm";
 
 export default async function EditPartPage({
   params,

@@ -5,7 +5,7 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { addWishlistItem } from "@/app/actions/wishlist";
-import WishlistForm from "@/components/WishlistForm";
+import WishlistForm from "@/components/garage/WishlistForm";
 
 export default async function NewWishlistPage({
   params,

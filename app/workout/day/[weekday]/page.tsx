@@ -1,0 +1,147 @@
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import Container from "@mui/material/Container";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
+import Paper from "@mui/material/Paper";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import AddIcon from "@mui/icons-material/Add";
+import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import EditCalendarIcon from "@mui/icons-material/EditCalendar";
+import LoopIcon from "@mui/icons-material/Loop";
+import { isEditor } from "@/lib/auth";
+import { listProfiles, getAssignments } from "@/lib/queries/workout";
+import { WEEKDAYS } from "@/lib/workout";
+import Pill from "@/components/shared/Pill";
+
+export const metadata = { title: "Day — Workout" };
+
+export default async function DayPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ weekday: string }>;
+  searchParams: Promise<{ profile?: string }>;
+}) {
+  const { weekday } = await params;
+  const wd = Number(weekday);
+  if (!Number.isInteger(wd) || wd < 0 || wd > 6) notFound();
+
+  const { profile } = await searchParams;
+  const [profiles, editor] = await Promise.all([listProfiles(), isEditor()]);
+  const activeProfile =
+    profiles.find((p) => String(p.id) === profile) ?? profiles[0] ?? null;
+  if (!activeProfile) redirect("/workout");
+
+  const assignments = await getAssignments(activeProfile.id);
+  const a = assignments.find((x) => x.weekday === wd) ?? null;
+
+  return (
+    <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
+      <Button
+        component={Link}
+        href={`/workout?profile=${activeProfile.id}`}
+        startIcon={<ArrowBackIcon />}
+        sx={{ mb: 2 }}
+      >
+        Back to week
+      </Button>
+
+      <Box sx={{ mb: 1 }}>
+        <Pill label={activeProfile.name} color="secondary" />
+      </Box>
+      <Typography variant="h3" component="h1" sx={{ mb: 3 }}>
+        {WEEKDAYS[wd].label}
+      </Typography>
+
+      {a ? (
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h5" component="h2">
+              {a.workoutName}
+            </Typography>
+            {a.rounds > 1 ? (
+              <Pill
+                color="primary"
+                variant="filled"
+                icon={<LoopIcon />}
+                label={`${a.rounds} rounds`}
+              />
+            ) : null}
+          </Stack>
+          <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <Button
+              component={Link}
+              href={`/workout/${a.workoutId}/run`}
+              variant="contained"
+              startIcon={<PlayArrowIcon />}
+            >
+              Start
+            </Button>
+            <Button
+              component={Link}
+              href={`/workout/${a.workoutId}`}
+              variant="outlined"
+            >
+              View
+            </Button>
+            {editor ? (
+              <Button
+                component={Link}
+                href={`/workout/${a.workoutId}/edit`}
+                variant="outlined"
+                startIcon={<EditOutlinedIcon />}
+              >
+                Edit workout
+              </Button>
+            ) : null}
+            {editor ? (
+              <Button
+                component={Link}
+                href={`/workout/schedule?profile=${activeProfile.id}`}
+                color="inherit"
+                startIcon={<EditCalendarIcon />}
+              >
+                Change this day
+              </Button>
+            ) : null}
+          </Stack>
+        </Paper>
+      ) : (
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 } }}>
+          <Typography variant="h6" sx={{ mb: 0.5 }}>
+            Rest day
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Nothing scheduled for this day yet.
+          </Typography>
+          {editor ? (
+            <Stack spacing={1.5}>
+              <Button
+                component={Link}
+                href={`/workout/new?profile=${activeProfile.id}&weekday=${wd}`}
+                variant="contained"
+                startIcon={<AddIcon />}
+              >
+                Build a workout for this day
+              </Button>
+              <Button
+                component={Link}
+                href={`/workout/schedule?profile=${activeProfile.id}`}
+                variant="outlined"
+                startIcon={<EditCalendarIcon />}
+              >
+                Assign an existing workout
+              </Button>
+            </Stack>
+          ) : (
+            <Typography color="text.secondary">Enjoy the rest day. 💤</Typography>
+          )}
+        </Paper>
+      )}
+    </Container>
+  );
+}

@@ -5,7 +5,7 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { addBuildTask } from "@/app/actions/build";
-import BuildTaskForm from "@/components/BuildTaskForm";
+import BuildTaskForm from "@/components/garage/BuildTaskForm";
 
 export default async function NewBuildTaskPage({
   params,

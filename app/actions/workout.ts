@@ -31,11 +31,10 @@ function parseExercise(formData: FormData) {
   return {
     name: String(formData.get("name") ?? "").trim(),
     category: str(formData, "category"),
-    defaultMode: str(formData, "defaultMode") ?? "reps",
     defaultReps: str(formData, "defaultReps"),
     defaultDuration: int(formData, "defaultDuration"),
     defaultWeight: str(formData, "defaultWeight"),
-    defaultRest: int(formData, "defaultRest"),
+    holdLast: formData.get("holdLast") != null, // checkbox present = on
     description: str(formData, "description"),
     tips: str(formData, "tips"), // textarea, one tip per line
   };
@@ -95,20 +94,34 @@ function parseWorkout(formData: FormData) {
   return {
     name: String(formData.get("name") ?? "").trim(),
     rounds: Math.max(1, int(formData, "rounds") ?? 1),
+    restBetweenRounds: Math.max(0, int(formData, "restBetweenRounds") ?? 60),
     createdByProfileId: int(formData, "createdByProfileId"),
   };
 }
 
 export async function addWorkout(formData: FormData): Promise<void> {
   await requireEditor();
-  const { name, rounds, createdByProfileId } = parseWorkout(formData);
+  const { name, rounds, restBetweenRounds, createdByProfileId } =
+    parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
   if (!createdByProfileId) throw new Error("Choose who's saving this workout.");
 
   const [row] = await db
     .insert(workouts)
-    .values({ name, rounds, createdByProfileId })
+    .values({ name, rounds, restBetweenRounds, createdByProfileId })
     .returning({ id: workouts.id });
+
+  // "Build a workout for this day" flow: auto-assign it to that weekday.
+  const assignWeekday = int(formData, "assignWeekday");
+  if (assignWeekday != null) {
+    await db
+      .insert(workoutAssignments)
+      .values({ profileId: createdByProfileId, weekday: assignWeekday, workoutId: row.id })
+      .onConflictDoUpdate({
+        target: [workoutAssignments.profileId, workoutAssignments.weekday],
+        set: { workoutId: row.id },
+      });
+  }
 
   revalidatePath("/workout");
   redirect(builderPath(row.id)); // straight into the builder to add exercises
@@ -119,7 +132,8 @@ export async function updateWorkout(
   formData: FormData,
 ): Promise<void> {
   await requireEditor();
-  const { name, rounds, createdByProfileId } = parseWorkout(formData);
+  const { name, rounds, restBetweenRounds, createdByProfileId } =
+    parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
 
   await db
@@ -127,13 +141,15 @@ export async function updateWorkout(
     .set({
       name,
       rounds,
+      restBetweenRounds,
       ...(createdByProfileId ? { createdByProfileId } : {}),
     })
     .where(eq(workouts.id, id));
 
+  // Auto-save: revalidate in place, stay in the builder (no navigation).
   revalidatePath("/workout");
   revalidatePath(`/workout/${id}`);
-  redirect(builderPath(id));
+  revalidatePath(`/workout/${id}/edit`);
 }
 
 export async function deleteWorkout(
@@ -176,18 +192,18 @@ export async function addWorkoutItem(
     sortOrder: await nextSort(workoutId),
   });
 
+  // No redirect — revalidate in place so the builder doesn't jump to the top.
   revalidatePath(`/workout/${workoutId}`);
-  redirect(builderPath(workoutId));
+  revalidatePath(builderPath(workoutId));
 }
 
 function parseItemOverrides(formData: FormData) {
   return {
     section: str(formData, "section") ?? "main",
-    mode: str(formData, "mode"), // null = inherit the exercise's default mode
     reps: str(formData, "reps"),
     duration: int(formData, "duration"),
     weight: str(formData, "weight"),
-    rest: int(formData, "rest"),
+    holdLast: formData.get("holdLast") != null, // checkbox present = on
     note: str(formData, "note"),
   };
 }
@@ -204,7 +220,7 @@ export async function updateWorkoutItem(
     .where(eq(workoutItems.id, itemId));
 
   revalidatePath(`/workout/${workoutId}`);
-  redirect(builderPath(workoutId));
+  revalidatePath(builderPath(workoutId));
 }
 
 export async function removeWorkoutItem(
@@ -216,7 +232,7 @@ export async function removeWorkoutItem(
   await db.delete(workoutItems).where(eq(workoutItems.id, itemId));
 
   revalidatePath(`/workout/${workoutId}`);
-  redirect(builderPath(workoutId));
+  revalidatePath(builderPath(workoutId));
 }
 
 /** Move an item up/down within its own section (swap sortOrder with neighbor). */

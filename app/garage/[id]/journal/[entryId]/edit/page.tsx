@@ -6,7 +6,7 @@ import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { getJournalEntry } from "@/lib/queries/journal";
 import { updateJournal } from "@/app/actions/journal";
-import JournalForm from "@/components/JournalForm";
+import JournalForm from "@/components/garage/JournalForm";
 
 export default async function EditJournalPage({
   params,

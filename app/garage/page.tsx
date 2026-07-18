@@ -11,7 +11,7 @@ import { listVehicles } from "@/lib/queries/vehicles";
 import { listAllDueRecords } from "@/lib/queries/summaries";
 import { isEditor } from "@/lib/auth";
 import { recordDueStatus, worstStatus, type DueStatus } from "@/lib/reminders";
-import VehicleCard from "@/components/VehicleCard";
+import VehicleCard from "@/components/garage/VehicleCard";
 
 export const metadata = { title: "Bryce's Garage" };
 

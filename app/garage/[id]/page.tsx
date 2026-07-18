@@ -11,15 +11,15 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getVehicle } from "@/lib/queries/vehicles";
 import { isEditor } from "@/lib/auth";
 import { deleteVehicle } from "@/app/actions/vehicles";
-import DeleteVehicleButton from "@/components/DeleteVehicleButton";
-import VehicleTabs from "@/components/VehicleTabs";
-import VehicleOverview from "@/components/VehicleOverview";
-import MaintenanceSection from "@/components/MaintenanceSection";
-import FuelSection from "@/components/FuelSection";
-import PartsSection from "@/components/PartsSection";
-import BuildSection from "@/components/BuildSection";
-import WishlistSection from "@/components/WishlistSection";
-import JournalSection from "@/components/JournalSection";
+import DeleteVehicleButton from "@/components/garage/DeleteVehicleButton";
+import VehicleTabs from "@/components/garage/VehicleTabs";
+import VehicleOverview from "@/components/garage/VehicleOverview";
+import MaintenanceSection from "@/components/garage/MaintenanceSection";
+import FuelSection from "@/components/garage/FuelSection";
+import PartsSection from "@/components/garage/PartsSection";
+import BuildSection from "@/components/garage/BuildSection";
+import WishlistSection from "@/components/garage/WishlistSection";
+import JournalSection from "@/components/garage/JournalSection";
 
 export default async function VehiclePage({
   params,

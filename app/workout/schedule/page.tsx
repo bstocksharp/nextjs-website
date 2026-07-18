@@ -14,7 +14,7 @@ import {
 } from "@/lib/queries/workout";
 import { setAssignment } from "@/app/actions/workout";
 import { WEEKDAYS } from "@/lib/workout";
-import AssignSelect from "@/components/AssignSelect";
+import AssignSelect from "@/components/workout/AssignSelect";
 
 export const metadata = { title: "Edit schedule — Workout" };
 
@@ -77,8 +77,10 @@ export default async function SchedulePage({
 
       <Stack spacing={1}>
         {ORDER.map((d) => (
+          // Key by profile+day so switching profiles remounts the selects with
+          // the new profile's values (uncontrolled defaults don't reset on nav).
           <Paper
-            key={d}
+            key={`${activeProfile.id}-${d}`}
             variant="outlined"
             sx={{ p: 1.5, display: "flex", alignItems: "center", gap: 2 }}
           >

@@ -5,7 +5,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Alert from "@mui/material/Alert";
-import SubmitButton from "@/components/SubmitButton";
+import SubmitButton from "@/components/shared/SubmitButton";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { isEditor } from "@/lib/auth";
 import { unlockAction } from "@/app/actions/auth";

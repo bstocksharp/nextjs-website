@@ -4,21 +4,16 @@ import Container from "@mui/material/Container";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
 import Button from "@mui/material/Button";
-import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Divider from "@mui/material/Divider";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
-import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
-import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
-import RepeatOutlinedIcon from "@mui/icons-material/RepeatOutlined";
 import LoopIcon from "@mui/icons-material/Loop";
+import DoneIcon from "@mui/icons-material/Done";
 import { isEditor } from "@/lib/auth";
 import {
-  getWorkoutWithItems,
+  getWorkout,
+  getWorkoutItemsWithExercises,
   listProfiles,
   listExercises,
 } from "@/lib/queries/workout";
@@ -26,13 +21,13 @@ import {
   updateWorkout,
   deleteWorkout,
   addWorkoutItem,
-  removeWorkoutItem,
-  moveWorkoutItem,
 } from "@/app/actions/workout";
-import { formatTarget, groupBySection, SECTIONS } from "@/lib/workout";
-import WorkoutMetaForm from "@/components/WorkoutMetaForm";
-import AddExerciseControl from "@/components/AddExerciseControl";
-import DeleteIconButton from "@/components/DeleteIconButton";
+import { resolveItem, SECTIONS, type Section } from "@/lib/workout";
+import WorkoutMetaAutoSave from "@/components/workout/WorkoutMetaAutoSave";
+import AddExerciseControl from "@/components/workout/AddExerciseControl";
+import BuilderItemRow from "@/components/workout/BuilderItemRow";
+import DeleteIconButton from "@/components/shared/DeleteIconButton";
+import Pill from "@/components/shared/Pill";
 
 export const metadata = { title: "Edit workout — Workout" };
 
@@ -47,15 +42,24 @@ export default async function WorkoutBuilderPage({
   const workoutId = Number(id);
   if (!Number.isInteger(workoutId)) notFound();
 
-  const [data, profiles, catalog] = await Promise.all([
-    getWorkoutWithItems(workoutId),
+  const [workout, rows, profiles, catalog] = await Promise.all([
+    getWorkout(workoutId),
+    getWorkoutItemsWithExercises(workoutId),
     listProfiles(),
     listExercises(),
   ]);
-  if (!data) notFound();
+  if (!workout) notFound();
 
-  const { workout, items } = data;
-  const bySection = groupBySection(items);
+  // Group each row (raw item + exercise + resolved display) by section.
+  const bySection: Record<Section, (typeof rows)[number][]> = {
+    warmup: [],
+    main: [],
+    cooldown: [],
+  };
+  for (const row of rows) {
+    const section = resolveItem(row.item, row.exercise).section;
+    bySection[section].push(row);
+  }
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -68,23 +72,24 @@ export default async function WorkoutBuilderPage({
         View workout
       </Button>
 
-      <Typography variant="h4" component="h1" sx={{ mb: 3 }}>
+      <Typography variant="h4" component="h1" sx={{ mb: 0.5 }}>
         Edit workout
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Everything here saves automatically.
       </Typography>
 
       <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 3 }, mb: 4 }}>
-        <WorkoutMetaForm
+        <WorkoutMetaAutoSave
           action={updateWorkout.bind(null, workoutId)}
           workout={workout}
           profiles={profiles}
-          submitLabel="Save details"
-          cancelHref={`/workout/${workoutId}`}
         />
       </Paper>
 
       <Stack spacing={4}>
         {SECTIONS.map((s) => {
-          const sectionItems = bySection[s.value];
+          const sectionRows = bySection[s.value];
           const isCircuit = s.value === "main" && workout.rounds > 1;
           return (
             <Box key={s.value}>
@@ -93,9 +98,9 @@ export default async function WorkoutBuilderPage({
                   {s.label}
                 </Typography>
                 {isCircuit ? (
-                  <Chip
+                  <Pill
                     color="primary"
-                    size="small"
+                    variant="filled"
                     icon={<LoopIcon />}
                     label={`${workout.rounds} rounds`}
                   />
@@ -103,86 +108,22 @@ export default async function WorkoutBuilderPage({
               </Stack>
 
               <Stack spacing={1} sx={{ mb: 1.5 }}>
-                {sectionItems.length === 0 ? (
+                {sectionRows.length === 0 ? (
                   <Typography variant="body2" color="text.secondary">
                     Nothing here yet.
                   </Typography>
                 ) : (
-                  sectionItems.map((it, i) => (
-                    <Paper key={it.itemId} variant="outlined" sx={{ p: 1.5 }}>
-                      <Stack direction="row" alignItems="center" spacing={1}>
-                        {/* Reorder within section */}
-                        <Stack sx={{ flexShrink: 0 }}>
-                          <form action={moveWorkoutItem.bind(null, it.itemId, workoutId, "up")}>
-                            <IconButton
-                              type="submit"
-                              size="small"
-                              aria-label="Move up"
-                              disabled={i === 0}
-                              sx={{ p: 0.25 }}
-                            >
-                              <ArrowUpwardIcon fontSize="small" />
-                            </IconButton>
-                          </form>
-                          <form action={moveWorkoutItem.bind(null, it.itemId, workoutId, "down")}>
-                            <IconButton
-                              type="submit"
-                              size="small"
-                              aria-label="Move down"
-                              disabled={i === sectionItems.length - 1}
-                              sx={{ p: 0.25 }}
-                            >
-                              <ArrowDownwardIcon fontSize="small" />
-                            </IconButton>
-                          </form>
-                        </Stack>
-
-                        <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-                            <Typography variant="body1" fontWeight={600}>
-                              {it.name}
-                            </Typography>
-                            <Chip
-                              size="small"
-                              variant="outlined"
-                              icon={
-                                it.mode === "timed" ? (
-                                  <TimerOutlinedIcon />
-                                ) : (
-                                  <RepeatOutlinedIcon />
-                                )
-                              }
-                              label={formatTarget(it)}
-                            />
-                            {it.weight ? (
-                              <Typography variant="body2" color="text.secondary">
-                                {it.weight}
-                              </Typography>
-                            ) : null}
-                          </Stack>
-                          {it.note ? (
-                            <Typography variant="body2" color="text.secondary">
-                              {it.note}
-                            </Typography>
-                          ) : null}
-                        </Box>
-
-                        <IconButton
-                          component={Link}
-                          href={`/workout/${workoutId}/items/${it.itemId}/edit`}
-                          size="small"
-                          aria-label={`Edit ${it.name}`}
-                          sx={{ flexShrink: 0 }}
-                        >
-                          <EditOutlinedIcon fontSize="small" />
-                        </IconButton>
-                        <DeleteIconButton
-                          action={removeWorkoutItem.bind(null, it.itemId, workoutId)}
-                          confirmMessage={`Remove ${it.name} from this workout?`}
-                          label={`Remove ${it.name}`}
-                        />
-                      </Stack>
-                    </Paper>
+                  sectionRows.map((row, i) => (
+                    <BuilderItemRow
+                      key={row.item.id}
+                      resolved={resolveItem(row.item, row.exercise)}
+                      item={row.item}
+                      exercise={row.exercise}
+                      workoutId={workoutId}
+                      itemId={row.item.id}
+                      isFirst={i === 0}
+                      isLast={i === sectionRows.length - 1}
+                    />
                   ))
                 )}
               </Stack>
@@ -196,6 +137,17 @@ export default async function WorkoutBuilderPage({
           );
         })}
       </Stack>
+
+      <Button
+        component={Link}
+        href={`/workout/${workoutId}`}
+        variant="contained"
+        size="large"
+        startIcon={<DoneIcon />}
+        sx={{ mt: 4 }}
+      >
+        Done
+      </Button>
 
       <Divider sx={{ my: 4 }} />
 

@@ -5,21 +5,23 @@ import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { listProfiles } from "@/lib/queries/workout";
 import { addWorkout } from "@/app/actions/workout";
-import WorkoutMetaForm from "@/components/WorkoutMetaForm";
+import WorkoutMetaForm from "@/components/workout/WorkoutMetaForm";
 
 export const metadata = { title: "New workout — Workout" };
 
 export default async function NewWorkoutPage({
   searchParams,
 }: {
-  searchParams: Promise<{ profile?: string }>;
+  searchParams: Promise<{ profile?: string; weekday?: string }>;
 }) {
   if (!(await isEditor())) redirect("/unlock");
 
-  const { profile } = await searchParams;
+  const { profile, weekday } = await searchParams;
   const profiles = await listProfiles();
   const defaultProfileId =
     profiles.find((p) => String(p.id) === profile)?.id ?? profiles[0]?.id;
+  const assignWeekday =
+    weekday != null && /^[0-6]$/.test(weekday) ? Number(weekday) : undefined;
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -34,6 +36,7 @@ export default async function NewWorkoutPage({
           action={addWorkout}
           profiles={profiles}
           defaultProfileId={defaultProfileId}
+          assignWeekday={assignWeekday}
           submitLabel="Create & add exercises"
           cancelHref="/workout"
         />

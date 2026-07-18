@@ -59,11 +59,11 @@ export type ResolvedItem = {
   name: string;
   category: string | null;
   section: Section; // warmup | main | cooldown
-  mode: string; // "reps" | "timed"
-  reps: string | null; // reps mode, e.g. "10-12", "8 each leg"
-  duration: number | null; // seconds, timed mode
+  mode: string; // derived: "reps" (has reps) | "timed" (no reps)
+  reps: string | null; // e.g. "10-12", "8 each leg"
+  duration: number | null; // seconds — per-rep time if reps set, else total hold
   weight: string | null; // e.g. "25 lb", "15s", "bodyweight"
-  rest: number | null; // seconds of rest after this item
+  holdLast: boolean; // hold the final rep (only takes effect with a per-rep time)
   description: string | null;
   tips: string | null;
   note: string | null; // per-item note (overrides nothing; extra context)
@@ -71,18 +71,26 @@ export type ResolvedItem = {
 };
 
 export function resolveItem(item: WorkoutItem, exercise: Exercise): ResolvedItem {
-  const section = (item.section as Section) ?? "main";
+  const rawSection = (item.section as Section) ?? "main";
+  const section = SECTIONS.some((s) => s.value === rawSection)
+    ? rawSection
+    : "main";
+  const reps = item.reps ?? exercise.defaultReps ?? null;
+  const duration = item.duration ?? exercise.defaultDuration ?? null;
+  // Mode is derived from the data (not a stored field): has reps → rep-based
+  // (auto mode times `duration` per rep); no reps → a plain countdown of `duration`.
+  const mode = reps ? "reps" : duration != null ? "timed" : "reps";
   return {
     itemId: item.id,
     exerciseId: exercise.id,
     name: exercise.name,
     category: exercise.category,
-    section: SECTIONS.some((s) => s.value === section) ? section : "main",
-    mode: item.mode ?? exercise.defaultMode,
-    reps: item.reps ?? exercise.defaultReps ?? null,
-    duration: item.duration ?? exercise.defaultDuration ?? null,
+    section,
+    mode,
+    reps,
+    duration,
     weight: item.weight ?? exercise.defaultWeight ?? null,
-    rest: item.rest ?? exercise.defaultRest ?? null,
+    holdLast: item.holdLast ?? exercise.holdLast ?? false,
     description: exercise.description,
     tips: exercise.tips,
     note: item.note,
@@ -116,14 +124,81 @@ export function formatDuration(seconds: number): string {
   return `${seconds}s`;
 }
 
-/** The per-item target: "10-12", "8 each leg", "45s", "5 min". No sets/rounds. */
+/**
+ * The per-item target line. Reps only → "10-12". Reps + per-rep time →
+ * "10 × 5s". Timed only → "45s" / "5 min".
+ */
 export function formatTarget(
-  r: Pick<ResolvedItem, "mode" | "reps" | "duration">,
+  r: Pick<ResolvedItem, "reps" | "duration">,
 ): string {
-  if (r.mode === "timed") {
-    return r.duration != null ? formatDuration(r.duration) : "";
+  if (r.reps) {
+    return r.duration != null
+      ? `${r.reps} × ${formatDuration(r.duration)}`
+      : r.reps;
   }
-  return r.reps ?? "";
+  return r.duration != null ? formatDuration(r.duration) : "";
+}
+
+/** First integer in a reps string ("10-12" → 10, "8 each leg" → 8, "to failure" → null). */
+export function parseLeadingInt(s: string | null): number | null {
+  if (!s) return null;
+  const m = s.match(/\d+/);
+  return m ? Number(m[0]) : null;
+}
+
+// ── Run steps: expand a workout into the ordered sequence the runner plays ─────
+// A short "Get ready" prep goes between consecutive exercises (time to
+// reposition); a longer "Rest" goes between main circuit rounds. Rest is a
+// workout-level concept now (not attached to individual exercises).
+export const PREP_SECONDS = 10;
+
+export type WorkStep = {
+  kind: "work";
+  item: ResolvedItem;
+  round: number | null; // main round number; null for warmup/cooldown
+  totalRounds: number;
+};
+export type RunStep =
+  | WorkStep
+  | { kind: "rest"; seconds: number; label: "Get ready" | "Rest" };
+
+/** warmup (once) → main (× rounds) → cooldown (once). */
+export function buildSteps(
+  items: ResolvedItem[],
+  rounds: number,
+  restBetweenRounds: number,
+): RunStep[] {
+  const bySection = groupBySection(items);
+  const R = Math.max(1, rounds);
+
+  const works: WorkStep[] = [];
+  bySection.warmup.forEach((it) =>
+    works.push({ kind: "work", item: it, round: null, totalRounds: R }),
+  );
+  for (let r = 1; r <= R; r++) {
+    bySection.main.forEach((it) =>
+      works.push({ kind: "work", item: it, round: r, totalRounds: R }),
+    );
+  }
+  bySection.cooldown.forEach((it) =>
+    works.push({ kind: "work", item: it, round: null, totalRounds: R }),
+  );
+
+  const steps: RunStep[] = [];
+  works.forEach((w, i) => {
+    if (i > 0) {
+      const prev = works[i - 1];
+      const crossRound =
+        prev.round != null && w.round != null && w.round !== prev.round;
+      if (crossRound && restBetweenRounds > 0) {
+        steps.push({ kind: "rest", seconds: restBetweenRounds, label: "Rest" });
+      } else if (PREP_SECONDS > 0) {
+        steps.push({ kind: "rest", seconds: PREP_SECONDS, label: "Get ready" });
+      }
+    }
+    steps.push(w);
+  });
+  return steps;
 }
 
 /** Tips are stored one per line; split into a clean list. */

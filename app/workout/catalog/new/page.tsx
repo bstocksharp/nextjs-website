@@ -4,7 +4,7 @@ import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { addExercise } from "@/app/actions/workout";
-import ExerciseForm from "@/components/ExerciseForm";
+import ExerciseForm from "@/components/workout/ExerciseForm";
 
 export const metadata = { title: "Add exercise — Workout" };
 

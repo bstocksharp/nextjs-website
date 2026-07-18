@@ -6,7 +6,7 @@ import Typography from "@mui/material/Typography";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
-import ColorModeToggle from "@/components/ColorModeToggle";
+import ColorModeToggle from "@/components/shared/ColorModeToggle";
 import { APPS } from "@/lib/apps";
 
 export const metadata = { title: "Bryce" };

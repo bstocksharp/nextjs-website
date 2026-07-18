@@ -19,11 +19,17 @@ const displayFont = Space_Grotesk({
 export const metadata: Metadata = {
   title: "Bryce",
   description: "Bryce's apps — a garage tracker, the Miata Bible, and more.",
+  icons: { icon: "/icon.svg" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Bryce" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  themeColor: [
+    { media: "(prefers-color-scheme: dark)", color: "#0e1214" },
+    { media: "(prefers-color-scheme: light)", color: "#f5f4ef" },
+  ],
 };
 
 // App-agnostic root shell: fonts, color-scheme init, and providers only.
