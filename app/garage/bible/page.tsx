@@ -48,7 +48,7 @@ export default function BiblePage() {
         <Box>
           <Chip
             label="NA Miata (1989–1997)"
-            color="secondary"
+            color="primary"
             variant="outlined"
             size="small"
           />

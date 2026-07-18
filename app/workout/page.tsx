@@ -13,7 +13,7 @@ import { isEditor } from "@/lib/auth";
 import { getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
 import { getActiveProfile } from "@/lib/profile";
 import WeekSchedule from "@/components/workout/WeekSchedule";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 
 export const metadata = { title: "Workout" };
 
@@ -111,7 +111,7 @@ export default async function WorkoutDashboard({
                       flexWrap="wrap"
                     >
                       {w.rounds > 1 ? (
-                        <Pill
+                        <Chip
                           icon={<LoopIcon />}
                           label={`${w.rounds} rounds`}
                         />

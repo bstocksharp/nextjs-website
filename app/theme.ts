@@ -6,8 +6,8 @@ import { color, font, radius, spacing } from "./tokens";
 // The theme is built from tokens (app/tokens.ts). The PRIMARY accent follows the
 // active profile's picked color (passed down from the root layout), so the whole
 // UI — buttons, links, active states — wears that person's color. When there's no
-// profile/color it falls back to the brand default. Secondary (tan) stays a fixed
-// contrast accent (dream-car chips, "saved by" pills, the workout runner).
+// profile/color it falls back to the brand default. There's no secondary accent
+// anymore — everything that used to be tan now uses primary.
 export function createAppTheme(accent?: string | null) {
   // The color picker guarantees a valid 6-digit hex, but guard anyway so a
   // malformed stored color can never white-screen the whole app.
@@ -33,7 +33,6 @@ export function createAppTheme(accent?: string | null) {
       dark: {
         palette: {
           primary: { main: accentMain },
-          secondary: { main: color.brandTan },
           background: { default: color.darkBg, paper: color.darkSurface },
           divider: color.darkDivider,
         },
@@ -41,7 +40,6 @@ export function createAppTheme(accent?: string | null) {
       light: {
         palette: {
           primary: { main: accentDeep },
-          secondary: { main: color.brandTanDeep },
           background: { default: color.lightBg, paper: color.lightSurface },
           divider: color.lightDivider,
         },
@@ -82,6 +80,22 @@ export function createAppTheme(accent?: string | null) {
       },
       MuiAppBar: {
         defaultProps: { elevation: 0 },
+      },
+      // One pill style used everywhere (targets, rounds, "saved by", categories,
+      // profile labels, statuses) so chips are always consistent — no custom
+      // wrapper to remember to import. Chips default to the compact outlined
+      // "pill" look; pass variant="filled" / size="medium" to opt out per use.
+      MuiChip: {
+        defaultProps: { size: "small", variant: "outlined" },
+        styleOverrides: {
+          root: {
+            height: 26,
+            borderRadius: 13,
+            // A bit of breathing room around any icon, and comfortable label padding.
+            "& .MuiChip-icon": { marginLeft: 8, marginRight: -2, fontSize: 16 },
+            "& .MuiChip-label": { paddingLeft: 10, paddingRight: 10 },
+          },
+        },
       },
     },
   });

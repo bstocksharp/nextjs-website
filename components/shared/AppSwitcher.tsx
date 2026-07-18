@@ -83,18 +83,19 @@ export default function AppSwitcher({
             <ListItemText>{a.name}</ListItemText>
           </MenuItem>
         ))}
-        {/* "All apps" only makes sense when there's a hub to go back to. */}
-        {apps.length > 1 ? (
-          <>
-            <Divider />
-            <MenuItem component={Link} href="/" onClick={close}>
-              <ListItemIcon>
-                <AppsIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>All apps</ListItemText>
-            </MenuItem>
-          </>
-        ) : null}
+        {/* "All apps" only makes sense when there's a hub to go back to. An
+            array (not a Fragment) so MUI's Menu can manage item focus. */}
+        {apps.length > 1
+          ? [
+              <Divider key="all-apps-divider" />,
+              <MenuItem key="all-apps" component={Link} href="/" onClick={close}>
+                <ListItemIcon>
+                  <AppsIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>All apps</ListItemText>
+              </MenuItem>,
+            ]
+          : null}
       </Menu>
     </>
   );

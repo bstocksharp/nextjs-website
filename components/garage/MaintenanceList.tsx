@@ -157,7 +157,7 @@ export default function MaintenanceList({
                 {nextDue.length > 0 ? (
                   <Chip
                     size="small"
-                    color="secondary"
+                    color="primary"
                     variant="outlined"
                     sx={{ mt: 1 }}
                     label={`Next due: ${nextDue.join(" · ")}`}

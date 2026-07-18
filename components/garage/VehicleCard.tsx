@@ -3,19 +3,17 @@ import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import Box from "@mui/material/Box";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { formatMiles } from "@/lib/format";
 import VehicleCardMenu from "@/components/garage/VehicleCardMenu";
 import type { Vehicle } from "@/lib/db/schema";
+import Chip from "@mui/material/Chip";
 
-const STATUS_COLOR: Record<
-  string,
-  "primary" | "secondary" | "default" | "warning"
-> = {
+const STATUS_COLOR: Record<string, "primary" | "default" | "warning"> = {
   owned: "primary",
-  dream: "secondary",
+  dream: "primary",
   prospect: "warning",
   sold: "default",
 };
@@ -41,15 +39,19 @@ export default function VehicleCard({
         href={`/garage/${vehicle.id}`}
         sx={{ height: "100%" }}
       >
-        <CardContent sx={{ pr: editor ? 5 : 2 }}>
-          <Typography variant="h6" component="h2" noWrap>
-            {vehicle.name}
-          </Typography>
-          {subtitle ? (
-            <Typography variant="body2" color="text.secondary" noWrap>
-              {subtitle}
+        <CardContent>
+          {/* Reserve room for the top-right ⋮ menu on the header text only, so
+              the pill row below stays flush-right in both edit + read modes. */}
+          <Box sx={{ pr: editor ? 3 : 0 }}>
+            <Typography variant="h6" component="h2" noWrap>
+              {vehicle.name}
             </Typography>
-          ) : null}
+            {subtitle ? (
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {subtitle}
+              </Typography>
+            ) : null}
+          </Box>
           <Stack
             direction="row"
             justifyContent="space-between"

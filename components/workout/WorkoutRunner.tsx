@@ -469,8 +469,9 @@ export default function WorkoutRunner({
   const isRest = step.kind === "rest";
   const restLabel = step.kind === "rest" ? step.label : "Rest";
   const item = step.kind === "work" ? step.item : null;
+  // Rest reads as a calm neutral; work steps wear the profile accent.
   const color = isRest
-    ? "var(--mui-palette-secondary-main)"
+    ? "var(--mui-palette-text-secondary)"
     : "var(--mui-palette-primary-main)";
 
   // dial fraction (outer ring) + inner breath disc + center content

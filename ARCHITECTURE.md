@@ -35,7 +35,7 @@ components/
   shared/    app shell + generic primitives — AppShell (per-app chrome), AppHeader,
              AppSwitcher, ProfileControl (account menu: switch/add people +
              appearance + editing lock), SubmitButton, DeleteIconButton,
-             NumberField, Pill, SavedToast
+             NumberField, SavedToast
   garage/    car-specific (Vehicle*, Build*, Maintenance*, Fuel*, Parts*, Wishlist*, Journal*)
   workout/   workout-specific (WorkoutRunner, WeekSchedule, CatalogList, builder forms, …)
 
@@ -182,8 +182,10 @@ builder and the runner consume.
 
 ## Conventions
 
-- **One [`Pill`](components/shared/Pill.tsx)** for every chip (targets, rounds,
-  "saved by", categories, profile labels) — never a raw MUI `Chip` for those.
+- **One chip style, from the theme** — MUI `Chip` is styled globally in
+  [`app/theme.ts`](app/theme.ts) (`MuiChip`) as a compact outlined pill, so every
+  chip (targets, rounds, "saved by", categories, profile labels, statuses) is
+  consistent. Use plain `Chip`; pass `variant="filled"` / `size="medium"` to opt out.
 - RSC by default; `"use client"` only where there's interactivity.
 - Auto-save editors submit on change (no Save/Cancel); one-shot create forms keep an
   explicit submit.

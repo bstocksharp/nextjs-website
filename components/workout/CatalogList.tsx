@@ -17,7 +17,7 @@ import RepeatOutlinedIcon from "@mui/icons-material/RepeatOutlined";
 import { CATEGORIES, categoryLabel, formatDuration } from "@/lib/workout";
 import { deleteExercise } from "@/app/actions/workout";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 import type { Exercise } from "@/lib/db/schema";
 
 // Reps only → "10-12". Reps + per-rep time → "10 × 5s". Time only → "45s".
@@ -104,7 +104,7 @@ export default function CatalogList({
                           <Typography variant="subtitle1" fontWeight={600}>
                             {e.name}
                           </Typography>
-                          <Pill
+                          <Chip
                             icon={
                               e.defaultReps ? (
                                 <RepeatOutlinedIcon />

@@ -16,7 +16,7 @@ import { isEditor } from "@/lib/auth";
 import { getAssignments, listWorkoutsWithCreator } from "@/lib/queries/workout";
 import { getActiveProfile } from "@/lib/profile";
 import { WEEKDAYS } from "@/lib/workout";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 import QuickStartList from "@/components/workout/QuickStartList";
 
 export const metadata = { title: "Day — Workout" };
@@ -58,7 +58,7 @@ export default async function DayPage({
       </Button>
 
       <Box sx={{ mb: 1 }}>
-        <Pill label={activeProfile.name} color="secondary" />
+        <Chip label={activeProfile.name} color="primary" />
       </Box>
       <Typography variant="h3" component="h1" sx={{ mb: 3 }}>
         {WEEKDAYS[wd].label}
@@ -71,7 +71,7 @@ export default async function DayPage({
               {a.workoutName}
             </Typography>
             {a.rounds > 1 ? (
-              <Pill
+              <Chip
                 color="primary"
                 variant="filled"
                 icon={<LoopIcon />}
