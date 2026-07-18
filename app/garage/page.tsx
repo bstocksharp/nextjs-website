@@ -14,7 +14,7 @@ import { getActiveProfile } from "@/lib/profile";
 import { recordDueStatus, worstStatus, type DueStatus } from "@/lib/reminders";
 import VehicleCard from "@/components/garage/VehicleCard";
 
-export const metadata = { title: "Bryce's Garage" };
+export const metadata = { title: "Garage" };
 
 export default async function GaragePage() {
   const active = await getActiveProfile();

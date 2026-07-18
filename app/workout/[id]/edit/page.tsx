@@ -27,7 +27,7 @@ import WorkoutMetaAutoSave from "@/components/workout/WorkoutMetaAutoSave";
 import AddExerciseControl from "@/components/workout/AddExerciseControl";
 import BuilderItemRow from "@/components/workout/BuilderItemRow";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 
 export const metadata = { title: "Edit workout — Workout" };
 
@@ -98,7 +98,7 @@ export default async function WorkoutBuilderPage({
                   {s.label}
                 </Typography>
                 {isCircuit ? (
-                  <Pill
+                  <Chip
                     color="primary"
                     variant="filled"
                     icon={<LoopIcon />}

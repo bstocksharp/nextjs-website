@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
 import { getActiveProfile, setActiveProfileCookie } from "@/lib/profile";
+import { APPS } from "@/lib/apps";
 
 /** First active profile other than `exceptId`, or null. */
 async function otherActiveProfile(exceptId: number) {
@@ -47,6 +48,47 @@ export async function addPerson(formData: FormData): Promise<void> {
 
   if (created) await setActiveProfileCookie(created.id);
   revalidatePath("/", "layout");
+}
+
+/** Update a person's display name, color, and hidden-apps preference. */
+export async function updateProfile(
+  id: number,
+  formData: FormData,
+): Promise<void> {
+  await requireEditor();
+
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) throw new Error("Name is required.");
+  const color = String(formData.get("color") ?? "").trim() || null;
+  const hiddenApps = parseHiddenApps(formData.get("hiddenApps"));
+
+  await db
+    .update(profiles)
+    .set({ name, color, hiddenApps })
+    .where(eq(profiles.id, id));
+  revalidatePath("/", "layout");
+}
+
+/**
+ * Parse the hidden-apps hidden field (a JSON array of slugs) and keep only real,
+ * known app slugs — so a stale or bogus value can never persist. Hiding every
+ * app is meaningless (the hub falls back to showing all), so we never let the
+ * last app be hidden: if the list would cover them all, we store nothing.
+ */
+function parseHiddenApps(raw: FormDataEntryValue | null): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const known = new Set(APPS.map((a) => a.slug));
+  const hidden = [...new Set(parsed)].filter(
+    (s): s is string => typeof s === "string" && known.has(s),
+  );
+  return hidden.length >= known.size ? [] : hidden;
 }
 
 /**

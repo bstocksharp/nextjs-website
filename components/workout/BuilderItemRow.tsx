@@ -21,7 +21,7 @@ import {
 } from "@/app/actions/workout";
 import { formatTarget, type ResolvedItem } from "@/lib/workout";
 import type { WorkoutItem, Exercise } from "@/lib/db/schema";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
 import WorkoutItemAutoSave from "@/components/workout/WorkoutItemAutoSave";
 
@@ -68,7 +68,7 @@ export default function BuilderItemRow({
             <Typography variant="body1" fontWeight={600}>
               {it.name}
             </Typography>
-            <Pill
+            <Chip
               icon={
                 it.mode === "timed" ? (
                   <TimerOutlinedIcon />

@@ -17,6 +17,7 @@ import {
   boolean,
   date,
   timestamp,
+  jsonb,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -243,6 +244,10 @@ export const profiles = pgTable("profiles", {
   name: varchar("name", { length: 80 }).notNull(),
   color: varchar("color", { length: 20 }), // tile accent / avatar color
   sortOrder: integer("sort_order").default(0),
+  // Apps this person has hidden from their hub (by slug, see lib/apps). A
+  // personal declutter preference, NOT a permission — the hub has no roles.
+  // Default [] = every app visible; new apps show up automatically.
+  hiddenApps: jsonb("hidden_apps").$type<string[]>().notNull().default([]),
   // Soft-delete: "Deactivate" sets this (hidden from the switcher, can't be
   // active) but keeps all their data. "Delete forever" removes the row after
   // reassigning shared cars/workouts. null = active.

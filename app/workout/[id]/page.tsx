@@ -22,7 +22,7 @@ import {
 } from "@/lib/workout";
 import ExerciseInfoButton from "@/components/workout/ExerciseInfoButton";
 import SavedToast from "@/components/shared/SavedToast";
-import Pill from "@/components/shared/Pill";
+import Chip from "@mui/material/Chip";
 
 function ItemRow({ index, it }: { index: number; it: ResolvedItem }) {
   return (
@@ -40,7 +40,7 @@ function ItemRow({ index, it }: { index: number; it: ResolvedItem }) {
           {it.name}
         </Typography>
         <ExerciseInfoButton name={it.name} description={it.description} />
-        <Pill
+        <Chip
           icon={
             it.mode === "timed" ? <TimerOutlinedIcon /> : <RepeatOutlinedIcon />
           }
@@ -131,7 +131,7 @@ export default async function WorkoutDetailPage({
           {items.length} exercise{items.length === 1 ? "" : "s"}
         </Typography>
         {creatorName ? (
-          <Pill label={`saved by ${creatorName}`} color="secondary" />
+          <Chip label={`saved by ${creatorName}`} color="primary" />
         ) : null}
       </Stack>
 
@@ -167,7 +167,7 @@ export default async function WorkoutDetailPage({
                   {s.label}
                 </Typography>
                 {isCircuit ? (
-                  <Pill
+                  <Chip
                     color="primary"
                     variant="filled"
                     icon={<LoopIcon />}

@@ -3,6 +3,7 @@ import * as React from "react";
 import { Inter, Space_Grotesk } from "next/font/google";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import Providers from "./providers";
+import { getActiveProfile } from "@/lib/profile";
 
 const bodyFont = Inter({
   subsets: ["latin"],
@@ -34,9 +35,13 @@ export const viewport: Viewport = {
 
 // App-agnostic root shell: fonts, color-scheme init, and providers only.
 // Each sub-app supplies its own header (and, later, its own theme) in its layout.
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  // The active profile's picked color drives the app-wide primary accent. Read
+  // it here (server) so it's baked into the theme's CSS vars on first paint.
+  const active = await getActiveProfile();
+
   return (
     <html
       lang="en"
@@ -45,7 +50,7 @@ export default function RootLayout({
     >
       <body>
         <InitColorSchemeScript attribute="class" defaultMode="dark" />
-        <Providers>{children}</Providers>
+        <Providers accentColor={active?.color ?? null}>{children}</Providers>
       </body>
     </html>
   );

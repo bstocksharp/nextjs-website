@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useColorScheme } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Avatar from "@mui/material/Avatar";
@@ -15,26 +16,24 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
+import Alert from "@mui/material/Alert";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import PersonAddAlt1Icon from "@mui/icons-material/PersonAddAlt1";
+import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
+import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
+import LightModeIcon from "@mui/icons-material/LightModeOutlined";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
 import CheckIcon from "@mui/icons-material/Check";
 import SubmitButton from "./SubmitButton";
+import ColorSwatches, { PROFILE_SWATCHES } from "./ColorSwatches";
 import { switchProfile, addPerson } from "@/app/actions/profile";
+import { lockAction, unlockInlineAction } from "@/app/actions/auth";
 
 export type ProfilePick = { id: number; name: string; color: string | null };
-
-// A few pleasant accents to pick from when adding a person.
-const SWATCHES = [
-  "#e0864f",
-  "#4caf7d",
-  "#5b8def",
-  "#c65b7c",
-  "#9b6bd6",
-  "#d9a441",
-];
 
 /** "Bryce" → "B", "Bryce Stock" → "BS". */
 function initials(name: string): string {
@@ -67,6 +66,10 @@ function ProfileAvatar({
   );
 }
 
+// The account menu for the whole hub: who you are (switch/add/manage people),
+// plus the two app-wide settings that used to be separate top-bar icons — the
+// light/dark toggle and the editing lock. The trigger always renders, so those
+// settings stay reachable even before any profile exists.
 export default function ProfileMenu({
   active,
   profiles,
@@ -78,8 +81,15 @@ export default function ProfileMenu({
 }) {
   const [anchor, setAnchor] = React.useState<null | HTMLElement>(null);
   const [addOpen, setAddOpen] = React.useState(false);
-  const [color, setColor] = React.useState(SWATCHES[0]);
+  const [unlockOpen, setUnlockOpen] = React.useState(false);
+  const [color, setColor] = React.useState(PROFILE_SWATCHES[0]);
   const [, startTransition] = React.useTransition();
+
+  // Color mode. useColorScheme() is undefined until mounted, so guard the toggle.
+  const { mode, systemMode, setMode } = useColorScheme();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  const isDark = (mode === "system" ? systemMode : mode) === "dark";
 
   const closeMenu = () => setAnchor(null);
 
@@ -90,76 +100,73 @@ export default function ProfileMenu({
 
   function openAdd() {
     closeMenu();
-    setColor(SWATCHES[0]);
+    setColor(PROFILE_SWATCHES[0]);
     setAddOpen(true);
   }
 
-  // No profiles yet: offer to create the first one (editors only).
-  if (!active) {
-    if (!canEdit) return null;
-    return (
-      <>
-        <Button
-          color="inherit"
-          size="small"
-          startIcon={<PersonAddAlt1Icon />}
-          onClick={openAdd}
-          sx={{ textTransform: "none" }}
-        >
-          Add person
-        </Button>
-        <AddPersonDialog
-          open={addOpen}
-          color={color}
-          setColor={setColor}
-          onClose={() => setAddOpen(false)}
-        />
-      </>
-    );
+  function openUnlock() {
+    closeMenu();
+    setUnlockOpen(true);
   }
+
+  function lock() {
+    closeMenu();
+    startTransition(() => lockAction());
+  }
+
+  // Whether the "who you are" section renders anything above the settings —
+  // used so we don't emit a leading divider when that section is empty.
+  const hasProfileSection = profiles.length > 0 || canEdit;
 
   return (
     <>
       <Button
         color="inherit"
         onClick={(e) => setAnchor(e.currentTarget)}
-        aria-label={`Active profile: ${active.name}. Switch profile`}
+        aria-label={active ? `${active.name} — open account menu` : "Open account menu"}
         sx={{ textTransform: "none", minWidth: 0, gap: 0.75, px: 1 }}
       >
-        <ProfileAvatar profile={active} />
-        <Box
-          component="span"
-          sx={{ display: { xs: "none", sm: "inline" }, fontWeight: 600 }}
-        >
-          {active.name}
-        </Box>
+        {active ? (
+          <>
+            <ProfileAvatar profile={active} />
+            <Box
+              component="span"
+              sx={{ display: { xs: "none", sm: "inline" }, fontWeight: 600 }}
+            >
+              {active.name}
+            </Box>
+          </>
+        ) : (
+          <PersonOutlineIcon />
+        )}
         <KeyboardArrowDownIcon fontSize="small" />
       </Button>
 
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={closeMenu}>
-        <Typography
-          variant="overline"
-          color="text.secondary"
-          sx={{ px: 2, display: "block" }}
-        >
-          Who&apos;s working out
-        </Typography>
+        {profiles.length > 0 ? (
+          <Typography
+            variant="overline"
+            color="text.secondary"
+            sx={{ px: 2, display: "block" }}
+          >
+            Switch profile
+          </Typography>
+        ) : null}
         {profiles.map((p) => (
           <MenuItem
             key={p.id}
-            selected={p.id === active.id}
+            selected={p.id === active?.id}
             onClick={() => choose(p.id)}
           >
             <ListItemIcon>
               <ProfileAvatar profile={p} size={24} />
             </ListItemIcon>
             <ListItemText>{p.name}</ListItemText>
-            {p.id === active.id ? (
+            {p.id === active?.id ? (
               <CheckIcon fontSize="small" color="primary" sx={{ ml: 1 }} />
             ) : null}
           </MenuItem>
         ))}
-        {canEdit ? <Divider /> : null}
         {canEdit ? (
           <MenuItem onClick={openAdd}>
             <ListItemIcon>
@@ -176,6 +183,39 @@ export default function ProfileMenu({
             <ListItemText>Manage people…</ListItemText>
           </MenuItem>
         ) : null}
+
+        {hasProfileSection ? <Divider /> : null}
+
+        {/* App-wide settings: appearance + the editing lock. */}
+        <MenuItem
+          onClick={() => setMode(isDark ? "light" : "dark")}
+          disabled={!mounted}
+        >
+          <ListItemIcon>
+            {isDark ? (
+              <LightModeIcon fontSize="small" />
+            ) : (
+              <DarkModeIcon fontSize="small" />
+            )}
+          </ListItemIcon>
+          <ListItemText>{isDark ? "Light mode" : "Dark mode"}</ListItemText>
+        </MenuItem>
+
+        {canEdit ? (
+          <MenuItem onClick={lock}>
+            <ListItemIcon>
+              <LockOpenOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Lock editing</ListItemText>
+          </MenuItem>
+        ) : (
+          <MenuItem onClick={openUnlock}>
+            <ListItemIcon>
+              <LockOutlinedIcon fontSize="small" />
+            </ListItemIcon>
+            <ListItemText>Unlock editing…</ListItemText>
+          </MenuItem>
+        )}
       </Menu>
 
       <AddPersonDialog
@@ -184,7 +224,54 @@ export default function ProfileMenu({
         setColor={setColor}
         onClose={() => setAddOpen(false)}
       />
+
+      {/* Mounted only while open so useActionState resets fresh each time. */}
+      {unlockOpen ? <UnlockDialog onClose={() => setUnlockOpen(false)} /> : null}
     </>
+  );
+}
+
+function UnlockDialog({ onClose }: { onClose: () => void }) {
+  const [state, formAction] = React.useActionState(unlockInlineAction, null);
+
+  // On success the cookie's set and the page revalidated — just close.
+  React.useEffect(() => {
+    if (state?.ok) onClose();
+  }, [state, onClose]);
+
+  return (
+    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
+      <form action={formAction}>
+        <DialogTitle>Unlock editing</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 0.5 }}>
+            <Typography variant="body2" color="text.secondary">
+              Enter the edit password to add or change entries. Viewing stays
+              open to everyone.
+            </Typography>
+            {state && !state.ok ? (
+              <Alert severity="error">{state.error}</Alert>
+            ) : null}
+            <TextField
+              name="password"
+              type="password"
+              label="Password"
+              autoFocus
+              required
+              fullWidth
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={onClose} color="inherit">
+            Cancel
+          </Button>
+          <SubmitButton variant="contained" pendingLabel="Unlocking…">
+            Unlock
+          </SubmitButton>
+        </DialogActions>
+      </form>
+    </Dialog>
   );
 }
 
@@ -218,33 +305,8 @@ function AddPersonDialog({
               autoFocus
               placeholder="e.g. Bryce"
             />
-            <Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Color
-              </Typography>
-              <input type="hidden" name="color" value={color} />
-              <Stack direction="row" spacing={1}>
-                {SWATCHES.map((c) => (
-                  <Box
-                    key={c}
-                    role="radio"
-                    aria-label={`Color ${c}`}
-                    aria-checked={c === color}
-                    onClick={() => setColor(c)}
-                    sx={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: "50%",
-                      bgcolor: c,
-                      cursor: "pointer",
-                      outline: c === color ? "2px solid" : "none",
-                      outlineColor: "text.primary",
-                      outlineOffset: 2,
-                    }}
-                  />
-                ))}
-              </Stack>
-            </Box>
+            <input type="hidden" name="color" value={color} />
+            <ColorSwatches value={color} onChange={setColor} />
           </Stack>
         </DialogContent>
         <DialogActions>

@@ -32,8 +32,10 @@ app/
   workout/**            the Workout app
 
 components/
-  shared/    app shell + generic primitives — AppHeader, AppSwitcher, ColorModeToggle,
-             EditControl, SubmitButton, DeleteIconButton, NumberField, Pill, SavedToast
+  shared/    app shell + generic primitives — AppShell (per-app chrome), AppHeader,
+             AppSwitcher, ProfileControl (account menu: switch/add people +
+             appearance + editing lock), SubmitButton, DeleteIconButton,
+             NumberField, SavedToast
   garage/    car-specific (Vehicle*, Build*, Maintenance*, Fuel*, Parts*, Wishlist*, Journal*)
   workout/   workout-specific (WorkoutRunner, WeekSchedule, CatalogList, builder forms, …)
 
@@ -51,12 +53,14 @@ scripts/                node utilities (seed-workout.mjs, inspect-db.mjs) — ra
 
 ## Adding a new app (the recipe)
 
-1. **Register it:** add one `AppDef` to [`lib/apps.tsx`](lib/apps.tsx) — this alone
-   lights it up in the hub grid ([`app/page.tsx`](app/page.tsx)) and the header
-   `AppSwitcher`.
-2. **Create the route folder** `app/<slug>/`: `layout.tsx` (renders `<AppHeader
-   current="<slug>" nav={…} profileControl={<ProfileControl/>}
-   editControl={<EditControl/>} />`), `error.tsx` (copy garage's), `page.tsx`.
+1. **Register it:** add one `AppDef` to [`lib/apps.tsx`](lib/apps.tsx) — including
+   its in-app `nav` links. This alone lights it up in the hub grid
+   ([`app/page.tsx`](app/page.tsx)) and drives the header + `AppSwitcher`.
+2. **Create the route folder** `app/<slug>/`: `layout.tsx` (just
+   `<AppShell current="<slug>">{children}</AppShell>` — nav, hidden-apps, the
+   account menu, appearance, and the editing lock are all resolved inside
+   `AppShell`, so there's nothing else to wire), `error.tsx` (copy garage's),
+   `page.tsx`.
 3. **If it needs data:** add tables to `lib/db/schema.ts` → `npm run db:push`; write
    reads in `lib/queries/<domain>.ts` (`import "server-only"`) and writes in
    `app/actions/<domain>.ts` (`"use server"`, each guarded by `requireEditor()`).
@@ -178,8 +182,10 @@ builder and the runner consume.
 
 ## Conventions
 
-- **One [`Pill`](components/shared/Pill.tsx)** for every chip (targets, rounds,
-  "saved by", categories, profile labels) — never a raw MUI `Chip` for those.
+- **One chip style, from the theme** — MUI `Chip` is styled globally in
+  [`app/theme.ts`](app/theme.ts) (`MuiChip`) as a compact outlined pill, so every
+  chip (targets, rounds, "saved by", categories, profile labels, statuses) is
+  consistent. Use plain `Chip`; pass `variant="filled"` / `size="medium"` to opt out.
 - RSC by default; `"use client"` only where there's interactivity.
 - Auto-save editors submit on change (no Save/Cancel); one-shot create forms keep an
   explicit submit.

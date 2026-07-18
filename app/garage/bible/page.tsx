@@ -12,7 +12,7 @@ import TuneOutlinedIcon from "@mui/icons-material/TuneOutlined";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
 
-export const metadata = { title: "The Miata Bible — Bryce's Garage" };
+export const metadata = { title: "The Miata Bible — Garage" };
 
 const sections = [
   {
@@ -48,7 +48,7 @@ export default function BiblePage() {
         <Box>
           <Chip
             label="NA Miata (1989–1997)"
-            color="secondary"
+            color="primary"
             variant="outlined"
             size="small"
           />
