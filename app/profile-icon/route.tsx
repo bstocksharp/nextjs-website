@@ -2,16 +2,13 @@ import { ImageResponse } from "next/og";
 import { getActiveProfile } from "@/lib/profile";
 import { iconInitial, textOn } from "@/lib/icon";
 
-// iOS "Add to Home Screen" icon (generated to PNG at request time). Next wires
-// this up as <link rel="apple-touch-icon">. It renders the ACTIVE profile's
-// color + initial, so whoever's active when you add the app to your home screen
-// gets their color baked in. iOS snapshots this at add-time and never refetches,
-// so it's per-device, not live — see the profile-color-theming notes.
+// Dynamic browser-tab favicon: the active profile's color + initial. The root
+// layout references it as `/profile-icon?v=<profileId>` — browsers cache favicons
+// hard, so the changing URL is what forces a repaint when you switch profiles.
+// Separate from apple-icon.tsx (the larger, iOS home-screen icon).
 export const dynamic = "force-dynamic";
-export const size = { width: 180, height: 180 };
-export const contentType = "image/png";
 
-export default async function AppleIcon() {
+export async function GET() {
   const active = await getActiveProfile();
   const bg = active?.color ?? "#4caf7d";
 
@@ -26,7 +23,7 @@ export default async function AppleIcon() {
           justifyContent: "center",
           background: bg,
           color: textOn(bg),
-          fontSize: 120,
+          fontSize: 34,
           fontWeight: 800,
           fontFamily: "sans-serif",
         }}
@@ -34,6 +31,6 @@ export default async function AppleIcon() {
         {iconInitial(active?.name)}
       </div>
     ),
-    size,
+    { width: 48, height: 48 },
   );
 }

@@ -17,12 +17,21 @@ const displayFont = Space_Grotesk({
   variable: "--font-display",
 });
 
-export const metadata: Metadata = {
-  title: "Bryce",
-  description: "Bryce's apps — a garage tracker, the Miata Bible, and more.",
-  icons: { icon: "/icon.svg" },
-  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Bryce" },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  // The active profile's name is the app's identity — including the iOS
+  // home-screen label (appleWebApp.title, snapshotted at "Add to Home Screen").
+  const active = await getActiveProfile();
+  const who = active?.name ?? "Hub";
+  return {
+    title: who,
+    description:
+      "A personal hub of small apps — a garage tracker, the Miata Bible, and a workout companion.",
+    // Tab favicon follows the active profile too; ?v=<id> busts the browser's
+    // aggressive favicon cache so it repaints on profile switch.
+    icons: { icon: `/profile-icon?v=${active?.id ?? 0}` },
+    appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: who },
+  };
+}
 
 export const viewport: Viewport = {
   width: "device-width",
