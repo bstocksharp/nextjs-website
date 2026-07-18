@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import type { Workout, WorkoutProfile } from "@/lib/db/schema";
+import type { Workout, Profile } from "@/lib/db/schema";
 
 // The builder's workout meta (name / saved-by / rounds), auto-saved: text/number
 // fields save on blur, the profile select on change. No Save button.
@@ -42,7 +42,7 @@ export default function WorkoutMetaAutoSave({
 }: {
   action: (formData: FormData) => void | Promise<void>;
   workout: Workout;
-  profiles: WorkoutProfile[];
+  profiles: Profile[];
 }) {
   const formRef = React.useRef<HTMLFormElement>(null);
   const save = () => formRef.current?.requestSubmit();

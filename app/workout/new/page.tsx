@@ -3,7 +3,8 @@ import Container from "@mui/material/Container";
 import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
-import { listProfiles } from "@/lib/queries/workout";
+import { listProfiles } from "@/lib/queries/profiles";
+import { getActiveProfile } from "@/lib/profile";
 import { addWorkout } from "@/app/actions/workout";
 import WorkoutMetaForm from "@/components/workout/WorkoutMetaForm";
 
@@ -17,9 +18,11 @@ export default async function NewWorkoutPage({
   if (!(await isEditor())) redirect("/unlock");
 
   const { profile, weekday } = await searchParams;
-  const profiles = await listProfiles();
-  const defaultProfileId =
-    profiles.find((p) => String(p.id) === profile)?.id ?? profiles[0]?.id;
+  const [profiles, active] = await Promise.all([
+    listProfiles(),
+    getActiveProfile(profile),
+  ]);
+  const defaultProfileId = active?.id ?? profiles[0]?.id;
   const assignWeekday =
     weekday != null && /^[0-6]$/.test(weekday) ? Number(weekday) : undefined;
 

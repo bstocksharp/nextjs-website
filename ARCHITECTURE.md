@@ -55,8 +55,8 @@ scripts/                node utilities (seed-workout.mjs, inspect-db.mjs) — ra
    lights it up in the hub grid ([`app/page.tsx`](app/page.tsx)) and the header
    `AppSwitcher`.
 2. **Create the route folder** `app/<slug>/`: `layout.tsx` (renders `<AppHeader
-   current="<slug>" nav={…} editControl={<EditControl/>} />`), `error.tsx` (copy
-   garage's), `page.tsx`.
+   current="<slug>" nav={…} profileControl={<ProfileControl/>}
+   editControl={<EditControl/>} />`), `error.tsx` (copy garage's), `page.tsx`.
 3. **If it needs data:** add tables to `lib/db/schema.ts` → `npm run db:push`; write
    reads in `lib/queries/<domain>.ts` (`import "server-only"`) and writes in
    `app/actions/<domain>.ts` (`"use server"`, each guarded by `requireEditor()`).
@@ -69,7 +69,51 @@ scripts/                node utilities (seed-workout.mjs, inspect-db.mjs) — ra
 `EDIT_PASSWORD` unlocks editing for everyone; the cookie value is an HMAC of
 `"editor"` keyed by `COOKIE_SECRET` (unforgeable). `isEditor()` gates UI; every
 mutating action calls `requireEditor()`. Missing secrets degrade to read-only
-(never crash). Unlock at `/unlock`.
+(never crash). Unlock at `/unlock`. **Editing is the *only* real security
+boundary** — see Profiles below for why profile scoping is organization, not auth.
+
+## Profiles, visibility & access
+
+**Profiles are hub-wide "who's using it" identities** (the `profiles` table — Bryce,
+Lauren), not accounts. The active profile is a persisted preference (`active_profile`
+cookie — [`lib/profile.ts`](lib/profile.ts) `getActiveProfile()`, precedence:
+`?profile` override → cookie → first profile). The header shows and switches it
+([`ProfileControl`](components/shared/ProfileControl.tsx) →
+[`ProfileMenu`](components/shared/ProfileMenu.tsx)); unlocked editors can add people.
+It renders in every app header, so identity is consistent hub-wide.
+
+**Profiles are NOT a security boundary (by design).** There are no per-profile
+passwords and anyone may switch profiles freely — so profile-level "permissions"
+would be unenforceable theater. The only real gate is the site-wide `EDIT_PASSWORD`.
+Two consequences:
+
+- **Visibility = organization, not permission.** A vehicle has an **owner**
+  (`vehicles.profile_id`) and a **visibility** (`vehicles.visibility`: `shared` |
+  `private`, default `shared`). The garage grid/dashboard shows
+  `visibility = 'shared' OR owner = active profile`. Everything hanging off a vehicle
+  (maintenance, fuel, parts, builds, wishlist, journal) inherits that scope;
+  `resources` and `checklists` stay shared. A shared car (e.g. a household RAV4) shows
+  for everyone and any unlocked editor can log to it; a private car shows only in its
+  owner's garage.
+- **Editing stays gated by the one site password**, regardless of profile — any
+  unlocked person can edit any car they can see.
+
+**Lifecycle:** editors add people (profile menu → *Add person*) and manage them at
+**`/people`** (linked from the switcher). *Deactivate* soft-deletes
+(`profiles.archived_at`) — hidden from the switcher, can't be active, **all data
+kept**; *Reactivate* restores. *Delete forever* is irreversible: it reassigns the
+person's **shared** cars + authored workouts to a chosen **heir**, then deletes their
+**private** cars (cascading that history) and their weekly schedule. Guards: can't
+deactivate the last active profile or delete without an heir, and
+`workouts.createdByProfileId` is `ON DELETE RESTRICT` so a delete can never nuke
+shared routines out from under someone.
+
+**Future direction:** if this grows into a multi-tenant product, an **account login**
+becomes the real security boundary with profiles living *under* an account.
+`visibility` then grows a `custom` value backed by a `vehicle_shares` join table
+(vehicleId, profileId, canEdit) — no rework of the owner/visibility columns.
+Per-profile passwords are intentionally omitted (a profile wanting true privacy = its
+own account); revisit only if that product direction changes.
 
 ## Data layer
 
@@ -92,7 +136,8 @@ mutating action calls `requireEditor()`. Missing secrets degrade to read-only
 
 **Tables** (all in `schema.ts`):
 
-- `workout_profiles` — the people (Bryce, Lauren). Profiles are *data*, not accounts.
+- `profiles` — the hub-wide people (Bryce, Lauren). Profiles are *data*, not accounts;
+  see **Profiles, visibility & access** above.
 - `exercises` — the **shared catalog** with recommended defaults (`defaultReps`,
   `defaultDuration`, `defaultWeight`, `holdLast`, `description`, `tips`).
 - `workouts` — a **shared library** of routines. `createdByProfileId` is just

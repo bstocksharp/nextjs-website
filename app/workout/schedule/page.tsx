@@ -8,11 +8,13 @@ import Paper from "@mui/material/Paper";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { isEditor } from "@/lib/auth";
 import {
-  listProfiles,
   getAssignments,
   listWorkoutsWithCreator,
 } from "@/lib/queries/workout";
+import { listProfiles } from "@/lib/queries/profiles";
 import { setAssignment } from "@/app/actions/workout";
+import { switchProfile } from "@/app/actions/profile";
+import { getActiveProfile } from "@/lib/profile";
 import { WEEKDAYS } from "@/lib/workout";
 import AssignSelect from "@/components/workout/AssignSelect";
 
@@ -29,9 +31,10 @@ export default async function SchedulePage({
   if (!(await isEditor())) redirect("/unlock");
 
   const { profile } = await searchParams;
-  const profiles = await listProfiles();
-  const activeProfile =
-    profiles.find((p) => String(p.id) === profile) ?? profiles[0] ?? null;
+  const [profiles, activeProfile] = await Promise.all([
+    listProfiles(),
+    getActiveProfile(profile),
+  ]);
   if (!activeProfile) redirect("/workout");
 
   const [assignments, library] = await Promise.all([
@@ -58,19 +61,19 @@ export default async function SchedulePage({
         Pick a workout for each day (or leave it as Rest). Changes save instantly.
       </Typography>
 
-      {/* Switch which profile you're scheduling */}
+      {/* Switch which profile you're scheduling (persists across the app) */}
       {profiles.length > 1 ? (
         <Stack direction="row" spacing={1} sx={{ mb: 3, flexWrap: "wrap", gap: 1 }}>
           {profiles.map((p) => (
-            <Button
-              key={p.id}
-              component={Link}
-              href={`/workout/schedule?profile=${p.id}`}
-              size="small"
-              variant={p.id === activeProfile.id ? "contained" : "outlined"}
-            >
-              {p.name}
-            </Button>
+            <form key={p.id} action={switchProfile.bind(null, p.id)}>
+              <Button
+                type="submit"
+                size="small"
+                variant={p.id === activeProfile.id ? "contained" : "outlined"}
+              >
+                {p.name}
+              </Button>
+            </form>
           ))}
         </Stack>
       ) : null}

@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { vehicles } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
+import { getActiveProfile } from "@/lib/profile";
 
 /** Pull vehicle fields out of a submitted form (empty strings → null). */
 function parseVehicle(formData: FormData) {
@@ -37,6 +38,8 @@ function parseVehicle(formData: FormData) {
     purchaseMileage: int("purchaseMileage"),
     currentMileage: int("currentMileage"),
     notes: str("notes"),
+    profileId: int("profileId"), // owner (see Profiles & visibility)
+    visibility: str("visibility") === "private" ? "private" : "shared",
   };
 }
 
@@ -45,9 +48,12 @@ export async function addVehicle(formData: FormData): Promise<void> {
   const data = parseVehicle(formData);
   if (!data.name) throw new Error("Name is required.");
 
+  // Default the owner to whoever's active if the form didn't specify one.
+  const profileId = data.profileId ?? (await getActiveProfile())?.id ?? null;
+
   const [row] = await db
     .insert(vehicles)
-    .values(data)
+    .values({ ...data, profileId })
     .returning({ id: vehicles.id });
 
   revalidatePath("/garage");

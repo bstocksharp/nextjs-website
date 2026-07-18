@@ -12,9 +12,16 @@ import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import AppsIcon from "@mui/icons-material/Apps";
 import { APPS, getApp } from "@/lib/apps";
 
-// The subtle app switcher: the current app's name is a button that opens a menu
-// of all apps (plus a link back to the Hub).
-export default function AppSwitcher({ current }: { current: string }) {
+// The subtle app switcher: the current app's name is a button that opens a menu.
+// On mobile the menu also holds this app's nav (Today/Catalog) — those show
+// inline in the header on desktop, so they're hidden (sm+) here to avoid dupes.
+export default function AppSwitcher({
+  current,
+  nav = [],
+}: {
+  current: string;
+  nav?: { label: string; href: string }[];
+}) {
   const app = getApp(current);
   const [anchor, setAnchor] = React.useState<null | HTMLElement>(null);
   const close = () => setAnchor(null);
@@ -38,6 +45,19 @@ export default function AppSwitcher({ current }: { current: string }) {
         {app?.name ?? "Bryce"}
       </Button>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
+        {/* This app's pages — mobile only (inline on desktop) */}
+        {nav.map((n) => (
+          <MenuItem
+            key={n.href}
+            component={Link}
+            href={n.href}
+            onClick={close}
+            sx={{ display: { sm: "none" } }}
+          >
+            <ListItemText inset>{n.label}</ListItemText>
+          </MenuItem>
+        ))}
+        {nav.length ? <Divider sx={{ display: { sm: "none" } }} /> : null}
         {APPS.map((a) => (
           <MenuItem
             key={a.slug}

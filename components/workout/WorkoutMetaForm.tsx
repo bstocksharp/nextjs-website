@@ -4,7 +4,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import SubmitButton from "@/components/shared/SubmitButton";
-import type { Workout, WorkoutProfile } from "@/lib/db/schema";
+import type { Workout, Profile } from "@/lib/db/schema";
 
 export default function WorkoutMetaForm({
   action,
@@ -17,7 +17,7 @@ export default function WorkoutMetaForm({
 }: {
   action: (formData: FormData) => void | Promise<void>;
   workout?: Workout | null;
-  profiles: WorkoutProfile[];
+  profiles: Profile[];
   defaultProfileId?: number;
   assignWeekday?: number;
   submitLabel: string;

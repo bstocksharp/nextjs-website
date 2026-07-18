@@ -6,7 +6,7 @@ import Button from "@mui/material/Button";
 import SubmitButton from "@/components/shared/SubmitButton";
 import YearField from "@/components/garage/YearField";
 import NumberField from "@/components/shared/NumberField";
-import type { Vehicle } from "@/lib/db/schema";
+import type { Vehicle, Profile } from "@/lib/db/schema";
 
 const STATUS_OPTIONS: [string, string][] = [
   ["owned", "Owned"],
@@ -18,15 +18,20 @@ const STATUS_OPTIONS: [string, string][] = [
 export default function VehicleForm({
   action,
   vehicle,
+  profiles,
+  defaultProfileId,
   submitLabel,
   cancelHref,
 }: {
   action: (formData: FormData) => void | Promise<void>;
   vehicle?: Vehicle | null;
+  profiles: Profile[];
+  defaultProfileId?: number;
   submitLabel: string;
   cancelHref: string;
 }) {
   const v = vehicle ?? null;
+  const ownerDefault = v?.profileId ?? defaultProfileId ?? "";
 
   return (
     <form action={action}>
@@ -39,6 +44,43 @@ export default function VehicleForm({
           defaultValue={v?.name ?? ""}
           placeholder="e.g. Project Roadster, Daily Truck"
         />
+
+        {/* Owner + visibility — organization, not security (see ARCHITECTURE). */}
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+          }}
+        >
+          <TextField
+            name="profileId"
+            label="Owner"
+            select
+            fullWidth
+            defaultValue={String(ownerDefault)}
+            slotProps={{ select: { native: true } }}
+            helperText="Whose garage this car belongs to"
+          >
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </TextField>
+          <TextField
+            name="visibility"
+            label="Visible to"
+            select
+            fullWidth
+            defaultValue={v?.visibility ?? "shared"}
+            slotProps={{ select: { native: true } }}
+            helperText="Shared = shows in everyone's garage"
+          >
+            <option value="shared">Everyone</option>
+            <option value="private">Just the owner</option>
+          </TextField>
+        </Box>
 
         <Box
           sx={{

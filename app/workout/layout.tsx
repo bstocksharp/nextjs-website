@@ -1,6 +1,7 @@
 import * as React from "react";
 import AppHeader from "@/components/shared/AppHeader";
 import EditControl from "@/components/shared/EditControl";
+import ProfileControl from "@/components/shared/ProfileControl";
 
 export default function WorkoutLayout({
   children,
@@ -12,9 +13,11 @@ export default function WorkoutLayout({
       <AppHeader
         current="workout"
         nav={[
-          { label: "Today", href: "/workout" },
+          { label: "Today", href: "/workout/today" },
+          { label: "Week", href: "/workout" },
           { label: "Catalog", href: "/workout/catalog" },
         ]}
+        profileControl={<ProfileControl />}
         editControl={<EditControl />}
       />
       {children}

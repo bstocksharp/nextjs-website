@@ -5,6 +5,7 @@ import CardContent from "@mui/material/CardContent";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Stack from "@mui/material/Stack";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import { formatMiles } from "@/lib/format";
 import VehicleCardMenu from "@/components/garage/VehicleCardMenu";
 import type { Vehicle } from "@/lib/db/schema";
@@ -33,9 +34,13 @@ export default function VehicleCard({
     .join(" ");
 
   return (
-    <Card variant="outlined" sx={{ position: "relative" }}>
+    <Card variant="outlined" sx={{ position: "relative", height: "100%" }}>
       {editor ? <VehicleCardMenu vehicleId={vehicle.id} /> : null}
-      <CardActionArea component={Link} href={`/garage/${vehicle.id}`}>
+      <CardActionArea
+        component={Link}
+        href={`/garage/${vehicle.id}`}
+        sx={{ height: "100%" }}
+      >
         <CardContent sx={{ pr: editor ? 5 : 2 }}>
           <Typography variant="h6" component="h2" noWrap>
             {vehicle.name}
@@ -55,6 +60,14 @@ export default function VehicleCard({
               {formatMiles(vehicle.currentMileage)}
             </Typography>
             <Stack direction="row" spacing={0.5} alignItems="center">
+              {vehicle.visibility === "private" ? (
+                <Chip
+                  size="small"
+                  variant="outlined"
+                  icon={<LockOutlinedIcon />}
+                  label="Private"
+                />
+              ) : null}
               {reminder ? (
                 <Chip
                   size="small"

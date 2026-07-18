@@ -4,6 +4,7 @@ import Typography from "@mui/material/Typography";
 import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { getVehicle } from "@/lib/queries/vehicles";
+import { listProfiles } from "@/lib/queries/profiles";
 import { updateVehicle } from "@/app/actions/vehicles";
 import VehicleForm from "@/components/garage/VehicleForm";
 
@@ -18,7 +19,7 @@ export default async function EditVehiclePage({
   const id = Number(idParam);
   if (!Number.isInteger(id)) notFound();
 
-  const vehicle = await getVehicle(id);
+  const [vehicle, profiles] = await Promise.all([getVehicle(id), listProfiles()]);
   if (!vehicle) notFound();
 
   return (
@@ -30,6 +31,7 @@ export default async function EditVehiclePage({
         <VehicleForm
           action={updateVehicle.bind(null, vehicle.id)}
           vehicle={vehicle}
+          profiles={profiles}
           submitLabel="Save changes"
           cancelHref={`/garage/${vehicle.id}`}
         />

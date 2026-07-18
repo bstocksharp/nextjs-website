@@ -2,7 +2,7 @@ import "server-only";
 import { asc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
-  workoutProfiles,
+  profiles,
   exercises,
   workouts,
   workoutItems,
@@ -10,23 +10,8 @@ import {
 } from "@/lib/db/schema";
 import type { Workout, WorkoutItem, Exercise } from "@/lib/db/schema";
 import { resolveItem, type ResolvedItem } from "@/lib/workout";
-
-// ── Profiles ──────────────────────────────────────────────────────────────────
-export function listProfiles() {
-  return db
-    .select()
-    .from(workoutProfiles)
-    .orderBy(asc(workoutProfiles.sortOrder), asc(workoutProfiles.id));
-}
-
-export async function getProfile(id: number) {
-  const rows = await db
-    .select()
-    .from(workoutProfiles)
-    .where(eq(workoutProfiles.id, id))
-    .limit(1);
-  return rows[0] ?? null;
-}
+// Profiles are hub-wide now — reads live in ./profiles.
+import { getProfile } from "./profiles";
 
 // ── Exercise catalog ──────────────────────────────────────────────────────────
 export function listExercises() {
@@ -67,12 +52,12 @@ export function listWorkoutsWithCreator(): Promise<WorkoutListRow[]> {
       name: workouts.name,
       rounds: workouts.rounds,
       createdByProfileId: workouts.createdByProfileId,
-      createdByName: workoutProfiles.name,
+      createdByName: profiles.name,
     })
     .from(workouts)
     .leftJoin(
-      workoutProfiles,
-      eq(workouts.createdByProfileId, workoutProfiles.id),
+      profiles,
+      eq(workouts.createdByProfileId, profiles.id),
     )
     .orderBy(asc(workouts.sortOrder), asc(workouts.id));
 }
