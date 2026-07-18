@@ -12,8 +12,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { isEditor } from "@/lib/auth";
 import { listAllProfiles } from "@/lib/queries/profiles";
 import { getActiveProfile } from "@/lib/profile";
-import { deactivateProfile, reactivateProfile } from "@/app/actions/profile";
-import DeleteProfileButton from "@/components/shared/DeleteProfileButton";
+import EditProfileButton from "@/components/shared/EditProfileButton";
 
 export const metadata = { title: "People" };
 
@@ -47,10 +46,9 @@ export default async function PeoplePage() {
         People
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Deactivate hides someone but keeps everything (restore anytime). Delete
-        forever removes them — their shared cars &amp; workouts move to someone
-        else; their private cars and schedule are deleted. Add people from the
-        profile menu in any app header.
+        Open a person to edit their name, color &amp; which apps they see — or, in
+        the Danger zone, deactivate them (hidden but kept, restore anytime) or
+        delete forever. Add people from the profile menu in any app header.
       </Typography>
 
       <Stack spacing={1.5}>
@@ -97,28 +95,13 @@ export default async function PeoplePage() {
                 ) : null}
               </Box>
 
-              {archived ? (
-                <form action={reactivateProfile.bind(null, p.id)}>
-                  <Button type="submit" size="small">
-                    Reactivate
-                  </Button>
-                </form>
-              ) : (
-                <form action={deactivateProfile.bind(null, p.id)}>
-                  <Button
-                    type="submit"
-                    size="small"
-                    color="inherit"
-                    disabled={!canDeactivate}
-                  >
-                    Deactivate
-                  </Button>
-                </form>
-              )}
-
-              <DeleteProfileButton
+              <EditProfileButton
                 profileId={p.id}
                 profileName={p.name}
+                profileColor={p.color}
+                profileHiddenApps={p.hiddenApps}
+                archived={archived}
+                canDeactivate={canDeactivate}
                 heirs={heirs}
               />
             </Paper>

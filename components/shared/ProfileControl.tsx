@@ -4,7 +4,7 @@ import { isEditor } from "@/lib/auth";
 import ProfileMenu, { type ProfilePick } from "./ProfileMenu";
 
 // Server component: reads who's active + the roster, then hands a plain,
-// serializable slice to the client menu. Passed into AppHeader like EditControl.
+// serializable slice to the client menu. Passed into AppHeader as a prop.
 export default async function ProfileControl() {
   const [profiles, active, canEdit] = await Promise.all([
     listProfiles(),

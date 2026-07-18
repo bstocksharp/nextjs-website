@@ -20,10 +20,12 @@ export default function DeleteProfileButton({
   profileId,
   profileName,
   heirs,
+  onDeleted,
 }: {
   profileId: number;
   profileName: string;
   heirs: { id: number; name: string }[];
+  onDeleted?: () => void;
 }) {
   const [open, setOpen] = React.useState(false);
   const [heirId, setHeirId] = React.useState(heirs[0]?.id ?? 0);
@@ -97,6 +99,7 @@ export default function DeleteProfileButton({
               startTransition(async () => {
                 await deleteProfileForever(profileId, heirId);
                 setOpen(false);
+                onDeleted?.();
               })
             }
           >

@@ -1,70 +1,88 @@
 "use client";
 
-import { createTheme } from "@mui/material/styles";
+import { createTheme, darken } from "@mui/material/styles";
 import { color, font, radius, spacing } from "./tokens";
 
-// The theme is built entirely from tokens (app/tokens.ts). It carries no
-// literal colors of its own — the one `var(--mui-palette-divider)` below is a
-// token MUI generates from color.darkDivider / color.lightDivider.
-const theme = createTheme({
-  cssVariables: { colorSchemeSelector: "class" },
-  spacing: spacing.unit,
-  shape: { borderRadius: radius.base },
-  colorSchemes: {
-    dark: {
-      palette: {
-        primary: { main: color.brandGreen },
-        secondary: { main: color.brandTan },
-        background: { default: color.darkBg, paper: color.darkSurface },
-        divider: color.darkDivider,
+// The theme is built from tokens (app/tokens.ts). The PRIMARY accent follows the
+// active profile's picked color (passed down from the root layout), so the whole
+// UI — buttons, links, active states — wears that person's color. When there's no
+// profile/color it falls back to the brand default. Secondary (tan) stays a fixed
+// contrast accent (dream-car chips, "saved by" pills, the workout runner).
+export function createAppTheme(accent?: string | null) {
+  // The color picker guarantees a valid 6-digit hex, but guard anyway so a
+  // malformed stored color can never white-screen the whole app.
+  let accentMain: string = color.brandAccent;
+  let accentDeep: string = color.brandAccentDeep;
+  if (accent) {
+    try {
+      // Deepen for light mode so it stays legible on the near-white background,
+      // mirroring the old green → deep-green pairing.
+      accentDeep = darken(accent, 0.15);
+      accentMain = accent;
+    } catch {
+      accentMain = color.brandAccent;
+      accentDeep = color.brandAccentDeep;
+    }
+  }
+
+  return createTheme({
+    cssVariables: { colorSchemeSelector: "class" },
+    spacing: spacing.unit,
+    shape: { borderRadius: radius.base },
+    colorSchemes: {
+      dark: {
+        palette: {
+          primary: { main: accentMain },
+          secondary: { main: color.brandTan },
+          background: { default: color.darkBg, paper: color.darkSurface },
+          divider: color.darkDivider,
+        },
       },
-    },
-    light: {
-      palette: {
-        primary: { main: color.brandGreenDeep },
-        secondary: { main: color.brandTanDeep },
-        background: { default: color.lightBg, paper: color.lightSurface },
-        divider: color.lightDivider,
-      },
-    },
-  },
-  typography: {
-    fontFamily: font.body,
-    h1: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h2: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h3: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
-    h4: { fontFamily: font.display, fontWeight: 600, letterSpacing: "-0.01em" },
-    h5: { fontFamily: font.display, fontWeight: 600 },
-    h6: { fontFamily: font.display, fontWeight: 600 },
-    button: { textTransform: "none", fontWeight: 600 },
-  },
-  components: {
-    MuiCssBaseline: {
-      styleOverrides: {
-        a: { color: "inherit", textDecoration: "none" },
-      },
-    },
-    MuiButton: {
-      defaultProps: { disableElevation: true },
-      styleOverrides: {
-        root: { borderRadius: radius.button, paddingInline: 18, paddingBlock: 8 },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: { root: { backgroundImage: "none" } },
-    },
-    MuiCard: {
-      styleOverrides: {
-        root: {
-          backgroundImage: "none",
-          border: "1px solid var(--mui-palette-divider)",
+      light: {
+        palette: {
+          primary: { main: accentDeep },
+          secondary: { main: color.brandTanDeep },
+          background: { default: color.lightBg, paper: color.lightSurface },
+          divider: color.lightDivider,
         },
       },
     },
-    MuiAppBar: {
-      defaultProps: { elevation: 0 },
+    typography: {
+      fontFamily: font.body,
+      h1: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+      h2: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+      h3: { fontFamily: font.display, fontWeight: 700, letterSpacing: "-0.02em" },
+      h4: { fontFamily: font.display, fontWeight: 600, letterSpacing: "-0.01em" },
+      h5: { fontFamily: font.display, fontWeight: 600 },
+      h6: { fontFamily: font.display, fontWeight: 600 },
+      button: { textTransform: "none", fontWeight: 600 },
     },
-  },
-});
-
-export default theme;
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: {
+          a: { color: "inherit", textDecoration: "none" },
+        },
+      },
+      MuiButton: {
+        defaultProps: { disableElevation: true },
+        styleOverrides: {
+          root: { borderRadius: radius.button, paddingInline: 18, paddingBlock: 8 },
+        },
+      },
+      MuiPaper: {
+        styleOverrides: { root: { backgroundImage: "none" } },
+      },
+      MuiCard: {
+        styleOverrides: {
+          root: {
+            backgroundImage: "none",
+            border: "1px solid var(--mui-palette-divider)",
+          },
+        },
+      },
+      MuiAppBar: {
+        defaultProps: { elevation: 0 },
+      },
+    },
+  });
+}

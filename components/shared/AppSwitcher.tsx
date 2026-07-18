@@ -10,19 +10,30 @@ import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import AppsIcon from "@mui/icons-material/Apps";
-import { APPS, getApp } from "@/lib/apps";
+import { getApp, visibleApps } from "@/lib/apps";
 
 // The subtle app switcher: the current app's name is a button that opens a menu.
 // On mobile the menu also holds this app's nav (Today/Catalog) — those show
 // inline in the header on desktop, so they're hidden (sm+) here to avoid dupes.
+// `hiddenApps` are the active profile's hidden slugs, so the switcher matches
+// the hub (an app hidden there doesn't reappear here).
 export default function AppSwitcher({
   current,
   nav = [],
+  hiddenApps = [],
 }: {
   current: string;
   nav?: { label: string; href: string }[];
+  hiddenApps?: string[];
 }) {
   const app = getApp(current);
+  // Always include the app you're currently in, even if it's "hidden" (you got
+  // here somehow) — but otherwise respect the hidden set.
+  const apps = visibleApps(hiddenApps).some((a) => a.slug === current)
+    ? visibleApps(hiddenApps)
+    : [...visibleApps(hiddenApps), getApp(current)].filter(
+        (a): a is NonNullable<typeof a> => Boolean(a),
+      );
   const [anchor, setAnchor] = React.useState<null | HTMLElement>(null);
   const close = () => setAnchor(null);
   const CurrentIcon = app?.Icon ?? AppsIcon;
@@ -42,7 +53,7 @@ export default function AppSwitcher({
           fontSize: "1.05rem",
         }}
       >
-        {app?.name ?? "Bryce"}
+        {app?.name ?? "Apps"}
       </Button>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
         {/* This app's pages — mobile only (inline on desktop) */}
@@ -58,7 +69,7 @@ export default function AppSwitcher({
           </MenuItem>
         ))}
         {nav.length ? <Divider sx={{ display: { sm: "none" } }} /> : null}
-        {APPS.map((a) => (
+        {apps.map((a) => (
           <MenuItem
             key={a.slug}
             component={Link}
@@ -72,13 +83,18 @@ export default function AppSwitcher({
             <ListItemText>{a.name}</ListItemText>
           </MenuItem>
         ))}
-        <Divider />
-        <MenuItem component={Link} href="/" onClick={close}>
-          <ListItemIcon>
-            <AppsIcon fontSize="small" />
-          </ListItemIcon>
-          <ListItemText>All apps</ListItemText>
-        </MenuItem>
+        {/* "All apps" only makes sense when there's a hub to go back to. */}
+        {apps.length > 1 ? (
+          <>
+            <Divider />
+            <MenuItem component={Link} href="/" onClick={close}>
+              <ListItemIcon>
+                <AppsIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>All apps</ListItemText>
+            </MenuItem>
+          </>
+        ) : null}
       </Menu>
     </>
   );

@@ -7,10 +7,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const color = {
-  // Brand
-  brandGreen: "#4caf7d", // British Racing Green-inspired — primary (dark mode)
-  brandGreenDeep: "#2e7d55", // deeper green for light-mode contrast
-  brandTan: "#d8b384", // secondary (dark mode)
+  // Brand — the DEFAULT accent, used only as a fallback when the active profile
+  // has no picked color. The live primary normally comes from the profile color
+  // (see app/theme.ts / createAppTheme).
+  brandAccent: "#4caf7d", // default primary (dark mode)
+  brandAccentDeep: "#2e7d55", // deeper, for light-mode contrast
+  brandTan: "#d8b384", // secondary — fixed contrast accent (dark mode)
   brandTanDeep: "#a97c43", // deeper tan for light mode
 
   // Dark color scheme

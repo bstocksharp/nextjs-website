@@ -6,22 +6,21 @@ import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import ColorModeToggle from "@/components/shared/ColorModeToggle";
 import AppSwitcher from "@/components/shared/AppSwitcher";
 
 // Shared header used by each sub-app. The app-switcher gives it identity + a way
-// to hop between apps; `nav` holds app-specific links; `editControl` is the
-// (server-rendered) lock/unlock control.
+// to hop between apps; `nav` holds app-specific links. Appearance + the editing
+// lock now live inside the profile/account menu (`profileControl`).
 export default function AppHeader({
   current,
   nav = [],
+  hiddenApps = [],
   profileControl,
-  editControl,
 }: {
   current: string;
   nav?: { label: string; href: string }[];
+  hiddenApps?: string[];
   profileControl?: React.ReactNode;
-  editControl?: React.ReactNode;
 }) {
   return (
     <AppBar
@@ -35,7 +34,7 @@ export default function AppHeader({
       }}
     >
       <Toolbar sx={{ gap: 0.5 }}>
-        <AppSwitcher current={current} nav={nav} />
+        <AppSwitcher current={current} nav={nav} hiddenApps={hiddenApps} />
         {/* Inline nav on desktop; on mobile it lives in the switcher menu. */}
         <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 0.5 }}>
           {nav.map((n) => (
@@ -52,8 +51,6 @@ export default function AppHeader({
         </Box>
         <Box sx={{ flexGrow: 1 }} />
         {profileControl}
-        <ColorModeToggle />
-        {editControl}
       </Toolbar>
     </AppBar>
   );
