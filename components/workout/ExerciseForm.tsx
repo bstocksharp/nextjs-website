@@ -7,6 +7,7 @@ import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import SubmitButton from "@/components/shared/SubmitButton";
+import EquipmentPicker from "@/components/workout/EquipmentPicker";
 import { CATEGORIES } from "@/lib/workout";
 import type { Exercise } from "@/lib/db/schema";
 
@@ -121,6 +122,13 @@ export default function ExerciseForm({
             amount in Reps/Time (e.g. <code>8</code>, not <code>8 each leg</code>).
           </Typography>
         </Box>
+
+        <EquipmentPicker
+          name="equipment"
+          defaultValue={e?.equipment ?? []}
+          label="Equipment needed"
+          helperText="What this move requires. Leave all unchecked for bodyweight — those always show up for everyone."
+        />
 
         <TextField
           name="description"

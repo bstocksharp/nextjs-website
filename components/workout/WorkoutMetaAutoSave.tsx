@@ -9,6 +9,7 @@ import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
 import { RUN_TIMING } from "@/lib/workout-config";
+import { formSig } from "@/components/workout/formSig";
 import type { Workout, Profile } from "@/lib/db/schema";
 
 // The builder's workout meta (name / saved-by / rounds), auto-saved: text/number
@@ -46,7 +47,23 @@ export default function WorkoutMetaAutoSave({
   profiles: Profile[];
 }) {
   const formRef = React.useRef<HTMLFormElement>(null);
-  const save = () => formRef.current?.requestSubmit();
+  const lastSavedRef = React.useRef<string | null>(null);
+
+  // Auto-save only when a field actually changed — otherwise every blur re-submits
+  // and flickers the "Saving…" state.
+  const save = () => {
+    const form = formRef.current;
+    if (!form) return;
+    const sig = formSig(form);
+    if (sig === lastSavedRef.current) return;
+    lastSavedRef.current = sig;
+    form.requestSubmit();
+  };
+
+  // Snapshot the initial values so an untouched blur is a no-op.
+  React.useEffect(() => {
+    if (formRef.current) lastSavedRef.current = formSig(formRef.current);
+  }, []);
 
   return (
     <form action={action} ref={formRef}>

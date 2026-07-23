@@ -8,6 +8,7 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import AddIcon from "@mui/icons-material/Add";
 import { isEditor } from "@/lib/auth";
 import { listExercises } from "@/lib/queries/workout";
+import { getActiveProfile } from "@/lib/profile";
 import CatalogList from "@/components/workout/CatalogList";
 
 export const metadata = { title: "Catalog — Workout" };
@@ -17,9 +18,10 @@ export default async function CatalogPage({
 }: {
   searchParams: Promise<{ blocked?: string; uses?: string }>;
 }) {
-  const [exercises, editor, sp] = await Promise.all([
+  const [exercises, editor, active, sp] = await Promise.all([
     listExercises(),
     isEditor(),
+    getActiveProfile(),
     searchParams,
   ]);
 
@@ -74,7 +76,13 @@ export default async function CatalogPage({
         </Alert>
       ) : null}
 
-      <CatalogList exercises={exercises} editor={editor} />
+      <CatalogList
+        exercises={exercises}
+        editor={editor}
+        ownedEquipment={active?.equipment ?? []}
+        activeProfileId={active?.id ?? null}
+        activeProfileName={active?.name ?? null}
+      />
     </Container>
   );
 }

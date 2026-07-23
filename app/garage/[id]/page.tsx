@@ -9,7 +9,7 @@ import Chip from "@mui/material/Chip";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getVehicle } from "@/lib/queries/vehicles";
-import { isEditor } from "@/lib/auth";
+import { canEditVehicle } from "@/lib/authz";
 import { deleteVehicle } from "@/app/actions/vehicles";
 import DeleteVehicleButton from "@/components/garage/DeleteVehicleButton";
 import VehicleTabs from "@/components/garage/VehicleTabs";
@@ -43,8 +43,11 @@ export default async function VehiclePage({
       ? tab
       : "overview";
 
-  const [vehicle, editor] = await Promise.all([getVehicle(id), isEditor()]);
+  const vehicle = await getVehicle(id);
   if (!vehicle) notFound();
+  // Edit affordances follow ownership: shared cars = anyone in edit mode; private
+  // cars = only the owner (unlocked). The write actions enforce the same rule.
+  const editor = await canEditVehicle(vehicle);
 
   const subtitle = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
     .filter(Boolean)

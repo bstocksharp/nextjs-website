@@ -9,8 +9,13 @@ import TextField from "@mui/material/TextField";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Checkbox from "@mui/material/Checkbox";
 import CircularProgress from "@mui/material/CircularProgress";
+import InputAdornment from "@mui/material/InputAdornment";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import SettingsBackupRestoreIcon from "@mui/icons-material/SettingsBackupRestore";
 import { SECTIONS } from "@/lib/workout";
+import { formSig } from "@/components/workout/formSig";
 import type { WorkoutItem, Exercise } from "@/lib/db/schema";
 
 // Inline item editor for the builder — auto-saves like the rest of the builder.
@@ -49,12 +54,79 @@ export default function WorkoutItemAutoSave({
   exercise: Exercise;
 }) {
   const formRef = React.useRef<HTMLFormElement>(null);
-  const save = () => formRef.current?.requestSubmit();
+  const lastSavedRef = React.useRef<string | null>(null);
+
+  // Auto-save, but only when a field actually changed. Without this, every blur
+  // (even just tabbing through) re-submits → revalidate → the row flickers.
+  const save = () => {
+    const form = formRef.current;
+    if (!form) return;
+    const sig = formSig(form);
+    if (sig === lastSavedRef.current) return; // nothing changed → skip the save
+    lastSavedRef.current = sig;
+    form.requestSubmit();
+  };
+
+  // Snapshot the initial (prefilled) values so an untouched blur is a no-op.
+  React.useEffect(() => {
+    if (formRef.current) lastSavedRef.current = formSig(formRef.current);
+  }, []);
 
   const reps = item.reps ?? exercise.defaultReps ?? "";
   const duration = item.duration ?? exercise.defaultDuration ?? "";
   const weight = item.weight ?? exercise.defaultWeight ?? "";
   const holdLast = item.holdLast ?? exercise.holdLast ?? false;
+
+  // A field is "overridden" when the item has its own value (not inheriting the
+  // catalog). The revert control resets the input to the catalog default and
+  // saves — the save action then stores null (inherit) since it matches.
+  const repsRef = React.useRef<HTMLInputElement>(null);
+  const durationRef = React.useRef<HTMLInputElement>(null);
+  const weightRef = React.useRef<HTMLInputElement>(null);
+  const holdLastRef = React.useRef<HTMLInputElement>(null);
+
+  const revertReps = () => {
+    if (repsRef.current) repsRef.current.value = exercise.defaultReps ?? "";
+    save();
+  };
+  const revertDuration = () => {
+    if (durationRef.current)
+      durationRef.current.value =
+        exercise.defaultDuration != null ? String(exercise.defaultDuration) : "";
+    save();
+  };
+  const revertWeight = () => {
+    if (weightRef.current) weightRef.current.value = exercise.defaultWeight ?? "";
+    save();
+  };
+  const revertHoldLast = () => {
+    if (holdLastRef.current) holdLastRef.current.checked = exercise.holdLast;
+    save();
+  };
+
+  // A small "restore to catalog default" button for a field's endAdornment.
+  // Shown only when that field is overridden; label names the default value.
+  const revertAdornment = (
+    show: boolean,
+    onClick: () => void,
+    defaultText: string,
+  ) =>
+    show ? (
+      <InputAdornment position="end">
+        <Tooltip title={`Revert to catalog default${defaultText ? ` (${defaultText})` : ""}`}>
+          <IconButton
+            size="small"
+            edge="end"
+            aria-label="Revert to catalog default"
+            // Keep the input from blurring (which would fire an extra save).
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={onClick}
+          >
+            <SettingsBackupRestoreIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </InputAdornment>
+    ) : undefined;
 
   return (
     <form action={action} ref={formRef}>
@@ -87,10 +159,20 @@ export default function WorkoutItemAutoSave({
             label="Reps"
             fullWidth
             defaultValue={reps}
+            inputRef={repsRef}
             onBlur={save}
             placeholder="e.g. 10-12, 8 each leg"
             helperText="Blank = pure timer"
-            slotProps={{ inputLabel: { shrink: true } }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              input: {
+                endAdornment: revertAdornment(
+                  item.reps != null,
+                  revertReps,
+                  exercise.defaultReps ?? "none",
+                ),
+              },
+            }}
           />
           <TextField
             name="duration"
@@ -98,11 +180,21 @@ export default function WorkoutItemAutoSave({
             type="number"
             fullWidth
             defaultValue={duration}
+            inputRef={durationRef}
             onBlur={save}
             helperText="Per rep if reps set, else total hold"
             slotProps={{
               htmlInput: { min: 0, step: 1 },
               inputLabel: { shrink: true },
+              input: {
+                endAdornment: revertAdornment(
+                  item.duration != null,
+                  revertDuration,
+                  exercise.defaultDuration != null
+                    ? `${exercise.defaultDuration}s`
+                    : "none",
+                ),
+              },
             }}
           />
           <TextField
@@ -110,24 +202,51 @@ export default function WorkoutItemAutoSave({
             label="Weight"
             fullWidth
             defaultValue={weight}
+            inputRef={weightRef}
             onBlur={save}
             placeholder="e.g. 25 lb, 15s, bodyweight"
-            slotProps={{ inputLabel: { shrink: true } }}
+            slotProps={{
+              inputLabel: { shrink: true },
+              input: {
+                endAdornment: revertAdornment(
+                  item.weight != null,
+                  revertWeight,
+                  exercise.defaultWeight ?? "none",
+                ),
+              },
+            }}
           />
         </Box>
 
         <Box>
-          <FormControlLabel
-            control={
-              <Checkbox
-                name="holdLast"
-                value="1"
-                defaultChecked={holdLast}
-                onChange={save}
-              />
-            }
-            label="Hold the last rep"
-          />
+          <Stack direction="row" alignItems="center">
+            <FormControlLabel
+              control={
+                <Checkbox
+                  name="holdLast"
+                  value="1"
+                  defaultChecked={holdLast}
+                  inputRef={holdLastRef}
+                  onChange={save}
+                />
+              }
+              label="Hold the last rep"
+            />
+            {item.holdLast != null ? (
+              <Tooltip
+                title={`Revert to catalog default (${exercise.holdLast ? "on" : "off"})`}
+              >
+                <IconButton
+                  size="small"
+                  aria-label="Revert to catalog default"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={revertHoldLast}
+                >
+                  <SettingsBackupRestoreIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            ) : null}
+          </Stack>
           <Typography variant="caption" color="text.secondary" display="block">
             Only kicks in when both Reps and a per-rep Time are set above.
           </Typography>

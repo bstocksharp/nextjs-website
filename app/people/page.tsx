@@ -8,8 +8,11 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
 import Avatar from "@mui/material/Avatar";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { isEditor } from "@/lib/auth";
+import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import { isEditor, canEditProfile } from "@/lib/auth";
 import { listAllProfiles } from "@/lib/queries/profiles";
 import { getActiveProfile } from "@/lib/profile";
 import EditProfileButton from "@/components/shared/EditProfileButton";
@@ -29,6 +32,10 @@ export default async function PeoplePage() {
   ]);
   const activeProfiles = all.filter((p) => !p.archivedAt);
   const canDeactivate = activeProfiles.length > 1;
+  // Per row: can the current (active) person actually manage this profile? A
+  // password-protected profile that isn't the active one shows a lock instead of
+  // the manage button — you can't edit it from another profile.
+  const canManage = await Promise.all(all.map((p) => canEditProfile(p.id)));
 
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
@@ -52,8 +59,11 @@ export default async function PeoplePage() {
       </Typography>
 
       <Stack spacing={1.5}>
-        {all.map((p) => {
+        {all.map((p, i) => {
           const archived = !!p.archivedAt;
+          // Archived rows still show manage so they can be reactivated (that
+          // action is open to any editor); otherwise gate on canManage.
+          const manageable = canManage[i] || archived;
           const heirs = activeProfiles
             .filter((x) => x.id !== p.id)
             .map((x) => ({ id: x.id, name: x.name }));
@@ -95,15 +105,27 @@ export default async function PeoplePage() {
                 ) : null}
               </Box>
 
-              <EditProfileButton
-                profileId={p.id}
-                profileName={p.name}
-                profileColor={p.color}
-                profileHiddenApps={p.hiddenApps}
-                archived={archived}
-                canDeactivate={canDeactivate}
-                heirs={heirs}
-              />
+              {manageable ? (
+                <EditProfileButton
+                  profileId={p.id}
+                  profileName={p.name}
+                  profileColor={p.color}
+                  profileHiddenApps={p.hiddenApps}
+                  profileEquipment={p.equipment}
+                  profileHasPassword={!!p.editPasswordHash}
+                  archived={archived}
+                  canDeactivate={canDeactivate}
+                  heirs={heirs}
+                />
+              ) : (
+                <Tooltip title={`Password-locked — switch to ${p.name} and unlock to manage`}>
+                  <span>
+                    <IconButton size="small" disabled aria-label={`${p.name} is locked`}>
+                      <LockOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  </span>
+                </Tooltip>
+              )}
             </Paper>
           );
         })}

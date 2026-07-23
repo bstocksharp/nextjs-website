@@ -20,6 +20,47 @@ export function categoryLabel(value: string | null): string {
   return CATEGORIES.find((c) => c.value === value)?.label ?? "Other";
 }
 
+// ── Equipment (what an exercise needs / what a person owns) ────────────────────
+// A small controlled vocabulary, like CATEGORIES. An exercise stores the slugs it
+// REQUIRES (exercises.equipment); a profile stores the slugs it OWNS
+// (profiles.equipment). You can do an exercise when you own every slug it needs;
+// an empty required list = bodyweight, always doable. Keep this list short and
+// home-gym focused — it's the set of things that actually gate what you can do.
+export const EQUIPMENT = [
+  { value: "dumbbells", label: "Dumbbells" },
+  { value: "pullup-bar", label: "Pull-up bar" },
+  { value: "bench", label: "Bench / chair" },
+  { value: "treadmill", label: "Treadmill" },
+] as const;
+
+export type EquipmentSlug = (typeof EQUIPMENT)[number]["value"];
+
+export function equipmentLabel(value: string): string {
+  return EQUIPMENT.find((eq) => eq.value === value)?.label ?? value;
+}
+
+/** Keep only real, known equipment slugs (deduped) — guards stored/parsed data. */
+export function cleanEquipment(values: unknown): string[] {
+  if (!Array.isArray(values)) return [];
+  const known = new Set<string>(EQUIPMENT.map((eq) => eq.value));
+  return [...new Set(values)].filter(
+    (v): v is string => typeof v === "string" && known.has(v),
+  );
+}
+
+/**
+ * Can a person who owns `owned` do an exercise that needs `needed`?
+ * True when they own every required slug (bodyweight exercises need nothing).
+ */
+export function canDoWithEquipment(
+  needed: string[] | null | undefined,
+  owned: string[] | null | undefined,
+): boolean {
+  if (!needed || needed.length === 0) return true;
+  const have = new Set(owned ?? []);
+  return needed.every((slug) => have.has(slug));
+}
+
 // ── Mode: reps = manual "Done → Next"; timed = countdown ──────────────────────
 export const MODES = [
   { value: "reps", label: "Reps (tap when done)" },

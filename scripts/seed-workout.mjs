@@ -5,9 +5,12 @@
 //   node scripts/seed-workout.mjs --reset   → wipe workout tables, then seed
 //
 // Built from Bryce's real routine so the app is runnable the moment it exists.
-// `tips` holds one tip per line — the live runner shows a random one.
+// Tips live in scripts/exercise-tips.mjs (one source of truth, shared with the
+// backfill scripts) and are stored one per line — the live runner shows a
+// random one and rotates through them.
 import { config } from "dotenv";
 import { neon } from "@neondatabase/serverless";
+import { TIPS_BY_NAME } from "./exercise-tips.mjs";
 
 config({ path: ".env.local" });
 
@@ -18,200 +21,93 @@ if (!url) {
 }
 const sql = neon(url);
 
-// ── The exercise catalog (recommended defaults, description + tips) ────────────
+// ── The exercise catalog (recommended defaults + description) ──────────────────
 // mode: "reps" | "timed". reps/weight are text on purpose ("10-12", "15s").
 // duration/rest are seconds. sets defaults to 3 (2 for Hammer Curls).
 // sides: 2 = performed per side (runner plays the set once per side with a short
 // switch between) — put the PER-SIDE amount in reps ("8", not "8 each leg").
-// description = the "how to" (shown behind an ⓘ). tips = one per line (runner
-// shows a random one live).
+// equipment: gear the move REQUIRES (slugs from lib/workout EQUIPMENT). Omit /
+// empty = bodyweight (always doable). A profile only sees moves whose gear it owns.
+// description = the "how to" (shown behind an ⓘ). Tips come from TIPS_BY_NAME in
+// scripts/exercise-tips.mjs, matched by name.
 const CATALOG = [
   // Warmup / cardio
-  { name: "Warmup Walk", category: "warmup", mode: "timed", sets: 1, duration: 300,
-    description: "Easy walk to raise the heart rate and loosen up before your workout.",
-    tips: [
-      "Keep it light — you're warming up, not working out.",
-      "Get the blood moving; a light sweat is perfect.",
-      "Roll the shoulders and swing the arms as you go.",
-    ] },
-  { name: "Treadmill Cooldown", category: "cardio", mode: "timed", sets: 1, duration: 600,
-    description: "Easy treadmill walk to cool down after the session.",
-    tips: [
-      "Bring the heart rate down slowly.",
-      "Easy pace — you should be able to hold a conversation.",
-      "Finish with a little stretching while you're warm.",
-    ] },
-  { name: "Treadmill", category: "cardio", mode: "timed", sets: 1, duration: 1800,
-    description: "Steady treadmill walk or run at a sustainable pace.",
-    tips: [
-      "Pick a pace you can hold for the whole time.",
-      "Steady beats starting out too hot.",
-      "Good time to put on a podcast or playlist.",
-    ] },
+  { name: "Warmup Walk", category: "warmup", mode: "timed", sets: 1, duration: 300, equipment: [],
+    description: "Easy walk to raise the heart rate and loosen up before your workout." },
+  { name: "Treadmill Cooldown", category: "cardio", mode: "timed", sets: 1, duration: 600, equipment: ["treadmill"],
+    description: "Easy treadmill walk to cool down after the session." },
+  { name: "Treadmill", category: "cardio", mode: "timed", sets: 1, duration: 1800, equipment: ["treadmill"],
+    description: "Steady treadmill walk or run at a sustainable pace." },
 
   // Legs
-  { name: "Goblet Squats", category: "legs", mode: "reps", sets: 3, reps: "10-12", weight: "25 lb", rest: 45,
-    description: "Hold a dumbbell at your chest and squat down, elbows inside your knees.",
-    tips: [
-      "Chest up, drive through the heels.",
-      "Elbows stay inside the knees at the bottom.",
-      "Go for full depth — thighs at least parallel.",
-    ] },
-  { name: "Bulgarian Split Squats", category: "legs", mode: "reps", sets: 3, reps: "8", sides: 2, weight: "15 lb", rest: 45,
-    description: "Rear foot on a couch/chair, drop straight down on the front leg.",
-    tips: [
-      "One foot on a couch/chair. Holy crap these work.",
-      "Keep most of your weight on the front leg.",
-      "Drop straight down — don't lunge forward.",
-    ] },
-  { name: "Reverse Lunges", category: "legs", mode: "reps", sets: 3, reps: "10", weight: "15s", rest: 45,
-    description: "Step backward into a lunge, then drive back up. Alternate legs.",
-    tips: [
-      "Controlled — don't let the front knee cave in.",
-      "Step back far enough that the front shin stays vertical.",
-      "Easier on the knees than forward lunges.",
-    ] },
-  { name: "Romanian Deadlift", category: "legs", mode: "reps", sets: 3, reps: "12", weight: "25 lb", rest: 60,
-    description: "Hinge at the hips with a soft knee, lowering the weights down your shins.",
-    tips: [
-      "Slow. Stretch the hamstrings.",
-      "Soft knees, push the hips back — it's a hinge, not a squat.",
-      "Flat back; feel it in the hamstrings, not the low back.",
-    ] },
-  { name: "Glute Bridge", category: "legs", mode: "reps", sets: 3, reps: "20", weight: "bodyweight", rest: 30,
-    description: "Lie on your back, drive your hips up, squeeze the glutes at the top.",
-    tips: [
-      "Easy. Awesome. Protects your back.",
-      "Squeeze the glutes hard at the top and pause.",
-      "Drive through the heels, not the toes.",
-    ] },
+  { name: "Goblet Squats", category: "legs", mode: "reps", sets: 3, reps: "10-12", weight: "25 lb", rest: 45, equipment: ["dumbbells"],
+    description: "Hold a dumbbell at your chest and squat down, elbows inside your knees." },
+  { name: "Bulgarian Split Squats", category: "legs", mode: "reps", sets: 3, reps: "8", sides: 2, weight: "15 lb", rest: 45, equipment: ["dumbbells", "bench"],
+    description: "Rear foot on a couch/chair, drop straight down on the front leg." },
+  { name: "Reverse Lunges", category: "legs", mode: "reps", sets: 3, reps: "10", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Step backward into a lunge, then drive back up. Alternate legs." },
+  { name: "Romanian Deadlift", category: "legs", mode: "reps", sets: 3, reps: "12", weight: "25 lb", rest: 60, equipment: ["dumbbells"],
+    description: "Hinge at the hips with a soft knee, lowering the weights down your shins." },
+  { name: "Glute Bridge", category: "legs", mode: "reps", sets: 3, reps: "20", weight: "bodyweight", rest: 30, equipment: [],
+    description: "Lie on your back, drive your hips up, squeeze the glutes at the top." },
 
   // Push
-  { name: "Dumbbell Floor Press", category: "push", mode: "reps", sets: 3, reps: "10-15", weight: "15s", rest: 45,
-    description: "Lie on the floor and press dumbbells up; elbows stop at the floor.",
-    tips: [
-      "The floor limits the range — great and shoulder-friendly.",
-      "Let the elbows rest a beat on the floor between reps.",
-      "Keep the wrists stacked over the elbows.",
-    ] },
-  { name: "Shoulder Press", category: "push", mode: "reps", sets: 3, reps: "8-12", weight: "15s", rest: 45,
-    description: "Press dumbbells overhead from shoulder height until arms lock out.",
-    tips: [
-      "Don't arch the lower back — brace your core.",
-      "Press up and slightly back, not straight forward.",
-      "Control the weights down; don't just drop them.",
-    ] },
-  { name: "Pushups", category: "push", mode: "reps", sets: 3, reps: "to near failure", weight: "bodyweight", rest: 45,
-    description: "Standard pushups, chest to the floor, body in a straight line.",
-    tips: [
-      "Stop 1-2 reps before failure.",
-      "Body in one straight line — no sagging hips.",
-      "Elbows about 45° from the body, not flared out.",
-    ] },
-  { name: "Arnold Press", category: "push", mode: "reps", sets: 3, reps: "10", weight: "15s", rest: 45,
-    description: "Shoulder press that rotates the palms from facing you to facing out.",
-    tips: [
-      "Smooth rotation — hits all three delt heads.",
-      "Start with palms facing you, finish facing forward.",
-      "Go lighter than a normal press; the rotation is the point.",
-    ] },
-  { name: "Lateral Raises", category: "push", mode: "reps", sets: 3, reps: "15", weight: "5 or 8s", rest: 30,
-    description: "Raise dumbbells out to the sides to shoulder height, slight bend in the elbow.",
-    tips: [
-      "These absolutely torch shoulders. Go light.",
-      "Lead with the elbows, slight bend in the arm.",
-      "Stop at shoulder height — no higher.",
-    ] },
-  { name: "Tricep Overhead Extension", category: "push", mode: "reps", sets: 3, reps: "12", weight: "25 lb", rest: 45,
-    description: "Hold one dumbbell overhead with both hands, lower behind your head, extend.",
-    tips: [
-      "Both hands. Keep the elbows tucked in.",
-      "Only the forearms move; upper arms stay still.",
-      "Get a full stretch at the bottom.",
-    ] },
+  { name: "Dumbbell Floor Press", category: "push", mode: "reps", sets: 3, reps: "10-15", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Lie on the floor and press dumbbells up; elbows stop at the floor." },
+  { name: "Shoulder Press", category: "push", mode: "reps", sets: 3, reps: "8-12", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Press dumbbells overhead from shoulder height until arms lock out." },
+  { name: "Pushups", category: "push", mode: "reps", sets: 3, reps: "to near failure", weight: "bodyweight", rest: 45, equipment: [],
+    description: "Standard pushups, chest to the floor, body in a straight line." },
+  { name: "Arnold Press", category: "push", mode: "reps", sets: 3, reps: "10", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Shoulder press that rotates the palms from facing you to facing out." },
+  { name: "Lateral Raises", category: "push", mode: "reps", sets: 3, reps: "15", weight: "5 or 8s", rest: 30, equipment: ["dumbbells"],
+    description: "Raise dumbbells out to the sides to shoulder height, slight bend in the elbow." },
+  { name: "Tricep Overhead Extension", category: "push", mode: "reps", sets: 3, reps: "12", weight: "25 lb", rest: 45, equipment: ["dumbbells"],
+    description: "Hold one dumbbell overhead with both hands, lower behind your head, extend." },
 
   // Pull
-  { name: "One Arm Row", category: "pull", mode: "reps", sets: 3, reps: "12", sides: 2, weight: "25 lb", rest: 45,
-    description: "Braced on a bench/couch, row a dumbbell to your hip. One side, then the other.",
-    tips: [
-      "Pull with the back, not the arm. Squeeze the shoulder blade.",
-      "Row the dumbbell to your hip, not your chest.",
-      "Keep a flat back and don't twist.",
-    ] },
-  { name: "Bicep Curls", category: "pull", mode: "reps", sets: 3, reps: "12", weight: "15s", rest: 45,
-    description: "Curl dumbbells up with palms facing forward; control the way down.",
-    tips: [
-      "You're gonna love these. No swinging.",
-      "Keep the elbows pinned to your sides.",
-      "Control the way down — that's half the work.",
-    ] },
-  { name: "Hammer Curls", category: "pull", mode: "reps", sets: 2, reps: "10", weight: "15s", rest: 45,
-    description: "Curl with palms facing each other (neutral grip).",
-    tips: [
-      "Builds forearms too.",
-      "Palms face each other the whole time.",
-      "No swinging — let the arms do the work.",
-    ] },
-  { name: "Bent Over Reverse Fly", category: "pull", mode: "reps", sets: 3, reps: "15", weight: "8s", rest: 30,
-    description: "Hinge forward and raise dumbbells out to the sides, squeezing the rear delts.",
-    tips: [
-      "Rear shoulders + posture. Light weight, slow.",
-      "Squeeze the shoulder blades together at the top.",
-      "Slight bend in the elbows, lead with the pinkies.",
-    ] },
+  { name: "One Arm Row", category: "pull", mode: "reps", sets: 3, reps: "12", sides: 2, weight: "25 lb", rest: 45, equipment: ["dumbbells", "bench"],
+    description: "Braced on a bench/couch, row a dumbbell to your hip. One side, then the other." },
+  { name: "Bicep Curls", category: "pull", mode: "reps", sets: 3, reps: "12", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Curl dumbbells up with palms facing forward; control the way down." },
+  { name: "Hammer Curls", category: "pull", mode: "reps", sets: 2, reps: "10", weight: "15s", rest: 45, equipment: ["dumbbells"],
+    description: "Curl with palms facing each other (neutral grip)." },
+  { name: "Bent Over Reverse Fly", category: "pull", mode: "reps", sets: 3, reps: "15", weight: "8s", rest: 30, equipment: ["dumbbells"],
+    description: "Hinge forward and raise dumbbells out to the sides, squeezing the rear delts." },
+
+  // Pull-up bar — a progression from "can't do one yet" up to the real thing.
+  { name: "Dead Hang", category: "pull", mode: "timed", sets: 3, duration: 30, equipment: ["pullup-bar"],
+    description: "Hang from the bar with straight arms and a full grip. Just hang and breathe." },
+  { name: "Scapular Pulls", category: "pull", mode: "reps", sets: 3, reps: "8-10", weight: "bodyweight", rest: 45, equipment: ["pullup-bar"],
+    description: "Hang with straight arms, then pull your shoulder blades down and back without bending the arms. This is the first inch of a pull-up." },
+  { name: "Flexed-Arm Hang", category: "pull", mode: "timed", sets: 3, duration: 15, equipment: ["pullup-bar"],
+    description: "Get your chin over the bar (step or jump up to it) and hold there as long as you can." },
+  { name: "Negative Pull-ups", category: "pull", mode: "reps", sets: 3, reps: "3-5", weight: "bodyweight", rest: 60, equipment: ["pullup-bar"],
+    description: "Step or jump to the top (chin over bar), then lower yourself as slowly as you possibly can." },
+  { name: "Hanging Knee Raises", category: "core", mode: "reps", sets: 3, reps: "10-12", weight: "bodyweight", rest: 45, equipment: ["pullup-bar"],
+    description: "Hang from the bar and raise your knees toward your chest, then lower with control." },
+  { name: "Chin-ups", category: "pull", mode: "reps", sets: 3, reps: "work up to 1", weight: "bodyweight", rest: 90, equipment: ["pullup-bar"],
+    description: "Underhand grip (palms facing you), pull your chin over the bar. Usually your first pull-up win." },
+  { name: "Pull-ups", category: "pull", mode: "reps", sets: 3, reps: "work up to 1", weight: "bodyweight", rest: 90, equipment: ["pullup-bar"],
+    description: "Overhand grip (palms facing away), pull your chin over the bar with a straight body." },
 
   // Core
-  { name: "Plank", category: "core", mode: "timed", sets: 3, duration: 60, rest: 30,
-    description: "Forearms and toes, body in a straight rigid line. Hold.",
-    tips: [
-      "Squeeze glutes and core; don't let the hips sag.",
-      "Stack the elbows under the shoulders.",
-      "Breathe — don't hold your breath.",
-    ] },
-  { name: "Superman Holds", category: "core", mode: "timed", sets: 3, duration: 20, rest: 30,
-    description: "Lay on your stomach and lift your chest and legs off the floor. Hold.",
-    tips: [
-      "Fantastic for your lower back.",
-      "Lift chest and legs together and hold.",
-      "Look down to keep your neck neutral.",
-    ] },
-  { name: "Bird Dogs", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30,
-    description: "On all fours, extend the opposite arm and leg, hold, return. Alternate.",
-    tips: [
-      "Boring — but one of the best core stability moves there is.",
-      "Extend opposite arm and leg; keep the hips level.",
-      "Move slow and don't let your back rotate.",
-    ] },
-  { name: "Dead Bug", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30,
-    description: "On your back, extend the opposite arm and leg while keeping your low back flat.",
-    tips: [
-      "Better than endless crunches — it teaches core control.",
-      "Press your low back flat into the floor the whole time.",
-      "Move the opposite arm and leg slowly.",
-    ] },
-  { name: "Situps", category: "core", mode: "reps", sets: 3, reps: "20", weight: "bodyweight", rest: 30,
-    description: "Full situps, controlled up and down.",
-    tips: [
-      "Slow and controlled beats fast and sloppy.",
-      "Don't yank on your neck — hands light behind the ears.",
-      "Exhale on the way up.",
-    ] },
+  { name: "Plank", category: "core", mode: "timed", sets: 3, duration: 60, rest: 30, equipment: [],
+    description: "Forearms and toes, body in a straight rigid line. Hold." },
+  { name: "Superman Holds", category: "core", mode: "timed", sets: 3, duration: 20, rest: 30, equipment: [],
+    description: "Lay on your stomach and lift your chest and legs off the floor. Hold." },
+  { name: "Bird Dogs", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30, equipment: [],
+    description: "On all fours, extend the opposite arm and leg, hold, return. Alternate." },
+  { name: "Dead Bug", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30, equipment: [],
+    description: "On your back, extend the opposite arm and leg while keeping your low back flat." },
+  { name: "Situps", category: "core", mode: "reps", sets: 3, reps: "20", weight: "bodyweight", rest: 30, equipment: [],
+    description: "Full situps, controlled up and down." },
 
   // Carries
-  { name: "Farmer Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb one hand", rest: 30,
-    description: "Hold a dumbbell in one hand and walk around the house. Switch hands, repeat.",
-    tips: [
-      "Secretly one of the best core exercises ever.",
-      "Stand tall — shoulders back, don't hunch.",
-      "Grip hard and brace the core the whole walk.",
-    ] },
-  { name: "Suitcase Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb", rest: 30,
-    description: "Like a farmer carry but one side only — walk tall, don't lean. Switch hands.",
-    tips: [
-      "Amazing for core, obliques, and lower back.",
-      "Don't lean toward the weight — stay perfectly upright.",
-      "Match the time on each side.",
-    ] },
+  { name: "Farmer Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb one hand", rest: 30, equipment: ["dumbbells"],
+    description: "Hold a dumbbell in one hand and walk around the house. Switch hands, repeat." },
+  { name: "Suitcase Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb", rest: 30, equipment: ["dumbbells"],
+    description: "Like a farmer carry but one side only — walk tall, don't lean. Switch hands." },
 ];
 
 // ── The workouts (exercise names must match the catalog above) ────────────────
@@ -284,16 +180,18 @@ async function main() {
     VALUES ('Lauren', '#d8b384', 1) RETURNING id`;
   console.log("• seeded 2 profiles (Bryce, Lauren)");
 
-  // Catalog → name→id map. tips[] is stored one per line.
+  // Catalog → name→id map. tips[] (from exercise-tips.mjs) is stored one per line.
   const byName = {};
   for (const e of CATALOG) {
-    const tips = Array.isArray(e.tips) ? e.tips.join("\n") : (e.tips ?? null);
+    const tipList = TIPS_BY_NAME[e.name] ?? [];
+    const tips = tipList.length ? tipList.join("\n") : null;
     const [row] = await sql`
       INSERT INTO exercises
-        (name, category, default_reps, default_duration, default_weight, sides, description, tips)
+        (name, category, default_reps, default_duration, default_weight, sides, equipment, description, tips)
       VALUES
         (${e.name}, ${e.category}, ${e.reps ?? null},
          ${e.duration ?? null}, ${e.weight ?? null}, ${e.sides ?? 1},
+         ${JSON.stringify(e.equipment ?? [])}::jsonb,
          ${e.description ?? null}, ${tips})
       RETURNING id`;
     byName[e.name] = row.id;

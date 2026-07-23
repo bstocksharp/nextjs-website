@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { buildTasks } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
@@ -42,7 +42,7 @@ export async function addBuildTask(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseTask(formData);
   if (!data.title) throw new Error("Task title is required.");
 
@@ -57,7 +57,7 @@ export async function updateBuildTask(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseTask(formData);
   if (!data.title) throw new Error("Task title is required.");
 
@@ -75,7 +75,7 @@ export async function deleteBuildTask(
   vehicleId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db.delete(buildTasks).where(eq(buildTasks.id, id));
 
   revalidatePath(`/garage/${vehicleId}`);
@@ -91,7 +91,7 @@ export async function toggleBuildTask(
   vehicleId: number,
   done: boolean,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db
     .update(buildTasks)
     .set({

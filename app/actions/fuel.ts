@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { fuelLogs } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 
 function parseFuel(formData: FormData) {
   const str = (k: string) => {
@@ -36,7 +36,7 @@ export async function addFuel(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseFuel(formData);
   if (!data.fillDate) throw new Error("Fill date is required.");
 
@@ -55,7 +55,7 @@ export async function updateFuel(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseFuel(formData);
   if (!data.fillDate) throw new Error("Fill date is required.");
 
@@ -73,7 +73,7 @@ export async function deleteFuel(
   vehicleId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db.delete(fuelLogs).where(eq(fuelLogs.id, id));
 
   revalidatePath(`/garage/${vehicleId}`);

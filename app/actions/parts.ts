@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { parts } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 
 function parsePart(formData: FormData) {
   const str = (k: string) => {
@@ -31,7 +31,7 @@ export async function addPart(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parsePart(formData);
   if (!data.name) throw new Error("Part name is required.");
 
@@ -46,7 +46,7 @@ export async function updatePart(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parsePart(formData);
   if (!data.name) throw new Error("Part name is required.");
 
@@ -64,7 +64,7 @@ export async function deletePart(
   vehicleId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db.delete(parts).where(eq(parts.id, id));
 
   revalidatePath(`/garage/${vehicleId}`);

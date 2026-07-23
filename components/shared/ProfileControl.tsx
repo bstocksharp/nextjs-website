@@ -23,6 +23,7 @@ export default async function ProfileControl() {
       active={active ? pick(active) : null}
       profiles={profiles.map(pick)}
       canEdit={canEdit}
+      activeHasPassword={!!active?.editPasswordHash}
     />
   );
 }

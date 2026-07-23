@@ -248,6 +248,17 @@ export const profiles = pgTable("profiles", {
   // personal declutter preference, NOT a permission — the hub has no roles.
   // Default [] = every app visible; new apps show up automatically.
   hiddenApps: jsonb("hidden_apps").$type<string[]>().notNull().default([]),
+  // Workout gear this person OWNS (slugs from lib/workout EQUIPMENT). The workout
+  // catalog greys out / warns on exercises whose required gear isn't here. Default
+  // [] = "not set up yet" → nothing is filtered (show everything). Editor-gated to
+  // change, so the read-only showcase stays read-only — see auth notes.
+  equipment: jsonb("equipment").$type<string[]>().notNull().default([]),
+  // OPTIONAL edit-lock password (scrypt hash, "scrypt$salt$hash"). Null = no
+  // password → anyone can enter edit mode for this profile. Set → you must enter
+  // it to edit this profile's own stuff (its workouts, schedule, private cars,
+  // settings). NOT a login (viewing/running is always open) and NOT real security
+  // — a forgiving per-person lock. See lib/auth + [[auth-single-login-no-roles]].
+  editPasswordHash: text("edit_password_hash"),
   // Soft-delete: "Deactivate" sets this (hidden from the switcher, can't be
   // active) but keeps all their data. "Delete forever" removes the row after
   // reassigning shared cars/workouts. null = active.
@@ -276,6 +287,12 @@ export const exercises = pgTable("exercises", {
   // 1 = normal; 2 = performed per side (e.g. Bulgarian split squats, planks each
   // side) — the runner runs the set once per side with a short "switch" between.
   sides: integer("sides").notNull().default(1),
+  // Gear this exercise REQUIRES, as slugs from lib/workout EQUIPMENT (e.g.
+  // ["dumbbells"], ["pullup-bar"]). Intrinsic to the exercise (a pull-up always
+  // needs a bar), so it's catalog-only — NO per-item override, same as `sides`.
+  // Empty [] = bodyweight, needs nothing. A profile only sees exercises whose
+  // required gear it owns (profiles.equipment); [] always shows.
+  equipment: jsonb("equipment").$type<string[]>().notNull().default([]),
   description: text("description"),
   tips: text("tips"),
   createdAt: createdAt(),

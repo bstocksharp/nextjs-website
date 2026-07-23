@@ -9,9 +9,10 @@ import {
   workouts,
   workoutAssignments,
 } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireEditor, requireEditorFor, hashPassword, lockAll } from "@/lib/auth";
 import { getActiveProfile, setActiveProfileCookie } from "@/lib/profile";
 import { APPS } from "@/lib/apps";
+import { cleanEquipment } from "@/lib/workout";
 
 /** First active profile other than `exceptId`, or null. */
 async function otherActiveProfile(exceptId: number) {
@@ -27,46 +28,98 @@ async function otherActiveProfile(exceptId: number) {
 // Switching who we are is harmless (it only changes whose data you view), so it's
 // open to anyone. Adding a person is a mutation — editor-gated.
 
-/** Make `id` the active profile and refresh every server-rendered page. */
+/**
+ * Make `id` the active profile and refresh every server-rendered page. Switching
+ * also clears edit mode (locks any unlocked password-protected profile) so it
+ * doesn't linger once you've stepped into someone else — passwordless profiles
+ * stay open.
+ */
 export async function switchProfile(id: number): Promise<void> {
+  await lockAll();
   await setActiveProfileCookie(id);
   revalidatePath("/", "layout");
 }
 
-/** Create a new person and switch to them. */
+/** Create a new person (optionally password-locked) and switch to them. */
 export async function addPerson(formData: FormData): Promise<void> {
   await requireEditor();
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
   const color = String(formData.get("color") ?? "").trim() || null;
+  const password = String(formData.get("password") ?? "").trim();
 
   const [created] = await db
     .insert(profiles)
-    .values({ name, color })
+    .values({
+      name,
+      color,
+      editPasswordHash: password ? hashPassword(password) : null,
+    })
     .returning();
 
+  // New person starts in view mode (not added to the unlocked set); switch to them.
   if (created) await setActiveProfileCookie(created.id);
   revalidatePath("/", "layout");
 }
 
-/** Update a person's display name, color, and hidden-apps preference. */
+/** Update a person's display name, color, hidden-apps, owned-equipment + password. */
 export async function updateProfile(
   id: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireEditorFor(id); // you can only edit a profile you've unlocked
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
   const color = String(formData.get("color") ?? "").trim() || null;
   const hiddenApps = parseHiddenApps(formData.get("hiddenApps"));
+  const equipment = parseEquipment(formData.get("equipment"));
 
-  await db
-    .update(profiles)
-    .set({ name, color, hiddenApps })
-    .where(eq(profiles.id, id));
+  // Password: only touch it deliberately. "removePassword" clears it; otherwise a
+  // non-empty "password" sets a new one; a blank field leaves it unchanged (so a
+  // normal save never wipes it).
+  const set: {
+    name: string;
+    color: string | null;
+    hiddenApps: string[];
+    equipment: string[];
+    editPasswordHash?: string | null;
+  } = { name, color, hiddenApps, equipment };
+  if (formData.get("removePassword") != null) {
+    set.editPasswordHash = null;
+  } else {
+    const password = String(formData.get("password") ?? "").trim();
+    if (password) set.editPasswordHash = hashPassword(password);
+  }
+
+  await db.update(profiles).set(set).where(eq(profiles.id, id));
   revalidatePath("/", "layout");
+}
+
+/**
+ * Set just the gear a person owns — a standalone action so the workout catalog &
+ * builder can offer a "My equipment" picker without touching name/color/apps.
+ * Editor-gated like every other write (keeps the read-only showcase read-only).
+ */
+export async function setProfileEquipment(
+  id: number,
+  formData: FormData,
+): Promise<void> {
+  await requireEditorFor(id);
+  const equipment = parseEquipment(formData.get("equipment"));
+  await db.update(profiles).set({ equipment }).where(eq(profiles.id, id));
+  revalidatePath("/", "layout");
+}
+
+/** Parse the equipment hidden field (JSON array of slugs), keeping known ones. */
+function parseEquipment(raw: FormDataEntryValue | null): string[] {
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    return cleanEquipment(JSON.parse(raw));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -97,7 +150,7 @@ function parseHiddenApps(raw: FormDataEntryValue | null): string[] {
  * profiles; if the archived one is currently active, switch to another first.
  */
 export async function deactivateProfile(id: number): Promise<void> {
-  await requireEditor();
+  await requireEditorFor(id); // deactivate a person you've unlocked
 
   const activeCount = await db.$count(profiles, isNull(profiles.archivedAt));
   if (activeCount <= 1) {
@@ -118,7 +171,11 @@ export async function deactivateProfile(id: number): Promise<void> {
   revalidatePath("/", "layout");
 }
 
-/** Restore an archived profile. */
+/**
+ * Restore an archived profile. Gated by general edit mode (not requireEditorFor):
+ * an archived profile can't be made active, so it can't be unlocked — requiring
+ * its own unlock would strand it archived forever.
+ */
 export async function reactivateProfile(id: number): Promise<void> {
   await requireEditor();
   await db.update(profiles).set({ archivedAt: null }).where(eq(profiles.id, id));
@@ -134,7 +191,7 @@ export async function deleteProfileForever(
   id: number,
   heirId: number,
 ): Promise<void> {
-  await requireEditor();
+  await requireEditorFor(id); // delete a person you've unlocked
 
   if (heirId === id) throw new Error("Pick a different profile to inherit.");
   const [heir] = await db
