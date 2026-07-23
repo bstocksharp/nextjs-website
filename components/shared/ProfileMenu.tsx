@@ -74,10 +74,12 @@ export default function ProfileMenu({
   active,
   profiles,
   canEdit,
+  activeHasPassword,
 }: {
   active: ProfilePick | null;
   profiles: ProfilePick[];
   canEdit: boolean;
+  activeHasPassword: boolean;
 }) {
   const [anchor, setAnchor] = React.useState<null | HTMLElement>(null);
   const [addOpen, setAddOpen] = React.useState(false);
@@ -104,6 +106,8 @@ export default function ProfileMenu({
     setAddOpen(true);
   }
 
+  // Only password-protected profiles have a lock to open — passwordless ones are
+  // always editable, so there's no toggle for them.
   function openUnlock() {
     closeMenu();
     setUnlockOpen(true);
@@ -201,21 +205,23 @@ export default function ProfileMenu({
           <ListItemText>{isDark ? "Light mode" : "Dark mode"}</ListItemText>
         </MenuItem>
 
-        {canEdit ? (
-          <MenuItem onClick={lock}>
-            <ListItemIcon>
-              <LockOpenOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Lock editing</ListItemText>
-          </MenuItem>
-        ) : (
-          <MenuItem onClick={openUnlock}>
-            <ListItemIcon>
-              <LockOutlinedIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Unlock editing…</ListItemText>
-          </MenuItem>
-        )}
+        {active && activeHasPassword ? (
+          canEdit ? (
+            <MenuItem onClick={lock}>
+              <ListItemIcon>
+                <LockOpenOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Lock editing</ListItemText>
+            </MenuItem>
+          ) : (
+            <MenuItem onClick={openUnlock}>
+              <ListItemIcon>
+                <LockOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Unlock editing…</ListItemText>
+            </MenuItem>
+          )
+        ) : null}
       </Menu>
 
       <AddPersonDialog
@@ -226,12 +232,23 @@ export default function ProfileMenu({
       />
 
       {/* Mounted only while open so useActionState resets fresh each time. */}
-      {unlockOpen ? <UnlockDialog onClose={() => setUnlockOpen(false)} /> : null}
+      {unlockOpen ? (
+        <UnlockDialog
+          profileName={active?.name ?? "this profile"}
+          onClose={() => setUnlockOpen(false)}
+        />
+      ) : null}
     </>
   );
 }
 
-function UnlockDialog({ onClose }: { onClose: () => void }) {
+function UnlockDialog({
+  profileName,
+  onClose,
+}: {
+  profileName: string;
+  onClose: () => void;
+}) {
   const [state, formAction] = React.useActionState(unlockInlineAction, null);
 
   // On success the cookie's set and the page revalidated — just close.
@@ -242,12 +259,12 @@ function UnlockDialog({ onClose }: { onClose: () => void }) {
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xs">
       <form action={formAction}>
-        <DialogTitle>Unlock editing</DialogTitle>
+        <DialogTitle>Unlock {profileName}&apos;s editing</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 0.5 }}>
             <Typography variant="body2" color="text.secondary">
-              Enter the edit password to add or change entries. Viewing stays
-              open to everyone.
+              Enter {profileName}&apos;s edit password to change their stuff.
+              Viewing &amp; running stay open to everyone.
             </Typography>
             {state && !state.ok ? (
               <Alert severity="error">{state.error}</Alert>
@@ -307,6 +324,14 @@ function AddPersonDialog({
             />
             <input type="hidden" name="color" value={color} />
             <ColorSwatches value={color} onChange={setColor} />
+            <TextField
+              name="password"
+              type="password"
+              label="Edit password (optional)"
+              fullWidth
+              autoComplete="new-password"
+              helperText="Leave blank for no lock — anyone can edit. Set one and only someone who knows it can edit this person's stuff. Viewing is always open."
+            />
           </Stack>
         </DialogContent>
         <DialogActions>

@@ -10,8 +10,13 @@ import {
   workoutItems,
   workoutAssignments,
 } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import type { Exercise } from "@/lib/db/schema";
+import { requireEditor, requireEditorFor } from "@/lib/auth";
+import { requireWorkoutEditor } from "@/lib/authz";
+import { getActiveProfile } from "@/lib/profile";
 import { countExerciseUsage } from "@/lib/queries/workout";
+import { RUN_TIMING } from "@/lib/workout-config";
+import { cleanEquipment } from "@/lib/workout";
 
 const CATALOG = "/workout/catalog";
 
@@ -27,6 +32,18 @@ function int(formData: FormData, k: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+// EquipmentPicker posts a JSON array of slugs in one hidden field; parse it and
+// keep only known slugs so a stale/bogus value can never persist.
+function equip(formData: FormData): string[] {
+  const raw = formData.get("equipment");
+  if (typeof raw !== "string" || !raw) return [];
+  try {
+    return cleanEquipment(JSON.parse(raw));
+  } catch {
+    return [];
+  }
+}
+
 function parseExercise(formData: FormData) {
   return {
     name: String(formData.get("name") ?? "").trim(),
@@ -35,6 +52,8 @@ function parseExercise(formData: FormData) {
     defaultDuration: int(formData, "defaultDuration"),
     defaultWeight: str(formData, "defaultWeight"),
     holdLast: formData.get("holdLast") != null, // checkbox present = on
+    sides: formData.get("perSide") != null ? 2 : 1, // checkbox present = per side
+    equipment: equip(formData), // intrinsic gear this move needs (catalog-only)
     description: str(formData, "description"),
     tips: str(formData, "tips"), // textarea, one tip per line
   };
@@ -94,17 +113,21 @@ function parseWorkout(formData: FormData) {
   return {
     name: String(formData.get("name") ?? "").trim(),
     rounds: Math.max(1, int(formData, "rounds") ?? 1),
-    restBetweenRounds: Math.max(0, int(formData, "restBetweenRounds") ?? 60),
+    restBetweenRounds: Math.max(
+      0,
+      int(formData, "restBetweenRounds") ?? RUN_TIMING.defaultRestBetweenRounds,
+    ),
     createdByProfileId: int(formData, "createdByProfileId"),
   };
 }
 
 export async function addWorkout(formData: FormData): Promise<void> {
-  await requireEditor();
   const { name, rounds, restBetweenRounds, createdByProfileId } =
     parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
   if (!createdByProfileId) throw new Error("Choose who's saving this workout.");
+  // The person it's saved-by owns it, so they must be unlocked to create it.
+  await requireEditorFor(createdByProfileId);
 
   const [row] = await db
     .insert(workouts)
@@ -131,7 +154,7 @@ export async function updateWorkout(
   id: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(id);
   const { name, rounds, restBetweenRounds, createdByProfileId } =
     parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
@@ -156,12 +179,68 @@ export async function deleteWorkout(
   id: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(id);
   // Cascades to workout_items and workout_assignments (FK onDelete: cascade).
   await db.delete(workouts).where(eq(workouts.id, id));
 
   revalidatePath("/workout");
   redirect("/workout");
+}
+
+/**
+ * Duplicate any workout onto the ACTIVE profile's side (name + " (copy)"), items
+ * and all. Since workouts are edit-owned now, this is how you take someone else's
+ * routine and tweak your own version. You must be unlocked (it becomes yours).
+ */
+export async function copyWorkout(
+  sourceId: number,
+  _formData: FormData,
+): Promise<void> {
+  const active = await getActiveProfile();
+  if (!active) throw new Error("No active profile to copy to.");
+  await requireEditorFor(active.id);
+
+  const [src] = await db
+    .select()
+    .from(workouts)
+    .where(eq(workouts.id, sourceId))
+    .limit(1);
+  if (!src) throw new Error("Workout not found.");
+
+  const [copy] = await db
+    .insert(workouts)
+    .values({
+      createdByProfileId: active.id,
+      name: `${src.name} (copy)`,
+      rounds: src.rounds,
+      restBetweenRounds: src.restBetweenRounds,
+      notes: src.notes,
+    })
+    .returning({ id: workouts.id });
+
+  const items = await db
+    .select()
+    .from(workoutItems)
+    .where(eq(workoutItems.workoutId, sourceId))
+    .orderBy(asc(workoutItems.sortOrder), asc(workoutItems.id));
+  if (items.length) {
+    await db.insert(workoutItems).values(
+      items.map((it) => ({
+        workoutId: copy.id,
+        exerciseId: it.exerciseId,
+        section: it.section,
+        reps: it.reps,
+        duration: it.duration,
+        weight: it.weight,
+        holdLast: it.holdLast,
+        note: it.note,
+        sortOrder: it.sortOrder,
+      })),
+    );
+  }
+
+  revalidatePath("/workout");
+  redirect(builderPath(copy.id)); // drop into the builder to tweak your copy
 }
 
 // ── Workout items ─────────────────────────────────────────────────────────────
@@ -179,7 +258,7 @@ export async function addWorkoutItem(
   workoutId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(workoutId);
   const exerciseId = int(formData, "exerciseId");
   const section = str(formData, "section") ?? "main";
   if (!exerciseId) throw new Error("Pick an exercise to add.");
@@ -197,14 +276,24 @@ export async function addWorkoutItem(
   revalidatePath(builderPath(workoutId));
 }
 
-function parseItemOverrides(formData: FormData) {
+// Store a per-item override ONLY when it differs from the catalog default;
+// otherwise store null so the item keeps inheriting. This keeps catalog edits
+// flowing to any field the user hasn't deliberately changed (the item form is
+// prefilled with the effective value, so "unchanged" == "equals the default").
+const overrideStr = (v: string | null, def: string | null) =>
+  v === null || v === def ? null : v;
+const overrideNum = (v: number | null, def: number | null) =>
+  v === null || v === def ? null : v;
+const overrideBool = (v: boolean, def: boolean) => (v === def ? null : v);
+
+function parseItemOverrides(formData: FormData, exercise: Exercise) {
   return {
-    section: str(formData, "section") ?? "main",
-    reps: str(formData, "reps"),
-    duration: int(formData, "duration"),
-    weight: str(formData, "weight"),
-    holdLast: formData.get("holdLast") != null, // checkbox present = on
-    note: str(formData, "note"),
+    section: str(formData, "section") ?? "main", // item-only field (always set)
+    reps: overrideStr(str(formData, "reps"), exercise.defaultReps),
+    duration: overrideNum(int(formData, "duration"), exercise.defaultDuration),
+    weight: overrideStr(str(formData, "weight"), exercise.defaultWeight),
+    holdLast: overrideBool(formData.get("holdLast") != null, exercise.holdLast),
+    note: str(formData, "note"), // item-only field (no catalog equivalent)
   };
 }
 
@@ -213,10 +302,20 @@ export async function updateWorkoutItem(
   workoutId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(workoutId);
+  // Fetch the item's catalog exercise so we can diff each field against its
+  // default and only persist genuine overrides.
+  const [row] = await db
+    .select({ exercise: exercises })
+    .from(workoutItems)
+    .innerJoin(exercises, eq(workoutItems.exerciseId, exercises.id))
+    .where(eq(workoutItems.id, itemId))
+    .limit(1);
+  if (!row) return;
+
   await db
     .update(workoutItems)
-    .set(parseItemOverrides(formData))
+    .set(parseItemOverrides(formData, row.exercise))
     .where(eq(workoutItems.id, itemId));
 
   revalidatePath(`/workout/${workoutId}`);
@@ -228,7 +327,7 @@ export async function removeWorkoutItem(
   workoutId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(workoutId);
   await db.delete(workoutItems).where(eq(workoutItems.id, itemId));
 
   revalidatePath(`/workout/${workoutId}`);
@@ -241,7 +340,7 @@ export async function moveWorkoutItem(
   workoutId: number,
   dir: "up" | "down",
 ): Promise<void> {
-  await requireEditor();
+  await requireWorkoutEditor(workoutId);
   const rows = await db
     .select()
     .from(workoutItems)
@@ -276,7 +375,7 @@ export async function setAssignment(
   weekday: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireEditorFor(profileId); // your own week — you must be unlocked
   const workoutId = int(formData, "workoutId");
 
   if (!workoutId) {

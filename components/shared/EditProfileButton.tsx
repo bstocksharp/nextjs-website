@@ -21,6 +21,7 @@ import TuneIcon from "@mui/icons-material/Tune";
 import ColorSwatches, { PROFILE_SWATCHES } from "./ColorSwatches";
 import SubmitButton from "./SubmitButton";
 import DeleteProfileButton from "./DeleteProfileButton";
+import EquipmentPicker from "@/components/workout/EquipmentPicker";
 import {
   updateProfile,
   deactivateProfile,
@@ -38,6 +39,8 @@ export default function EditProfileButton({
   profileName,
   profileColor,
   profileHiddenApps,
+  profileEquipment,
+  profileHasPassword,
   archived,
   canDeactivate,
   heirs,
@@ -46,6 +49,8 @@ export default function EditProfileButton({
   profileName: string;
   profileColor: string | null;
   profileHiddenApps: string[];
+  profileEquipment: string[];
+  profileHasPassword: boolean;
   archived: boolean;
   canDeactivate: boolean;
   heirs: { id: number; name: string }[];
@@ -53,12 +58,14 @@ export default function EditProfileButton({
   const [open, setOpen] = React.useState(false);
   const [color, setColor] = React.useState(profileColor ?? PROFILE_SWATCHES[0]);
   const [hidden, setHidden] = React.useState<string[]>(profileHiddenApps);
+  const [removePw, setRemovePw] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
 
   function openDialog() {
     // Reset to the current values each time (the dialog remounts on open).
     setColor(profileColor ?? PROFILE_SWATCHES[0]);
     setHidden(profileHiddenApps);
+    setRemovePw(false);
     setOpen(true);
   }
 
@@ -143,7 +150,9 @@ export default function EditProfileButton({
                           <Checkbox
                             checked={visible}
                             disabled={lockOn}
-                            onChange={(e) => toggleApp(a.slug, e.target.checked)}
+                            onChange={(e) =>
+                              toggleApp(a.slug, e.target.checked)
+                            }
                           />
                         }
                         label={
@@ -160,6 +169,47 @@ export default function EditProfileButton({
                     );
                   })}
                 </FormGroup>
+              </Box>
+
+              <Box>
+                <Typography
+                  variant="body2"
+                  color="text.secondary"
+                  sx={{ mb: 0.5 }}
+                >
+                  Edit password
+                </Typography>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: "block", mb: 1 }}
+                >
+                  {profileHasPassword
+                    ? "Locked. Type a new password to change it, or remove it below. Leave blank to keep the current one."
+                    : "Optional — set one and only someone who knows it can edit this person's stuff. Viewing is always open."}
+                </Typography>
+                <TextField
+                  name="password"
+                  type="password"
+                  label={profileHasPassword ? "New password" : "Set a password"}
+                  fullWidth
+                  autoComplete="new-password"
+                  disabled={removePw}
+                />
+                {profileHasPassword ? (
+                  <FormControlLabel
+                    sx={{ mt: 0.5 }}
+                    control={
+                      <Checkbox
+                        name="removePassword"
+                        value="1"
+                        checked={removePw}
+                        onChange={(e) => setRemovePw(e.target.checked)}
+                      />
+                    }
+                    label="Remove password (anyone can edit)"
+                  />
+                ) : null}
               </Box>
 
               {/* Danger zone: reversible deactivate + irreversible delete.

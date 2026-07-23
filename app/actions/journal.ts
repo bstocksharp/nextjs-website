@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { journalEntries } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 
 function parseEntry(formData: FormData) {
   const str = (k: string) => {
@@ -33,7 +33,7 @@ export async function addJournal(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseEntry(formData);
   if (!data.entryDate) throw new Error("Date is required.");
   if (!data.body) throw new Error("Entry text is required.");
@@ -54,7 +54,7 @@ export async function updateJournal(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseEntry(formData);
   if (!data.entryDate) throw new Error("Date is required.");
   if (!data.body) throw new Error("Entry text is required.");
@@ -73,7 +73,7 @@ export async function deleteJournal(
   vehicleId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db.delete(journalEntries).where(eq(journalEntries.id, id));
 
   revalidatePath(`/garage/${vehicleId}`);

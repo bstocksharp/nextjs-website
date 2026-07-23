@@ -8,12 +8,15 @@ import Button from "@mui/material/Button";
 import Paper from "@mui/material/Paper";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
 import RepeatOutlinedIcon from "@mui/icons-material/RepeatOutlined";
 import LoopIcon from "@mui/icons-material/Loop";
-import { isEditor } from "@/lib/auth";
+import { canEditProfile, isEditMode } from "@/lib/auth";
 import { getWorkoutWithItems } from "@/lib/queries/workout";
+import { copyWorkout } from "@/app/actions/workout";
+import SubmitButton from "@/components/shared/SubmitButton";
 import {
   formatTarget,
   groupBySection,
@@ -74,14 +77,18 @@ export default async function WorkoutDetailPage({
 }) {
   const { id } = await params;
   const { saved } = await searchParams;
-  const [data, editor] = await Promise.all([
-    getWorkoutWithItems(Number(id)),
-    isEditor(),
-  ]);
+  const data = await getWorkoutWithItems(Number(id));
   if (!data) notFound();
 
   const { workout, creatorName, items } = data;
   const bySection = groupBySection(items);
+
+  // Workouts are edit-owned: only the creator (unlocked) may edit. Anyone in edit
+  // mode can Copy it to their own side and tweak from there.
+  const [canEdit, inEditMode] = await Promise.all([
+    canEditProfile(workout.createdByProfileId),
+    isEditMode(),
+  ]);
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -106,17 +113,30 @@ export default async function WorkoutDetailPage({
         <Typography variant="h3" component="h1">
           {workout.name}
         </Typography>
-        {editor ? (
-          <Button
-            component={Link}
-            href={`/workout/${workout.id}/edit`}
-            variant="outlined"
-            startIcon={<EditOutlinedIcon />}
-            sx={{ flexShrink: 0 }}
-          >
-            Edit
-          </Button>
-        ) : null}
+        <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
+          {canEdit ? (
+            <Button
+              component={Link}
+              href={`/workout/${workout.id}/edit`}
+              variant="outlined"
+              startIcon={<EditOutlinedIcon />}
+            >
+              Edit
+            </Button>
+          ) : null}
+          {inEditMode ? (
+            <form action={copyWorkout.bind(null, workout.id)}>
+              <SubmitButton
+                variant="outlined"
+                color="inherit"
+                startIcon={<ContentCopyIcon />}
+                pendingLabel="Copying…"
+              >
+                Copy
+              </SubmitButton>
+            </form>
+          ) : null}
+        </Stack>
       </Stack>
 
       {/* Count + "saved by" on one line */}

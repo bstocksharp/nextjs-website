@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 import { getWorkoutWithItems } from "@/lib/queries/workout";
-import { buildSteps } from "@/lib/workout";
 import WorkoutRunner from "@/components/workout/WorkoutRunner";
 
 export const metadata = { title: "Workout in progress" };
@@ -14,17 +13,15 @@ export default async function RunPage({
   const data = await getWorkoutWithItems(Number(id));
   if (!data) notFound();
 
-  const steps = buildSteps(
-    data.items,
-    data.workout.rounds,
-    data.workout.restBetweenRounds,
-  );
-
+  // The runner builds its own step sequence — it depends on the client-side
+  // auto-advance toggle (manual mode drops the "Get ready" / "Switch" lead-ins).
   return (
     <WorkoutRunner
       workoutId={data.workout.id}
       workoutName={data.workout.name}
-      steps={steps}
+      items={data.items}
+      rounds={data.workout.rounds}
+      restBetweenRounds={data.workout.restBetweenRounds}
     />
   );
 }

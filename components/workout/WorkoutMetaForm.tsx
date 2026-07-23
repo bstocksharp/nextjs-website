@@ -4,6 +4,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import SubmitButton from "@/components/shared/SubmitButton";
+import { RUN_TIMING } from "@/lib/workout-config";
 import type { Workout, Profile } from "@/lib/db/schema";
 
 export default function WorkoutMetaForm({
@@ -76,9 +77,9 @@ export default function WorkoutMetaForm({
           label="Rest between rounds (seconds)"
           type="number"
           fullWidth
-          defaultValue={w?.restBetweenRounds ?? 60}
+          defaultValue={w?.restBetweenRounds ?? RUN_TIMING.defaultRestBetweenRounds}
           slotProps={{ htmlInput: { min: 0, step: 1 } }}
-          helperText="A quick 10s 'get ready' is added between exercises automatically."
+          helperText={`In auto-advance mode a ${RUN_TIMING.prepSeconds}s 'get ready' is added between exercises; manual mode skips it.`}
         />
 
         <Stack direction="row" spacing={1.5}>

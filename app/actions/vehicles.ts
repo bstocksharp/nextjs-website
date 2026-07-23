@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { vehicles } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 import { getActiveProfile } from "@/lib/profile";
 
 /** Pull vehicle fields out of a submitted form (empty strings → null). */
@@ -64,7 +65,7 @@ export async function updateVehicle(
   id: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(id);
   const data = parseVehicle(formData);
   if (!data.name) throw new Error("Name is required.");
 
@@ -79,7 +80,7 @@ export async function deleteVehicle(
   id: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(id);
   await db.delete(vehicles).where(eq(vehicles.id, id));
 
   revalidatePath("/garage");

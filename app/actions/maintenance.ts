@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { maintenanceRecords } from "@/lib/db/schema";
-import { requireEditor } from "@/lib/auth";
+import { requireVehicleEditor } from "@/lib/authz";
 
 function parseRecord(formData: FormData) {
   const str = (k: string) => {
@@ -38,7 +38,7 @@ export async function addMaintenance(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseRecord(formData);
   if (!data.serviceType) throw new Error("Service type is required.");
   if (!data.serviceDate) throw new Error("Service date is required.");
@@ -59,7 +59,7 @@ export async function updateMaintenance(
   vehicleId: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   const data = parseRecord(formData);
   if (!data.serviceType) throw new Error("Service type is required.");
   if (!data.serviceDate) throw new Error("Service date is required.");
@@ -78,7 +78,7 @@ export async function deleteMaintenance(
   vehicleId: number,
   _formData: FormData,
 ): Promise<void> {
-  await requireEditor();
+  await requireVehicleEditor(vehicleId);
   await db.delete(maintenanceRecords).where(eq(maintenanceRecords.id, id));
 
   revalidatePath(`/garage/${vehicleId}`);

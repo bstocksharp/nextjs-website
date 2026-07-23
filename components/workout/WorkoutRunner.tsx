@@ -18,7 +18,10 @@ import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PauseIcon from "@mui/icons-material/Pause";
 import CheckIcon from "@mui/icons-material/Check";
 import FitnessCenterIcon from "@mui/icons-material/FitnessCenter";
+import VolumeUpIcon from "@mui/icons-material/VolumeUp";
+import VolumeOffIcon from "@mui/icons-material/VolumeOff";
 import {
+  buildSteps,
   clock,
   parseLeadingInt,
   parseTips,
@@ -27,6 +30,7 @@ import {
   type ResolvedItem,
 } from "@/lib/workout";
 import ExerciseInfoButton from "@/components/workout/ExerciseInfoButton";
+import { RUN_TIMING, RUN_CUES } from "@/lib/workout-config";
 
 // ── Timing plan derived from a step ───────────────────────────────────────────
 type Plan =
@@ -61,17 +65,43 @@ function planFor(step: RunStep): Plan {
   return { type: "manual", repsText: null };
 }
 
-// The last rep runs 2× when "hold last" is on: first half = the rep, second
-// half = the HOLD.
+// When "hold last" is on, the final rep is stretched to
+//   build (per/2) → HOLD at the top (per × holdRatio) → fall (per/2)
+// so it lasts `per × (1 + holdRatio)`. At the default holdRatio of 1 that's the
+// classic 2× rep; bump holdRatio in RUN_TIMING for a longer top-hold.
 function repDuration(
   plan: Extract<Plan, { type: "repsTimed" }>,
   repNum: number,
 ): number {
-  return plan.holdLast && repNum === plan.reps ? plan.per * 2 : plan.per;
+  return plan.holdLast && repNum === plan.reps
+    ? plan.per * (1 + RUN_TIMING.holdRatio)
+    : plan.per;
 }
 
 const sectionLabel = (s: string) =>
   SECTIONS.find((x) => x.value === s)?.label ?? s;
+
+// Stable identity for a WORK step (survives a step-list rebuild when the
+// auto-advance toggle flips). Rests return null — they aren't anchors.
+function workKey(s: RunStep | undefined): string | null {
+  if (!s || s.kind !== "work") return null;
+  return `${s.item.itemId}:${s.round ?? 0}:${s.side?.index ?? 0}`;
+}
+
+// The work step to re-anchor to from a given position: the current one if it's
+// work, else the next work step (e.g. when sitting on a "Get ready" gap that
+// won't exist in manual mode), else the previous.
+function anchorKey(steps: RunStep[], idx: number): string | null {
+  for (let i = idx; i < steps.length; i++) {
+    const k = workKey(steps[i]);
+    if (k) return k;
+  }
+  for (let i = idx - 1; i >= 0; i--) {
+    const k = workKey(steps[i]);
+    if (k) return k;
+  }
+  return null;
+}
 
 // ── Circular dial (static ring + centered content + an inner "breath" disc) ────
 function Dial({
@@ -174,11 +204,15 @@ function Dial({
 export default function WorkoutRunner({
   workoutId,
   workoutName,
-  steps,
+  items,
+  rounds,
+  restBetweenRounds,
 }: {
   workoutId: number;
   workoutName: string;
-  steps: RunStep[];
+  items: ResolvedItem[];
+  rounds: number;
+  restBetweenRounds: number;
 }) {
   const router = useRouter();
 
@@ -189,8 +223,10 @@ export default function WorkoutRunner({
   const [remaining, setRemaining] = React.useState(0);
   const [rep, setRep] = React.useState(0);
   const [finished, setFinished] = React.useState(false); // timer hit 0, awaiting manual Next
+  const [awaitingStart, setAwaitingStart] = React.useState(false); // manual mode: timed step ready, not started
   const [flash, setFlash] = React.useState(false);
   const [autoAdvance, setAutoAdvance] = React.useState(true);
+  const [muted, setMuted] = React.useState(false);
   const [tipIndex, setTipIndex] = React.useState(0);
 
   const deadlineRef = React.useRef(0);
@@ -198,6 +234,23 @@ export default function WorkoutRunner({
   const holdBeepedRef = React.useRef(false);
   const audioRef = React.useRef<AudioContext | null>(null);
   const wakeRef = React.useRef<WakeLockSentinel | null>(null);
+  const anchorKeyRef = React.useRef<string | null>(null);
+  const mutedRef = React.useRef(false); // live value for the clock loop
+  // Fire-once guards for the per-timer cues (reset each step in initStep).
+  const cuesRef = React.useRef({
+    half: false,
+    quarter: false,
+    cd3: false,
+    cd2: false,
+    cd1: false,
+  });
+
+  // The runner owns the step sequence because it depends on the (client-side)
+  // auto-advance toggle: manual mode drops the "Get ready" / "Switch" lead-ins.
+  const steps = React.useMemo(
+    () => buildSteps(items, rounds, restBetweenRounds, { autoAdvance }),
+    [items, rounds, restBetweenRounds, autoAdvance],
+  );
 
   const step = steps[stepIndex];
   const plan = step ? planFor(step) : null;
@@ -211,10 +264,21 @@ export default function WorkoutRunner({
     localStorage.setItem("workout.autoAdvance", autoAdvance ? "1" : "0");
   }, [autoAdvance]);
 
+  // Mute preference — mirrored into a ref so the clock loop reads it live.
+  React.useEffect(() => {
+    const v = localStorage.getItem("workout.muted");
+    if (v != null) setMuted(v === "1");
+  }, []);
+  React.useEffect(() => {
+    mutedRef.current = muted;
+    localStorage.setItem("workout.muted", muted ? "1" : "0");
+  }, [muted]);
+
   // ── Cues ────────────────────────────────────────────────────────────────────
+  // A single sine "beep". No-op when muted so all audio flows through one gate.
   const beep = React.useCallback((freq: number, dur: number, vol: number) => {
     const ctx = audioRef.current;
-    if (!ctx) return;
+    if (!ctx || mutedRef.current) return;
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.frequency.value = freq;
@@ -225,14 +289,45 @@ export default function WorkoutRunner({
     osc.stop(ctx.currentTime + dur);
   }, []);
 
-  const fireAlert = React.useCallback(() => {
-    beep(880, 0.18, 0.25);
-    setFlash(true);
-    setTimeout(() => setFlash(false), 600);
-    navigator.vibrate?.(200);
-  }, [beep]);
+  // Play one of the { freq, duration, volume } cues defined in RUN_CUES.
+  const playBeep = React.useCallback(
+    (b: { freq: number; duration: number; volume: number }) =>
+      beep(b.freq, b.duration, b.volume),
+    [beep],
+  );
 
-  const tickBeep = React.useCallback(() => beep(1320, 0.05, 0.08), [beep]);
+  // Distinct tones so each cue means one thing (all defined in RUN_CUES):
+  const cueMarker = React.useCallback(
+    () => playBeep(RUN_CUES.markerBeep),
+    [playBeep],
+  ); // 50%/25% blip
+  const cueTick = React.useCallback(
+    () => playBeep(RUN_CUES.countdownBeep),
+    [playBeep],
+  ); // 3-2-1 countdown
+  const tickBeep = React.useCallback(
+    () => playBeep(RUN_CUES.repBeep),
+    [playBeep],
+  ); // between reps
+
+  // Terminal cue: "go" (a rest/get-ready ended → work starts) rises; "done" (a
+  // timed set ended) is a firm single tone + green flash. Both distinct from the
+  // countdown ticks and each other.
+  const terminalAlert = React.useCallback(
+    (kind: "go" | "done") => {
+      if (kind === "go") {
+        playBeep(RUN_CUES.goBeep);
+        setTimeout(() => playBeep(RUN_CUES.goBeep2), RUN_CUES.goBeep2DelayMs);
+        navigator.vibrate?.(RUN_CUES.vibrateMs.go);
+      } else {
+        playBeep(RUN_CUES.doneBeep);
+        setFlash(true);
+        setTimeout(() => setFlash(false), RUN_CUES.flashMs);
+        navigator.vibrate?.(RUN_CUES.vibrateMs.done);
+      }
+    },
+    [playBeep],
+  );
 
   // ── Wake lock ─────────────────────────────────────────────────────────────
   const acquireWake = React.useCallback(async () => {
@@ -262,10 +357,21 @@ export default function WorkoutRunner({
       if (!s) return;
       const p = planFor(s);
       setFinished(false);
+      setAwaitingStart(false);
       holdBeepedRef.current = false;
+      cuesRef.current = {
+        half: false,
+        quarter: false,
+        cd3: false,
+        cd2: false,
+        cd1: false,
+      };
       // Start on a random tip (then it rotates while the step runs).
       const t = s.kind === "work" ? parseTips(s.item.tips) : [];
       setTipIndex(t.length ? Math.floor(Math.random() * t.length) : 0);
+      // A rest timer always auto-runs; a WORK timer waits for a Start tap in
+      // manual mode (nothing auto-starts when you're driving it yourself).
+      const autoRun = p.type === "timer" && p.label === "rest" ? true : autoAdvance;
       if (p.type === "manual") {
         setRunning(false);
         setRemaining(0);
@@ -275,24 +381,52 @@ export default function WorkoutRunner({
         setRep(0);
         repRef.current = 0;
         setRemaining(p.total);
-        deadlineRef.current = Date.now() + p.total * 1000;
-        setRunning(true);
+        if (autoRun) {
+          deadlineRef.current = Date.now() + p.total * 1000;
+          setRunning(true);
+        } else {
+          setRunning(false);
+          setAwaitingStart(true);
+        }
       } else {
         setRep(1);
         repRef.current = 1;
         const d = repDuration(p, 1);
         setRemaining(d);
-        deadlineRef.current = Date.now() + d * 1000;
-        setRunning(true);
+        if (autoRun) {
+          deadlineRef.current = Date.now() + d * 1000;
+          setRunning(true);
+        } else {
+          setRunning(false);
+          setAwaitingStart(true);
+        }
       }
     },
-    [steps],
+    [steps, autoAdvance],
   );
 
   React.useEffect(() => {
-    if (started && !done) initStep(stepIndex);
+    if (started && !done) {
+      initStep(stepIndex);
+      anchorKeyRef.current = anchorKey(steps, stepIndex);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stepIndex, started]);
+
+  // When the auto-advance toggle flips mid-run, `steps` is rebuilt (lead-ins
+  // appear/disappear). Re-anchor to the same exercise/side so the flip doesn't
+  // jump you around.
+  React.useEffect(() => {
+    if (!started || done) return;
+    const key = anchorKeyRef.current;
+    const target = key ? steps.findIndex((s) => workKey(s) === key) : -1;
+    if (target >= 0 && target !== stepIndex) {
+      setStepIndex(target); // triggers the init effect above
+    } else {
+      initStep(stepIndex); // same slot, new content (e.g. was a lead-in) → re-init
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAdvance]);
 
   // ── Advance ─────────────────────────────────────────────────────────────────
   const advance = React.useCallback(() => {
@@ -304,13 +438,13 @@ export default function WorkoutRunner({
     }
   }, [stepIndex, steps.length]);
 
-  // ── Rotating tip (change every ~6s during a work step) ───────────────────────
+  // ── Rotating tip (cadence set by RUN_TIMING.tipRotateSeconds) ────────────────
   const tips = step && step.kind === "work" ? parseTips(step.item.tips) : [];
   React.useEffect(() => {
     if (tips.length <= 1 || !running) return;
     const id = setInterval(
       () => setTipIndex((t) => (t + 1) % tips.length),
-      6000,
+      RUN_TIMING.tipRotateSeconds * 1000,
     );
     return () => clearInterval(id);
   }, [tips.length, running, stepIndex]);
@@ -326,15 +460,48 @@ export default function WorkoutRunner({
         plan.type === "repsTimed" &&
         plan.holdLast &&
         repRef.current === plan.reps &&
-        rem <= 1.5 * plan.per &&
+        rem <= plan.per * (0.5 + RUN_TIMING.holdRatio) &&
         rem > 0.05 &&
         !holdBeepedRef.current
       ) {
         holdBeepedRef.current = true;
-        beep(660, 0.15, 0.2);
-        navigator.vibrate?.(60);
+        playBeep(RUN_CUES.holdBeep);
+        navigator.vibrate?.(RUN_CUES.vibrateMs.hold);
       }
       if (rem > 0.05) {
+        // Timer cues: progress markers (timed WORK holds only) + a 3-2-1
+        // countdown (every timer). repsTimed keeps only its per-rep tick.
+        if (plan.type === "timer") {
+          const total = plan.total;
+          const c = cuesRef.current;
+          // Halfway / quarter blips — only on real holds, long enough, and never
+          // inside the last ~3.5s where they'd collide with the countdown.
+          if (plan.label === "work" && total >= 12) {
+            if (rem <= total * 0.5 && rem > 3.5 && !c.half) {
+              c.half = true;
+              cueMarker();
+            }
+            if (rem <= total * 0.25 && rem > 3.5 && !c.quarter) {
+              c.quarter = true;
+              cueMarker();
+            }
+          }
+          // 3-2-1 countdown (skip on very short timers so it isn't a blur).
+          if (total > 3.5) {
+            if (rem <= 3 && !c.cd3) {
+              c.cd3 = true;
+              cueTick();
+            }
+            if (rem <= 2 && !c.cd2) {
+              c.cd2 = true;
+              cueTick();
+            }
+            if (rem <= 1 && !c.cd1) {
+              c.cd1 = true;
+              cueTick();
+            }
+          }
+        }
         setRemaining(rem);
         return;
       }
@@ -348,7 +515,8 @@ export default function WorkoutRunner({
         setRemaining(d);
         tickBeep();
       } else {
-        fireAlert();
+        // "GO" when a rest/get-ready ends (work resumes); "done" when a set ends.
+        terminalAlert(plan.type === "timer" && plan.label === "rest" ? "go" : "done");
         if (autoAdvance) advance();
         else {
           setFinished(true);
@@ -377,10 +545,22 @@ export default function WorkoutRunner({
     setStarted(true);
   }
 
+  // Start a timed WORK step that's been sitting on its Start button (manual mode).
+  function beginTimer() {
+    if (!plan || plan.type === "manual") return;
+    deadlineRef.current = Date.now() + remaining * 1000;
+    setAwaitingStart(false);
+    setRunning(true);
+  }
+
   function centerTap() {
     if (!plan || plan.type === "manual") return; // manual advances via button
     if (finished) {
       advance();
+      return;
+    }
+    if (awaitingStart) {
+      beginTimer();
       return;
     }
     if (running) setRunning(false);
@@ -470,9 +650,24 @@ export default function WorkoutRunner({
   const restLabel = step.kind === "rest" ? step.label : "Rest";
   const item = step.kind === "work" ? step.item : null;
   // Rest reads as a calm neutral; work steps wear the profile accent.
-  const color = isRest
+  // Then an "almost done" ramp overrides it: yellow in the last 25%, red in the
+  // last 10%. For timers that's by time; for auto-timed reps it's by rep number
+  // (so it never flips colour mid-rep). Pure manual reps have no progress → no ramp.
+  let color = isRest
     ? "var(--mui-palette-text-secondary)"
     : "var(--mui-palette-primary-main)";
+  let zone: "yellow" | "red" | null = null;
+  if (plan?.type === "timer") {
+    const fracLeft = plan.total > 0 ? remaining / plan.total : 0;
+    zone = fracLeft <= 0.1 ? "red" : fracLeft <= 0.25 ? "yellow" : null;
+  } else if (plan?.type === "repsTimed") {
+    const leftIncl = plan.reps - rep + 1; // reps remaining incl. the current one
+    const redAt = Math.max(1, Math.round(plan.reps * 0.1));
+    const yellowAt = Math.max(1, Math.round(plan.reps * 0.25));
+    zone = leftIncl <= redAt ? "red" : leftIncl <= yellowAt ? "yellow" : null;
+  }
+  if (zone === "red") color = "var(--mui-palette-error-main)";
+  else if (zone === "yellow") color = "var(--mui-palette-warning-main)";
 
   // dial fraction (outer ring) + inner breath disc + center content
   let fraction = 1;
@@ -497,18 +692,19 @@ export default function WorkoutRunner({
     const isLastHold = plan.holdLast && rep === plan.reps;
     // Breath peaks at the MIDPOINT (the top / hardest point of the movement).
     // Normal rep: build (half) → fall (half), peaking at 50%.
-    // Hold rep: build (half) → HOLD at the top (per) → fall (half).
+    // Hold rep: build (half) → HOLD at the top (per × holdRatio) → fall (half).
     let intensity: number;
     if (isLastHold) {
       const half = plan.per / 2;
+      const holdDur = plan.per * RUN_TIMING.holdRatio;
       if (elapsed < half) {
         intensity = Math.sin((elapsed / half) * (Math.PI / 2)); // build → peak
         hold = false;
-      } else if (elapsed < half + plan.per) {
+      } else if (elapsed < half + holdDur) {
         intensity = 1; // HOLD at the top
         hold = true;
       } else {
-        const fp = Math.min(1, (elapsed - half - plan.per) / half);
+        const fp = Math.min(1, (elapsed - half - holdDur) / half);
         intensity = Math.cos(fp * (Math.PI / 2)); // fall from the top
         hold = false;
       }
@@ -560,9 +756,23 @@ export default function WorkoutRunner({
         : restLabel;
 
   const tip = tips.length ? tips[tipIndex % tips.length] : null;
-  const isPrep = step.kind === "rest" && step.label === "Get ready";
-  // During a prep gap, feature the exercise you're getting ready for.
-  const featured = isPrep && nextWork ? nextWork.item : item;
+  // A "lead-in" is a short gap that features what's coming up (auto mode only):
+  // "Get ready" before an exercise, or "Switch" between the two sides of one.
+  const isLeadIn =
+    step.kind === "rest" &&
+    (step.label === "Get ready" || step.label === "Switch");
+  const leadInLabel =
+    step.kind === "rest" && step.label === "Switch"
+      ? "Switch sides"
+      : "Get ready";
+  // During a lead-in, feature the exercise/side you're getting ready for.
+  const featured = isLeadIn && nextWork ? nextWork.item : item;
+  const featuredSide =
+    step.kind === "work"
+      ? step.side
+      : isLeadIn && nextWork
+        ? nextWork.side
+        : undefined;
 
   return (
     // Full-viewport overlay (covers the app header) so the active workout fills
@@ -601,9 +811,17 @@ export default function WorkoutRunner({
           label={<Typography variant="caption">Auto-advance</Typography>}
           sx={{ ml: 0 }}
         />
-        <IconButton onClick={exit} aria-label="Exit workout">
-          <CloseIcon />
-        </IconButton>
+        <Stack direction="row" alignItems="center">
+          <IconButton
+            onClick={() => setMuted((m) => !m)}
+            aria-label={muted ? "Unmute cues" : "Mute cues"}
+          >
+            {muted ? <VolumeOffIcon /> : <VolumeUpIcon />}
+          </IconButton>
+          <IconButton onClick={exit} aria-label="Exit workout">
+            <CloseIcon />
+          </IconButton>
+        </Stack>
       </Stack>
 
       <LinearProgress
@@ -615,15 +833,15 @@ export default function WorkoutRunner({
         {header} · step {stepIndex + 1}/{steps.length}
       </Typography>
 
-      {/* Name + info (during a prep gap, feature what's coming up) */}
-      {isPrep ? (
+      {/* Name + info (during a lead-in gap, feature what's coming up) */}
+      {isLeadIn ? (
         <Typography
           variant="overline"
           color="primary"
           textAlign="center"
           sx={{ display: "block" }}
         >
-          Get ready
+          {leadInLabel}
         </Typography>
       ) : null}
       <Stack
@@ -644,6 +862,17 @@ export default function WorkoutRunner({
           />
         ) : null}
       </Stack>
+      {/* Per-side badge (split squats, planks each side, …) */}
+      {featuredSide ? (
+        <Typography
+          variant="subtitle2"
+          color="primary"
+          textAlign="center"
+          sx={{ fontWeight: 700, mb: 0.5 }}
+        >
+          {featuredSide.label}
+        </Typography>
+      ) : null}
       {featured?.weight ? (
         <Typography color="text.secondary" textAlign="center" sx={{ mb: 1 }}>
           {featured.weight}
@@ -672,19 +901,35 @@ export default function WorkoutRunner({
         </Dial>
       </Box>
 
-      {/* Tip (live only) */}
+      {/* Tip (live only). Fixed height (≈2 lines, centered) so a longer tip when
+          it rotates never shifts the "Up next" line or the action button below. */}
       {tip ? (
-        <Typography
-          color="text.secondary"
-          textAlign="center"
-          sx={{ mb: 1, minHeight: 24 }}
+        <Box
+          sx={{
+            mb: 1,
+            height: "3em", // 2 lines at lineHeight 1.5 — reserved, doesn't grow
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
-          💡 {tip}
-        </Typography>
+          <Typography
+            color="text.secondary"
+            textAlign="center"
+            sx={{
+              display: "-webkit-box",
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: "vertical",
+              overflow: "hidden",
+            }}
+          >
+            💡 {tip}
+          </Typography>
+        </Box>
       ) : null}
 
-      {/* Up next (skip during a prep gap — the name is already featured above) */}
-      {nextWork && !isPrep ? (
+      {/* Up next (skip during a lead-in — the name is already featured above) */}
+      {nextWork && !isLeadIn ? (
         <Typography
           variant="body2"
           color="text.secondary"
@@ -705,6 +950,16 @@ export default function WorkoutRunner({
           sx={{ py: 1.5, fontSize: "1.1rem", mb: 1 }}
         >
           Done → Next
+        </Button>
+      ) : awaitingStart ? (
+        <Button
+          variant="contained"
+          size="large"
+          startIcon={<PlayArrowIcon />}
+          onClick={beginTimer}
+          sx={{ py: 1.5, fontSize: "1.1rem", mb: 1 }}
+        >
+          Start
         </Button>
       ) : finished ? (
         <Button
