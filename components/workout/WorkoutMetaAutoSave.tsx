@@ -8,6 +8,7 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import CircularProgress from "@mui/material/CircularProgress";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import { RUN_TIMING } from "@/lib/workout-config";
 import type { Workout, Profile } from "@/lib/db/schema";
 
 // The builder's workout meta (name / saved-by / rounds), auto-saved: text/number
@@ -99,7 +100,7 @@ export default function WorkoutMetaAutoSave({
           defaultValue={workout.restBetweenRounds}
           onBlur={save}
           slotProps={{ htmlInput: { min: 0, step: 1 } }}
-          helperText="A quick 10s 'get ready' is added between exercises automatically."
+          helperText={`In auto-advance mode a ${RUN_TIMING.prepSeconds}s 'get ready' is added between exercises; manual mode skips it.`}
         />
         <SaveStatus />
       </Stack>

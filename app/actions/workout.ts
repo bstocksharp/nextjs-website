@@ -10,8 +10,10 @@ import {
   workoutItems,
   workoutAssignments,
 } from "@/lib/db/schema";
+import type { Exercise } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
 import { countExerciseUsage } from "@/lib/queries/workout";
+import { RUN_TIMING } from "@/lib/workout-config";
 
 const CATALOG = "/workout/catalog";
 
@@ -35,6 +37,7 @@ function parseExercise(formData: FormData) {
     defaultDuration: int(formData, "defaultDuration"),
     defaultWeight: str(formData, "defaultWeight"),
     holdLast: formData.get("holdLast") != null, // checkbox present = on
+    sides: formData.get("perSide") != null ? 2 : 1, // checkbox present = per side
     description: str(formData, "description"),
     tips: str(formData, "tips"), // textarea, one tip per line
   };
@@ -94,7 +97,10 @@ function parseWorkout(formData: FormData) {
   return {
     name: String(formData.get("name") ?? "").trim(),
     rounds: Math.max(1, int(formData, "rounds") ?? 1),
-    restBetweenRounds: Math.max(0, int(formData, "restBetweenRounds") ?? 60),
+    restBetweenRounds: Math.max(
+      0,
+      int(formData, "restBetweenRounds") ?? RUN_TIMING.defaultRestBetweenRounds,
+    ),
     createdByProfileId: int(formData, "createdByProfileId"),
   };
 }
@@ -197,14 +203,24 @@ export async function addWorkoutItem(
   revalidatePath(builderPath(workoutId));
 }
 
-function parseItemOverrides(formData: FormData) {
+// Store a per-item override ONLY when it differs from the catalog default;
+// otherwise store null so the item keeps inheriting. This keeps catalog edits
+// flowing to any field the user hasn't deliberately changed (the item form is
+// prefilled with the effective value, so "unchanged" == "equals the default").
+const overrideStr = (v: string | null, def: string | null) =>
+  v === null || v === def ? null : v;
+const overrideNum = (v: number | null, def: number | null) =>
+  v === null || v === def ? null : v;
+const overrideBool = (v: boolean, def: boolean) => (v === def ? null : v);
+
+function parseItemOverrides(formData: FormData, exercise: Exercise) {
   return {
-    section: str(formData, "section") ?? "main",
-    reps: str(formData, "reps"),
-    duration: int(formData, "duration"),
-    weight: str(formData, "weight"),
-    holdLast: formData.get("holdLast") != null, // checkbox present = on
-    note: str(formData, "note"),
+    section: str(formData, "section") ?? "main", // item-only field (always set)
+    reps: overrideStr(str(formData, "reps"), exercise.defaultReps),
+    duration: overrideNum(int(formData, "duration"), exercise.defaultDuration),
+    weight: overrideStr(str(formData, "weight"), exercise.defaultWeight),
+    holdLast: overrideBool(formData.get("holdLast") != null, exercise.holdLast),
+    note: str(formData, "note"), // item-only field (no catalog equivalent)
   };
 }
 
@@ -214,9 +230,19 @@ export async function updateWorkoutItem(
   formData: FormData,
 ): Promise<void> {
   await requireEditor();
+  // Fetch the item's catalog exercise so we can diff each field against its
+  // default and only persist genuine overrides.
+  const [row] = await db
+    .select({ exercise: exercises })
+    .from(workoutItems)
+    .innerJoin(exercises, eq(workoutItems.exerciseId, exercises.id))
+    .where(eq(workoutItems.id, itemId))
+    .limit(1);
+  if (!row) return;
+
   await db
     .update(workoutItems)
-    .set(parseItemOverrides(formData))
+    .set(parseItemOverrides(formData, row.exercise))
     .where(eq(workoutItems.id, itemId));
 
   revalidatePath(`/workout/${workoutId}`);

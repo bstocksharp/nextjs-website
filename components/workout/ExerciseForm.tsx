@@ -104,6 +104,24 @@ export default function ExerciseForm({
           </Typography>
         </Box>
 
+        <Box>
+          <FormControlLabel
+            control={
+              <Checkbox
+                name="perSide"
+                value="1"
+                defaultChecked={(e?.sides ?? 1) > 1}
+              />
+            }
+            label="Performed per side (do both sides)"
+          />
+          <Typography variant="caption" color="text.secondary" display="block">
+            For split squats, planks each side, etc. — the runner plays the set
+            once per side with a short switch between. Put the <strong>per-side</strong>{" "}
+            amount in Reps/Time (e.g. <code>8</code>, not <code>8 each leg</code>).
+          </Typography>
+        </Box>
+
         <TextField
           name="description"
           label="Description (how to do it)"

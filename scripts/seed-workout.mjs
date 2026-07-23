@@ -19,8 +19,10 @@ if (!url) {
 const sql = neon(url);
 
 // ── The exercise catalog (recommended defaults, description + tips) ────────────
-// mode: "reps" | "timed". reps/weight are text on purpose ("10-12", "8 each leg",
-// "15s"). duration/rest are seconds. sets defaults to 3 (2 for Hammer Curls).
+// mode: "reps" | "timed". reps/weight are text on purpose ("10-12", "15s").
+// duration/rest are seconds. sets defaults to 3 (2 for Hammer Curls).
+// sides: 2 = performed per side (runner plays the set once per side with a short
+// switch between) — put the PER-SIDE amount in reps ("8", not "8 each leg").
 // description = the "how to" (shown behind an ⓘ). tips = one per line (runner
 // shows a random one live).
 const CATALOG = [
@@ -55,7 +57,7 @@ const CATALOG = [
       "Elbows stay inside the knees at the bottom.",
       "Go for full depth — thighs at least parallel.",
     ] },
-  { name: "Bulgarian Split Squats", category: "legs", mode: "reps", sets: 3, reps: "8 each leg", weight: "15 lb", rest: 45,
+  { name: "Bulgarian Split Squats", category: "legs", mode: "reps", sets: 3, reps: "8", sides: 2, weight: "15 lb", rest: 45,
     description: "Rear foot on a couch/chair, drop straight down on the front leg.",
     tips: [
       "One foot on a couch/chair. Holy crap these work.",
@@ -129,7 +131,7 @@ const CATALOG = [
     ] },
 
   // Pull
-  { name: "One Arm Row", category: "pull", mode: "reps", sets: 3, reps: "12 each side", weight: "25 lb", rest: 45,
+  { name: "One Arm Row", category: "pull", mode: "reps", sets: 3, reps: "12", sides: 2, weight: "25 lb", rest: 45,
     description: "Braced on a bench/couch, row a dumbbell to your hip. One side, then the other.",
     tips: [
       "Pull with the back, not the arm. Squeeze the shoulder blade.",
@@ -173,14 +175,14 @@ const CATALOG = [
       "Lift chest and legs together and hold.",
       "Look down to keep your neck neutral.",
     ] },
-  { name: "Bird Dogs", category: "core", mode: "reps", sets: 3, reps: "10 each side", weight: "bodyweight", rest: 30,
+  { name: "Bird Dogs", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30,
     description: "On all fours, extend the opposite arm and leg, hold, return. Alternate.",
     tips: [
       "Boring — but one of the best core stability moves there is.",
       "Extend opposite arm and leg; keep the hips level.",
       "Move slow and don't let your back rotate.",
     ] },
-  { name: "Dead Bug", category: "core", mode: "reps", sets: 3, reps: "10 each side", weight: "bodyweight", rest: 30,
+  { name: "Dead Bug", category: "core", mode: "reps", sets: 3, reps: "10", sides: 2, weight: "bodyweight", rest: 30,
     description: "On your back, extend the opposite arm and leg while keeping your low back flat.",
     tips: [
       "Better than endless crunches — it teaches core control.",
@@ -196,14 +198,14 @@ const CATALOG = [
     ] },
 
   // Carries
-  { name: "Farmer Carry", category: "carry", mode: "timed", sets: 3, duration: 45, weight: "25 lb one hand", rest: 30,
+  { name: "Farmer Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb one hand", rest: 30,
     description: "Hold a dumbbell in one hand and walk around the house. Switch hands, repeat.",
     tips: [
       "Secretly one of the best core exercises ever.",
       "Stand tall — shoulders back, don't hunch.",
       "Grip hard and brace the core the whole walk.",
     ] },
-  { name: "Suitcase Carry", category: "carry", mode: "timed", sets: 3, duration: 45, weight: "25 lb", rest: 30,
+  { name: "Suitcase Carry", category: "carry", mode: "timed", sets: 3, duration: 45, sides: 2, weight: "25 lb", rest: 30,
     description: "Like a farmer carry but one side only — walk tall, don't lean. Switch hands.",
     tips: [
       "Amazing for core, obliques, and lower back.",
@@ -288,10 +290,10 @@ async function main() {
     const tips = Array.isArray(e.tips) ? e.tips.join("\n") : (e.tips ?? null);
     const [row] = await sql`
       INSERT INTO exercises
-        (name, category, default_reps, default_duration, default_weight, description, tips)
+        (name, category, default_reps, default_duration, default_weight, sides, description, tips)
       VALUES
         (${e.name}, ${e.category}, ${e.reps ?? null},
-         ${e.duration ?? null}, ${e.weight ?? null},
+         ${e.duration ?? null}, ${e.weight ?? null}, ${e.sides ?? 1},
          ${e.description ?? null}, ${tips})
       RETURNING id`;
     byName[e.name] = row.id;

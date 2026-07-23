@@ -273,6 +273,9 @@ export const exercises = pgTable("exercises", {
   defaultDuration: integer("default_duration"), // seconds; per-rep when reps set, else total hold
   defaultWeight: varchar("default_weight", { length: 40 }), // "25 lb", "15s", "bodyweight"
   holdLast: boolean("hold_last").notNull().default(false), // hold the final rep (needs per-rep time)
+  // 1 = normal; 2 = performed per side (e.g. Bulgarian split squats, planks each
+  // side) — the runner runs the set once per side with a short "switch" between.
+  sides: integer("sides").notNull().default(1),
   description: text("description"),
   tips: text("tips"),
   createdAt: createdAt(),
@@ -344,6 +347,8 @@ export const workoutItems = pgTable(
     duration: integer("duration"), // seconds; per-rep when reps set, else total hold
     weight: varchar("weight", { length: 40 }),
     holdLast: boolean("hold_last"), // override; null = inherit the exercise's default
+    // NOTE: per-side is intentionally catalog-only (see exercises.sides) — it's an
+    // intrinsic property of the exercise, not a per-workout dial, so no override here.
     note: text("note"),
     sortOrder: integer("sort_order").notNull().default(0),
   },

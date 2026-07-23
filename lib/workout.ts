@@ -2,6 +2,7 @@
 // Safe to import from both Server and Client Components — no server-only deps.
 
 import type { Exercise, WorkoutItem } from "@/lib/db/schema";
+import { RUN_TIMING } from "@/lib/workout-config";
 
 // ── Categories (used to group the catalog + tag exercises) ────────────────────
 export const CATEGORIES = [
@@ -64,13 +65,17 @@ export type ResolvedItem = {
   duration: number | null; // seconds — per-rep time if reps set, else total hold
   weight: string | null; // e.g. "25 lb", "15s", "bodyweight"
   holdLast: boolean; // hold the final rep (only takes effect with a per-rep time)
+  sides: number; // 1 = normal; 2 = performed per side (run the set once per side)
   description: string | null;
   tips: string | null;
   note: string | null; // per-item note (overrides nothing; extra context)
   sortOrder: number;
 };
 
-export function resolveItem(item: WorkoutItem, exercise: Exercise): ResolvedItem {
+export function resolveItem(
+  item: WorkoutItem,
+  exercise: Exercise,
+): ResolvedItem {
   const rawSection = (item.section as Section) ?? "main";
   const section = SECTIONS.some((s) => s.value === rawSection)
     ? rawSection
@@ -91,6 +96,9 @@ export function resolveItem(item: WorkoutItem, exercise: Exercise): ResolvedItem
     duration,
     weight: item.weight ?? exercise.defaultWeight ?? null,
     holdLast: item.holdLast ?? exercise.holdLast ?? false,
+    // Per-side is intrinsic to the exercise (a split squat is always per leg), so
+    // it lives on the catalog only — no per-item override.
+    sides: exercise.sides ?? 1,
     description: exercise.description,
     tips: exercise.tips,
     note: item.note,
@@ -147,42 +155,69 @@ export function parseLeadingInt(s: string | null): number | null {
 }
 
 // ── Run steps: expand a workout into the ordered sequence the runner plays ─────
-// A short "Get ready" prep goes between consecutive exercises (time to
-// reposition); a longer "Rest" goes between main circuit rounds. Rest is a
-// workout-level concept now (not attached to individual exercises).
-export const PREP_SECONDS = 10;
+// Between consecutive works we may insert a rest:
+//   • "Rest"      — the real rest between main circuit rounds (both modes).
+//   • "Get ready" — a short reposition lead-in before an exercise (AUTO only).
+//   • "Switch"    — a short lead-in between the two sides of a per-side exercise
+//                   (AUTO only).
+// The "Get ready" / "Switch" lead-ins only make sense when the next step will
+// auto-start; in manual mode you start each exercise yourself, so they're
+// omitted (see the `autoAdvance` option below). All timing lives in RUN_TIMING
+// (lib/workout-config.ts).
 
+// A per-side exercise (item.sides > 1) is played once per side; each side is its
+// own work step, tagged so the runner can show "Side 1 of 2" etc.
 export type WorkStep = {
   kind: "work";
   item: ResolvedItem;
   round: number | null; // main round number; null for warmup/cooldown
   totalRounds: number;
+  side?: { index: number; total: number; label: string }; // only when sides > 1
 };
 export type RunStep =
   | WorkStep
-  | { kind: "rest"; seconds: number; label: "Get ready" | "Rest" };
+  | { kind: "rest"; seconds: number; label: "Get ready" | "Rest" | "Switch" };
 
-/** warmup (once) → main (× rounds) → cooldown (once). */
+/** Expand one resolved item into its per-side work steps (just one if sides ≤ 1). */
+function sideSteps(
+  item: ResolvedItem,
+  round: number | null,
+  totalRounds: number,
+): WorkStep[] {
+  const sides = Math.max(1, item.sides || 1);
+  if (sides <= 1) return [{ kind: "work", item, round, totalRounds }];
+  return Array.from({ length: sides }, (_, i) => ({
+    kind: "work",
+    item,
+    round,
+    totalRounds,
+    side: { index: i + 1, total: sides, label: `Side ${i + 1} of ${sides}` },
+  }));
+}
+
+/**
+ * warmup (once) → main (× rounds) → cooldown (once).
+ *
+ * `autoAdvance` mirrors the runner's toggle: when off (manual mode) the short
+ * "Get ready" / "Switch" lead-ins are dropped, since you start each exercise
+ * yourself. The real between-rounds "Rest" is kept in both modes.
+ */
 export function buildSteps(
   items: ResolvedItem[],
   rounds: number,
   restBetweenRounds: number,
+  opts: { autoAdvance?: boolean } = {},
 ): RunStep[] {
+  const autoAdvance = opts.autoAdvance ?? true;
   const bySection = groupBySection(items);
   const R = Math.max(1, rounds);
 
   const works: WorkStep[] = [];
-  bySection.warmup.forEach((it) =>
-    works.push({ kind: "work", item: it, round: null, totalRounds: R }),
-  );
+  bySection.warmup.forEach((it) => works.push(...sideSteps(it, null, R)));
   for (let r = 1; r <= R; r++) {
-    bySection.main.forEach((it) =>
-      works.push({ kind: "work", item: it, round: r, totalRounds: R }),
-    );
+    bySection.main.forEach((it) => works.push(...sideSteps(it, r, R)));
   }
-  bySection.cooldown.forEach((it) =>
-    works.push({ kind: "work", item: it, round: null, totalRounds: R }),
-  );
+  bySection.cooldown.forEach((it) => works.push(...sideSteps(it, null, R)));
 
   const steps: RunStep[] = [];
   works.forEach((w, i) => {
@@ -190,10 +225,29 @@ export function buildSteps(
       const prev = works[i - 1];
       const crossRound =
         prev.round != null && w.round != null && w.round !== prev.round;
+      // Consecutive sides of the same exercise (same item + round, next side).
+      const sideSwitch =
+        !!w.side &&
+        !!prev.side &&
+        prev.item.itemId === w.item.itemId &&
+        prev.round === w.round &&
+        w.side.index === prev.side.index + 1;
+
       if (crossRound && restBetweenRounds > 0) {
         steps.push({ kind: "rest", seconds: restBetweenRounds, label: "Rest" });
-      } else if (PREP_SECONDS > 0) {
-        steps.push({ kind: "rest", seconds: PREP_SECONDS, label: "Get ready" });
+      } else if (sideSwitch) {
+        if (autoAdvance && RUN_TIMING.switchSideSeconds > 0)
+          steps.push({
+            kind: "rest",
+            seconds: RUN_TIMING.switchSideSeconds,
+            label: "Switch",
+          });
+      } else if (autoAdvance && RUN_TIMING.prepSeconds > 0) {
+        steps.push({
+          kind: "rest",
+          seconds: RUN_TIMING.prepSeconds,
+          label: "Get ready",
+        });
       }
     }
     steps.push(w);
