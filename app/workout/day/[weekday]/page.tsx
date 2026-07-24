@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/shared/AppLink";
 import { notFound, redirect } from "next/navigation";
 import Container from "@mui/material/Container";
 import Box from "@mui/material/Box";

@@ -1,8 +1,3 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
-const rootDir = path.dirname(fileURLToPath(import.meta.url));
-
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // Keep `next dev` (.next) and one-off verification builds in separate output
@@ -11,16 +6,12 @@ const nextConfig = {
   // NEXT_DIST_DIR=.next-build.
   distDir: process.env.NEXT_DIST_DIR || ".next",
 
-  // Resolve the "@/..." path alias at the bundler level so it does not depend
-  // on tsconfig `baseUrl` (deprecated in TS 7). Keying on "@" only matches
-  // "@" and "@/..." — it does NOT clobber scoped packages like "@mui/material".
-  webpack: (config) => {
-    config.resolve.alias = {
-      ...config.resolve.alias,
-      "@": rootDir,
-    };
-    return config;
-  },
+  // Next 16 uses Turbopack by default. The "@/..." path alias is resolved
+  // natively from tsconfig `paths` (Next applies tsconfig paths to Turbopack
+  // resolution automatically), so no explicit bundler alias is needed. An
+  // empty `turbopack` block also silences the "webpack config, no turbopack
+  // config" error now that the webpack alias is gone.
+  turbopack: {},
 };
 
 export default nextConfig;
