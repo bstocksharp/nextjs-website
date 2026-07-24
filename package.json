@@ -9,7 +9,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:studio": "drizzle-kit studio"
@@ -23,7 +23,7 @@
     "@mui/material-nextjs": "^7.3.10",
     "@neondatabase/serverless": "^1.1.0",
     "drizzle-orm": "^0.45.2",
-    "next": "^15.5.20",
+    "next": "^16.2.11",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-number-format": "^5.4.5"
@@ -34,8 +34,8 @@
     "@types/react-dom": "^19.2.3",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
-    "eslint": "^8.57.1",
-    "eslint-config-next": "^15.5.20",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.11",
     "typescript": "5.8.2"
   }
 }

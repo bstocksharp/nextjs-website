@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/shared/AppLink";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";

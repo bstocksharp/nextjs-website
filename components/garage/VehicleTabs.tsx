@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link from "@/components/shared/AppLink";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 

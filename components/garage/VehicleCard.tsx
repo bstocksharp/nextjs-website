@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/shared/AppLink";
 import Card from "@mui/material/Card";
 import CardActionArea from "@mui/material/CardActionArea";
 import CardContent from "@mui/material/CardContent";

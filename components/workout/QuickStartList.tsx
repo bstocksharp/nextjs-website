@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/shared/AppLink";
 import Stack from "@mui/material/Stack";
 import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
