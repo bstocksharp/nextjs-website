@@ -7,20 +7,16 @@ import type { WeighIn, WeightPlan } from "@/lib/db/schema";
 // ─────────────────────────────────────────────────────────────────────────────
 // WEIGHT — reads + all DERIVED metrics (nothing here is stored; same spirit as
 // MPG in the fuel queries). Postgres `numeric` comes back as a string, so every
-// weight/goal number is Number()-parsed the moment it leaves the DB.
+// weight number is Number()-parsed the moment it leaves the DB.
 //
-// The math, once:
-//   • target line = startWeight − perWeekPace · weeksElapsed, floored at goal.
-//   • trend       = least-squares line through the actual weigh-ins IN A WINDOW,
-//                   extended forward so it can PROJECT the goal date. Computed for
-//                   several windows (all / 6mo / 3mo / 6wk) so the client can
-//                   re-contextualise the trajectory without a round-trip.
-//   • moving avg  = trailing 4-week mean of actuals (the noise-dampened truth).
-//   • pace buffer = target − actual at the latest weigh-in (+ = ahead of plan).
+// The chart is a fixed ~1-calendar-year window: it shows EVERY weigh-in, and the
+// target/band for each week comes from whichever plan covers that date. So a
+// plan switch mid-year hands the target off (lose line → maintain band) WITHOUT
+// hiding history. Stats/trend/milestones reflect the ACTIVE plan.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MS_DAY = 86_400_000;
-const PLAN_HORIZON_WEEKS = 52; // one year of target line, like the sheet
+const PLAN_HORIZON_WEEKS = 52; // one calendar year of chart
 const MIN_TREND_POINTS = 3; // fewer than this in a window → no meaningful trend
 
 // The selectable trend windows. `weeks: null` = all history.
@@ -78,6 +74,15 @@ export async function getActivePlan(profileId: number): Promise<WeightPlan | nul
   return rows[0] ?? null;
 }
 
+/** All plans for a profile, oldest first (for the continuous multi-plan chart). */
+export function listPlans(profileId: number): Promise<WeightPlan[]> {
+  return db
+    .select()
+    .from(weightPlans)
+    .where(eq(weightPlans.profileId, profileId))
+    .orderBy(asc(weightPlans.startDate), asc(weightPlans.id));
+}
+
 /** A single weigh-in by (id, profile) — scoped so one person can't edit another's. */
 export async function getWeighIn(id: number, profileId: number): Promise<WeighIn | null> {
   const rows = await db
@@ -108,50 +113,62 @@ export async function getWeighInsWithDelta(profileId: number): Promise<
 }
 
 // ── Derived dashboard ───────────────────────────────────────────────────────
+export type PlanMode = "lose" | "maintain";
+
 export type ChartBase = {
-  dates: string[]; // weekly tick dates (YYYY-MM-DD) from the plan start
+  dates: string[]; // weekly tick dates (YYYY-MM-DD) from the chart anchor
   weeks: number[];
   actual: (number | null)[];
-  target: (number | null)[];
+  target: (number | null)[]; // per-week, from whichever plan covers that date
   movingAvg: (number | null)[];
+  bandLow: (number | null)[]; // per-week maintain band lower edge (null off-band)
+  bandHigh: (number | null)[]; // per-week maintain band upper edge (null off-band)
 };
 
 export type WeightStats = {
+  mode: PlanMode;
   current: number;
   currentDate: string;
   wowAbs: number | null;
   wowPct: number | null;
   totalLost: number;
   totalLostPct: number;
-  paceBuffer: number | null; // target − actual at latest; + = ahead, − = behind
-  percentToGoal: number | null; // 0–100 (can exceed past goal); null if no goal
+  paceBuffer: number | null; // LOSE: target − actual at latest; + = ahead, − = behind
+  percentToGoal: number | null; // LOSE: 0–100 (can exceed past goal)
+  distanceFromCenter: number | null; // MAINTAIN: current − hold weight (signed)
+  inRange: boolean | null; // MAINTAIN: within the band right now
+  weeksInRange: number | null; // MAINTAIN: trailing consecutive in-range weigh-ins
 };
 
 export type Projection = {
-  onTrack: boolean; // is the windowed trend actually heading to the goal?
-  date: string | null; // when the trend crosses the goal (null if off-track)
+  onTrack: boolean;
+  date: string | null;
   weeks: number | null;
-  vsPlanDays: number | null; // + = ahead of planned finish, − = behind
-  paceLbPerWeek: number | null; // the window's actual pace (lbs lost / week)
-  enoughData: boolean; // false when the window has < MIN_TREND_POINTS points
+  vsPlanDays: number | null;
+  paceLbPerWeek: number | null;
+  enoughData: boolean;
 };
 
 export type Milestones = {
-  earnedLoss: number[]; // 5-lb thresholds reached: [5, 10, 15, …]
-  earnedPct: number[]; // % -of-goal reached: subset of [25, 50, 75, 100]
-  decadesCrossed: number[]; // "Under 220", "Under 210" — decade boundaries dropped below
-  atGoal: boolean; // hit (or passed) the goal weight
-  newLow: boolean; // latest weigh-in is an all-time low
-  backOnPace: boolean; // buffer just flipped from behind → ahead of plan
-  comeback: boolean; // new all-time low after a recent gain (pushed through a setback)
-  momentum: boolean; // down in ≥3 of the last 4 weeks (without a clean 3+ streak)
-  steadyLoser: boolean; // consistent small weekly losses, no big swings
-  bestWeekDrop: number | null; // biggest single-week loss (lbs)
-  currentStreak: number; // trailing consecutive down-weeks
-  bestStreak: number; // longest run of consecutive down-weeks ever
-  loggingStreak: number; // trailing consecutive weeks with a weigh-in
-  nextLossLb: number | null; // next 5-lb threshold
-  toNextLossLb: number | null; // lbs remaining to it
+  mode: PlanMode;
+  earnedLoss: number[];
+  earnedPct: number[];
+  decadesCrossed: number[];
+  atGoal: boolean;
+  newLow: boolean;
+  backOnPace: boolean;
+  comeback: boolean;
+  momentum: boolean;
+  steadyLoser: boolean;
+  bestWeekDrop: number | null;
+  currentStreak: number;
+  bestStreak: number;
+  nextLossLb: number | null;
+  toNextLossLb: number | null;
+  inRangeNow: boolean;
+  weeksInRange: number;
+  longestInRange: number;
+  loggingStreak: number;
 };
 
 export type WeightDashboard = {
@@ -191,14 +208,22 @@ const emptyProjection = (enoughData: boolean): Projection => ({
 
 /** Everything the dashboard page needs for one profile, in a single call. */
 export async function getWeightDashboard(profileId: number): Promise<WeightDashboard> {
-  const [rows, plan] = await Promise.all([listWeighIns(profileId), getActivePlan(profileId)]);
+  const [rows, plans] = await Promise.all([listWeighIns(profileId), listPlans(profileId)]);
+  const today = new Date().toISOString().slice(0, 10);
 
-  const series = rows.map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
-
-  const startDate = plan?.startDate ?? series[0]?.date ?? null;
-  const startWeight = plan ? Number(plan.startWeight) : (series[0]?.weight ?? null);
+  // Active plan = the one whose window contains today (latest start wins). Kept
+  // as a `const` so TypeScript narrows it inside the closures below.
+  let active: WeightPlan | null = null;
+  for (const p of plans) {
+    if (p.startDate <= today && (p.endDate == null || p.endDate >= today)) active = p;
+  }
+  const plan = active;
+  const isMaintain = plan?.mode === "maintain";
   const goalWeight = plan ? Number(plan.goalWeight) : null;
   const pace = plan ? Number(plan.perWeekPace) : null;
+  const rangeLb = plan?.rangeLb != null ? Number(plan.rangeLb) : null;
+
+  const allSeries = rows.map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
 
   const emptyTrends = {
     all: [] as (number | null)[],
@@ -212,13 +237,31 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     "3mo": emptyProjection(false),
     "6wk": emptyProjection(false),
   };
+  const emptyChart: ChartBase = {
+    dates: [],
+    weeks: [],
+    actual: [],
+    target: [],
+    movingAvg: [],
+    bandLow: [],
+    bandHigh: [],
+  };
 
-  if (!startDate || startWeight == null) {
+  // Anchor the 1-year window at the earliest weigh-in / plan start.
+  const firstPlanStart = plans[0]?.startDate ?? null;
+  const anchorDate =
+    allSeries[0] && firstPlanStart
+      ? firstPlanStart < allSeries[0].date
+        ? firstPlanStart
+        : allSeries[0].date
+      : (allSeries[0]?.date ?? firstPlanStart ?? null);
+
+  if (!anchorDate || allSeries.length === 0) {
     return {
       plan,
       weighIns: rows,
       stats: null,
-      chart: { dates: [], weeks: [], actual: [], target: [], movingAvg: [] },
+      chart: emptyChart,
       trends: emptyTrends,
       projections: emptyProjections,
       planPaceLbPerWeek: pace,
@@ -226,60 +269,104 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     };
   }
 
-  // Place each weigh-in at its week index off the start date.
+  // Full-history week placement off the anchor (for actuals + moving average).
   const actualByWeek = new Map<number, number>();
-  for (const s of series) actualByWeek.set(weeksBetween(startDate, s.date), s.weight);
-  const lastWeek = series.length ? weeksBetween(startDate, series[series.length - 1].date) : 0;
+  for (const s of allSeries) actualByWeek.set(weeksBetween(anchorDate, s.date), s.weight);
+  const lastWeek = weeksBetween(anchorDate, allSeries[allSeries.length - 1].date);
+  const axisEnd = Math.max(PLAN_HORIZON_WEEKS, lastWeek);
 
-  const planEndWeek =
-    goalWeight != null && pace && pace > 0
-      ? Math.ceil((startWeight - goalWeight) / pace)
-      : PLAN_HORIZON_WEEKS;
-  const axisEnd = Math.max(planEndWeek, lastWeek, PLAN_HORIZON_WEEKS);
-
-  // Trailing 4-week moving average over the actual points.
+  const fullOrdered = [...actualByWeek.entries()].sort((a, b) => a[0] - b[0]);
   const maByWeek = new Map<number, number>();
-  const ordered = [...actualByWeek.entries()].sort((a, b) => a[0] - b[0]);
-  for (let i = 0; i < ordered.length; i++) {
-    const win = ordered.slice(Math.max(0, i - 3), i + 1);
-    maByWeek.set(ordered[i][0], round1(win.reduce((s, [, w]) => s + w, 0) / win.length));
+  for (let i = 0; i < fullOrdered.length; i++) {
+    const winPts = fullOrdered.slice(Math.max(0, i - 3), i + 1);
+    maByWeek.set(fullOrdered[i][0], round1(winPts.reduce((s, [, w]) => s + w, 0) / winPts.length));
   }
 
-  // Window-independent chart base.
+  // The plan covering a given date (latest-starting match, or null).
+  const planCovering = (dateISO: string): WeightPlan | null => {
+    let match: WeightPlan | null = null;
+    for (const p of plans) {
+      if (p.startDate <= dateISO && (p.endDate == null || p.endDate >= dateISO)) match = p;
+    }
+    return match;
+  };
+
   const dates: string[] = [];
   const weeks: number[] = [];
   const actual: (number | null)[] = [];
   const target: (number | null)[] = [];
   const movingAvg: (number | null)[] = [];
+  const bandLow: (number | null)[] = [];
+  const bandHigh: (number | null)[] = [];
   for (let w = 0; w <= axisEnd; w++) {
     weeks.push(w);
-    dates.push(addWeeks(startDate, w));
+    const date = addWeeks(anchorDate, w);
+    dates.push(date);
     actual.push(actualByWeek.has(w) ? actualByWeek.get(w)! : null);
     movingAvg.push(maByWeek.has(w) ? maByWeek.get(w)! : null);
-    target.push(
-      goalWeight != null && pace != null ? round1(Math.max(goalWeight, startWeight - pace * w)) : null,
-    );
+
+    const p = planCovering(date);
+    if (!p) {
+      target.push(null);
+      bandLow.push(null);
+      bandHigh.push(null);
+    } else if (p.mode === "maintain") {
+      const g = Number(p.goalWeight);
+      const r = p.rangeLb != null ? Number(p.rangeLb) : 0;
+      target.push(g);
+      bandLow.push(round1(g - r));
+      bandHigh.push(round1(g + r));
+    } else {
+      const wk = weeksBetween(p.startDate, date);
+      target.push(
+        round1(Math.max(Number(p.goalWeight), Number(p.startWeight) - Number(p.perWeekPace) * wk)),
+      );
+      bandLow.push(null);
+      bandHigh.push(null);
+    }
   }
 
-  // Per-window trend line + projection.
+  // The ACTIVE plan's window drives stats/trend/milestones. Fall back to the
+  // latest overall weigh-in so "current" always shows a real number.
+  const activeSeries = plan
+    ? allSeries.filter(
+        (s) => s.date >= plan.startDate && (plan.endDate == null || s.date <= plan.endDate),
+      )
+    : allSeries;
+  const series = activeSeries.length ? activeSeries : allSeries.slice(-1);
+  const startWeight = plan ? Number(plan.startWeight) : (series[0]?.weight ?? 0);
+
+  const activeByWeek = new Map<number, number>();
+  for (const s of series) activeByWeek.set(weeksBetween(anchorDate, s.date), s.weight);
+  const ordered = [...activeByWeek.entries()].sort((a, b) => a[0] - b[0]);
+
+  // ── Trend line + projection ──
+  // The TREND is plan-agnostic: a regression over ALL weigh-ins (it's continuous
+  // weekly weight), windowed by the timeframe toggle — so it shows right away and
+  // the toggle stays meaningful even in maintenance. Projection to the goal date
+  // only applies to a LOSE plan. In maintenance the line stops at the last weigh-in
+  // (no false "heading somewhere"); a lose line extends forward toward the goal.
   const trends = { ...emptyTrends } as Record<WindowKey, (number | null)[]>;
   const projections = { ...emptyProjections } as Record<WindowKey, Projection>;
-  const planEndDate = pace && pace > 0 ? addWeeks(startDate, planEndWeek) : null;
+  const planEndDate =
+    !isMaintain && plan && pace && pace > 0
+      ? addWeeks(plan.startDate, (Number(plan.startWeight) - Number(plan.goalWeight)) / pace)
+      : null;
+  const drawEnd = isMaintain ? lastWeek : axisEnd;
 
   for (const win of TREND_WINDOWS) {
     const cutoffWeek = win.weeks == null ? 0 : Math.max(0, lastWeek - (win.weeks - 1));
-    const winPoints = ordered.filter(([w]) => w >= cutoffWeek);
-    const enough = winPoints.length >= MIN_TREND_POINTS;
-    const fit = enough ? linearFit(winPoints.map(([w, y]) => ({ x: w, y }))) : null;
+    const winPts = fullOrdered.filter(([w]) => w >= cutoffWeek);
+    const enough = winPts.length >= MIN_TREND_POINTS;
+    const fit = enough ? linearFit(winPts.map(([w, y]) => ({ x: w, y }))) : null;
 
-    // Trend line: drawn from the window's first point forward across the axis.
     const line: (number | null)[] = [];
     for (let w = 0; w <= axisEnd; w++) {
-      line.push(fit && w >= cutoffWeek ? round1(fit.m * w + fit.b) : null);
+      line.push(fit && w >= cutoffWeek && w <= drawEnd ? round1(fit.m * w + fit.b) : null);
     }
     trends[win.key] = line;
 
-    if (!fit || goalWeight == null) {
+    if (!fit || goalWeight == null || isMaintain) {
       projections[win.key] = emptyProjection(enough);
       continue;
     }
@@ -289,7 +376,7 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
       continue;
     }
     const crossWeek = (goalWeight - fit.b) / fit.m;
-    const date = addWeeks(startDate, crossWeek);
+    const date = addWeeks(anchorDate, crossWeek);
     const vsPlanDays = planEndDate
       ? Math.round((parseDate(planEndDate).getTime() - parseDate(date).getTime()) / MS_DAY)
       : null;
@@ -303,14 +390,24 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     };
   }
 
-  // Window-independent stats (from the plan + latest actual).
-  const first = series[0].weight;
+  // ── Stats (active plan + latest weigh-in) ────────────────────────────────
+  const weightsAsc = series.map((s) => s.weight);
+  const first = weightsAsc[0];
   const last = series[series.length - 1];
-  const prev = series.length >= 2 ? series[series.length - 2].weight : null;
-  const targetAtLast =
-    goalWeight != null && pace != null ? Math.max(goalWeight, startWeight - pace * lastWeek) : null;
+  const prev = allSeries.length >= 2 ? allSeries[allSeries.length - 2].weight : null;
+
+  const inRangeAt = (w: number) =>
+    goalWeight != null && rangeLb != null && Math.abs(w - goalWeight) <= rangeLb;
+  let weeksInRangeTrailing = 0;
+  for (let i = weightsAsc.length - 1; i >= 0; i--) {
+    if (inRangeAt(weightsAsc[i])) weeksInRangeTrailing++;
+    else break;
+  }
+
+  const targetAtLast = !isMaintain ? (target[lastWeek] ?? null) : null;
 
   const stats: WeightStats = {
+    mode: isMaintain ? "maintain" : "lose",
     current: last.weight,
     currentDate: last.date,
     wowAbs: prev != null ? round1(last.weight - prev) : null,
@@ -319,14 +416,15 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     totalLostPct: first ? round1(((first - last.weight) / first) * 100) : 0,
     paceBuffer: targetAtLast != null ? round1(targetAtLast - last.weight) : null,
     percentToGoal:
-      goalWeight != null && startWeight !== goalWeight
+      !isMaintain && goalWeight != null && startWeight !== goalWeight
         ? round1(((startWeight - last.weight) / (startWeight - goalWeight)) * 100)
         : null,
+    distanceFromCenter: isMaintain && goalWeight != null ? round1(last.weight - goalWeight) : null,
+    inRange: isMaintain ? inRangeAt(last.weight) : null,
+    weeksInRange: isMaintain ? weeksInRangeTrailing : null,
   };
 
-  // ── Milestones (window-independent; from actuals + goal) ─────────────────
-  const weightsAsc = series.map((s) => s.weight);
-  const allTimeLow = Math.min(...weightsAsc);
+  // ── Milestones (over the active plan) ────────────────────────────────────
   let best = 0;
   let run = 0;
   for (let i = 1; i < weightsAsc.length; i++) {
@@ -340,80 +438,95 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     if (weightsAsc[i] < weightsAsc[i - 1]) currentStreak++;
     else break;
   }
-  const earnedLoss: number[] = [];
-  for (let t = 5; t <= stats.totalLost + 1e-9; t += 5) earnedLoss.push(t);
-  const earnedPct =
-    goalWeight != null && stats.percentToGoal != null
-      ? [25, 50, 75, 100].filter((p) => stats.percentToGoal! >= p)
-      : [];
-  const atGoal = stats.percentToGoal != null && stats.percentToGoal >= 100;
-  const nextLossLb = atGoal ? null : (Math.floor(Math.max(0, stats.totalLost) / 5) + 1) * 5;
 
-  // Decade boundaries dropped below since the first weigh-in (230 → "Under 220").
-  const firstWeight = weightsAsc[0];
-  const decadesCrossed: number[] = [];
-  for (let d = Math.floor(firstWeight / 10) * 10; d > last.weight; d -= 10) {
-    if (d < firstWeight) decadesCrossed.push(d);
-  }
-  decadesCrossed.reverse(); // lowest (most impressive) first
-
-  // Biggest single-week loss.
-  let bestDrop = 0;
-  for (let i = 1; i < weightsAsc.length; i++) {
-    bestDrop = Math.max(bestDrop, weightsAsc[i - 1] - weightsAsc[i]);
+  let longestInRange = 0;
+  let inRun = 0;
+  for (const w of weightsAsc) {
+    if (inRangeAt(w)) {
+      inRun++;
+      longestInRange = Math.max(longestInRange, inRun);
+    } else inRun = 0;
   }
 
-  // Back on pace: buffer at the latest weigh-in is ahead, but was behind at the prior one.
-  let backOnPace = false;
-  if (goalWeight != null && pace != null && series.length >= 2) {
-    const bufferAt = (wk: number, wt: number) =>
-      Math.max(goalWeight, startWeight - pace * wk) - wt;
-    const a = series[series.length - 1];
-    const b = series[series.length - 2];
-    backOnPace =
-      bufferAt(weeksBetween(startDate, a.date), a.weight) >= 0 &&
-      bufferAt(weeksBetween(startDate, b.date), b.weight) < 0;
-  }
+  const byWeekWeights = ordered.map(([, w]) => w); // active plan (loss badges)
 
-  // By-week sequence (deduped, ascending) for streak/consistency checks.
-  const byWeekWeights = ordered.map(([, w]) => w);
-  const weekIdxs = ordered.map(([w]) => w);
-
-  // Logging streak: trailing consecutive weeks that each have a weigh-in.
-  let loggingStreak = weekIdxs.length ? 1 : 0;
-  for (let i = weekIdxs.length - 1; i > 0; i--) {
-    if (weekIdxs[i] - weekIdxs[i - 1] === 1) loggingStreak++;
+  // Logging streak is plan-agnostic (the habit spans plans).
+  const fullWeekIdxs = fullOrdered.map(([w]) => w);
+  let loggingStreak = fullWeekIdxs.length ? 1 : 0;
+  for (let i = fullWeekIdxs.length - 1; i > 0; i--) {
+    if (fullWeekIdxs[i] - fullWeekIdxs[i - 1] === 1) loggingStreak++;
     else break;
   }
 
-  // Recent week-over-week changes (last up to 6) for steady/momentum/comeback.
-  const changes: number[] = [];
-  for (let i = Math.max(1, byWeekWeights.length - 6); i < byWeekWeights.length; i++) {
-    changes.push(byWeekWeights[i] - byWeekWeights[i - 1]); // negative = loss
-  }
-  const recentLosses = changes.filter((c) => c < 0).length;
-  const steadyLoser =
-    changes.length >= 4 &&
-    recentLosses >= changes.length - 1 && // at most one non-loss
-    !changes.some((c) => Math.abs(c) > 3) && // no big swing
-    changes.reduce((s, c) => s + c, 0) < 0; // net loss
+  const earnedLoss: number[] = [];
+  const earnedPct: number[] = [];
+  const decadesCrossed: number[] = [];
+  let atGoal = false;
+  let newLow = false;
+  let backOnPace = false;
+  let comeback = false;
+  let momentum = false;
+  let steadyLoser = false;
+  let bestDrop = 0;
+  let nextLossLb: number | null = null;
 
-  let last4Down = 0;
-  let last4Total = 0;
-  for (let i = Math.max(1, byWeekWeights.length - 4); i < byWeekWeights.length; i++) {
-    last4Total++;
-    if (byWeekWeights[i] < byWeekWeights[i - 1]) last4Down++;
-  }
-  const momentum = last4Total >= 4 && last4Down >= 3 && currentStreak < 3;
+  if (!isMaintain && plan) {
+    const allTimeLow = Math.min(...weightsAsc);
+    for (let t = 5; t <= stats.totalLost + 1e-9; t += 5) earnedLoss.push(t);
+    if (goalWeight != null && stats.percentToGoal != null) {
+      for (const p of [25, 50, 75, 100]) if (stats.percentToGoal >= p) earnedPct.push(p);
+    }
+    atGoal = stats.percentToGoal != null && stats.percentToGoal >= 100;
+    nextLossLb = atGoal ? null : (Math.floor(Math.max(0, stats.totalLost) / 5) + 1) * 5;
 
-  let recentGain = false;
-  for (let i = Math.max(1, byWeekWeights.length - 5); i < byWeekWeights.length; i++) {
-    if (byWeekWeights[i] > byWeekWeights[i - 1]) recentGain = true;
+    const firstWeight = weightsAsc[0];
+    for (let d = Math.floor(firstWeight / 10) * 10; d > last.weight; d -= 10) {
+      if (d < firstWeight) decadesCrossed.push(d);
+    }
+    decadesCrossed.reverse();
+
+    for (let i = 1; i < weightsAsc.length; i++) {
+      bestDrop = Math.max(bestDrop, weightsAsc[i - 1] - weightsAsc[i]);
+    }
+
+    if (goalWeight != null && pace != null && series.length >= 2) {
+      const psw = Number(plan.startWeight);
+      const bufferAt = (dt: string, wt: number) =>
+        Math.max(goalWeight, psw - pace * weeksBetween(plan.startDate, dt)) - wt;
+      const a = series[series.length - 1];
+      const b = series[series.length - 2];
+      backOnPace = bufferAt(a.date, a.weight) >= 0 && bufferAt(b.date, b.weight) < 0;
+    }
+
+    newLow = last.weight <= allTimeLow + 1e-9;
+    let recentGain = false;
+    for (let i = Math.max(1, byWeekWeights.length - 5); i < byWeekWeights.length; i++) {
+      if (byWeekWeights[i] > byWeekWeights[i - 1]) recentGain = true;
+    }
+    comeback = newLow && recentGain;
+
+    const changes: number[] = [];
+    for (let i = Math.max(1, byWeekWeights.length - 6); i < byWeekWeights.length; i++) {
+      changes.push(byWeekWeights[i] - byWeekWeights[i - 1]);
+    }
+    const recentLosses = changes.filter((c) => c < 0).length;
+    steadyLoser =
+      changes.length >= 4 &&
+      recentLosses >= changes.length - 1 &&
+      !changes.some((c) => Math.abs(c) > 3) &&
+      changes.reduce((s, c) => s + c, 0) < 0;
+
+    let last4Down = 0;
+    let last4Total = 0;
+    for (let i = Math.max(1, byWeekWeights.length - 4); i < byWeekWeights.length; i++) {
+      last4Total++;
+      if (byWeekWeights[i] < byWeekWeights[i - 1]) last4Down++;
+    }
+    momentum = last4Total >= 4 && last4Down >= 3 && currentStreak < 3;
   }
-  const newLow = last.weight <= allTimeLow + 1e-9;
-  const comeback = newLow && recentGain;
 
   const milestones: Milestones = {
+    mode: isMaintain ? "maintain" : "lose",
     earnedLoss,
     earnedPct,
     decadesCrossed,
@@ -424,18 +537,21 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     momentum,
     steadyLoser,
     bestWeekDrop: bestDrop > 0 ? round1(bestDrop) : null,
-    currentStreak,
-    bestStreak: best,
-    loggingStreak,
+    currentStreak: isMaintain ? 0 : currentStreak,
+    bestStreak: isMaintain ? 0 : best,
     nextLossLb,
     toNextLossLb: nextLossLb != null ? round1(nextLossLb - stats.totalLost) : null,
+    inRangeNow: isMaintain ? inRangeAt(last.weight) : false,
+    weeksInRange: isMaintain ? weeksInRangeTrailing : 0,
+    longestInRange: isMaintain ? longestInRange : 0,
+    loggingStreak,
   };
 
   return {
     plan,
     weighIns: rows,
     stats,
-    chart: { dates, weeks, actual, target, movingAvg },
+    chart: { dates, weeks, actual, target, movingAvg, bandLow, bandHigh },
     trends,
     projections,
     planPaceLbPerWeek: pace,

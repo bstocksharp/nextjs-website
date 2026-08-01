@@ -16,128 +16,170 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import SubmitButton from "@/components/shared/SubmitButton";
 import NumberField from "@/components/shared/NumberField";
 
-// Set or edit the active (lose) plan. Two ways to define the target: a weekly
-// PACE (open-ended) or a target DATE (a deadline — "lose 5 by the wedding";
-// the pace is derived and the plan ends on that date). Maintain mode arrives in
-// 2b-2. Closes itself on success.
+// Set / edit / start a plan.
+//   • Editing (isNew=false) → savePlan on the active plan, mode locked.
+//   • Starting new (isNew=true) → startPlan (ends the old one), mode toggle shown.
+// LOSE: define by weekly pace OR target date (deadline → pace derived).
+// MAINTAIN: hold weight (goalWeight) ± a range band; pace handled server-side.
 export default function PlanDialog({
   open,
   onClose,
   action,
-  hasPlan,
+  isNew,
+  initialMode = "lose",
   startWeight,
   startDate,
   goalWeight,
   perWeekPace,
   endDate,
+  rangeLb,
 }: {
   open: boolean;
   onClose: () => void;
   action: (formData: FormData) => Promise<void>;
-  hasPlan: boolean;
+  isNew: boolean;
+  initialMode?: "lose" | "maintain";
   startWeight?: number | null;
   startDate?: string | null;
   goalWeight?: number | null;
   perWeekPace?: number | null;
   endDate?: string | null;
+  rangeLb?: number | null;
 }) {
   const [error, setError] = React.useState<string | null>(null);
+  const [mode, setMode] = React.useState<"lose" | "maintain">(initialMode);
   const [paceMode, setPaceMode] = React.useState<"pace" | "date">(endDate ? "date" : "pace");
-  // Enable Save only once something actually changes (viewing ≠ editing).
-  const [dirty, setDirty] = React.useState(false);
+  // New plans are ready to save immediately; edits enable Save only once changed.
+  const [dirty, setDirty] = React.useState(isNew);
 
   async function handle(formData: FormData) {
-    const required = ["startWeight", "goalWeight", "startDate"].some(
-      (k) => !String(formData.get(k) ?? "").trim(),
-    );
-    const paceMissing =
-      paceMode === "pace"
-        ? !String(formData.get("perWeekPace") ?? "").trim()
-        : !String(formData.get("targetDate") ?? "").trim();
-    if (required || paceMissing) {
-      setError("Fill in start, goal, date, and the pace (or target date).");
-      return;
-    }
     setError(null);
     try {
       await action(formData);
       onClose();
     } catch {
-      setError("Couldn't save the plan. Try again.");
+      setError("Couldn't save the plan — check the fields and try again.");
     }
   }
 
+  const title = isNew ? "Start a new plan" : "Edit plan";
+  const submitLabel = isNew ? "Start plan" : "Save plan";
+
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <DialogTitle>{hasPlan ? "Edit plan" : "Set a plan"}</DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <form action={handle} onChange={() => setDirty(true)}>
-        <input type="hidden" name="mode" value="lose" />
+        <input type="hidden" name="mode" value={mode} />
         <input type="hidden" name="paceMode" value={paceMode} />
         <DialogContent sx={{ pt: 1 }}>
           <Stack spacing={2.5}>
             {error ? <Alert severity="error">{error}</Alert> : null}
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
-              <NumberField
-                name="startWeight"
-                label="Start weight (lb)"
-                decimalScale={1}
-                defaultValue={startWeight}
-              />
-              <TextField
-                name="startDate"
-                label="Start date"
-                type="date"
-                required
-                fullWidth
-                defaultValue={startDate ?? ""}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-              <NumberField
-                name="goalWeight"
-                label="Goal weight (lb)"
-                decimalScale={1}
-                defaultValue={goalWeight}
-              />
-            </Box>
 
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-                Define the target by…
-              </Typography>
-              <ToggleButtonGroup
-                size="small"
-                exclusive
-                value={paceMode}
-                onChange={(_, v) => {
-                  if (v) {
-                    setPaceMode(v);
-                    setDirty(true);
-                  }
-                }}
-                fullWidth
-              >
-                <ToggleButton value="date">Target date</ToggleButton>
-                <ToggleButton value="pace">Weekly pace</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
+            {isNew ? (
+              <Box>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                  Plan type
+                </Typography>
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  fullWidth
+                  value={mode}
+                  onChange={(_, v) => {
+                    if (v) {
+                      setMode(v);
+                      setDirty(true);
+                    }
+                  }}
+                >
+                  <ToggleButton value="lose">Lose</ToggleButton>
+                  <ToggleButton value="maintain">Maintain</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            ) : null}
 
-            {paceMode === "pace" ? (
-              <NumberField
-                name="perWeekPace"
-                label="Pace (lb / week)"
-                decimalScale={3}
-                defaultValue={perWeekPace}
-              />
+            <TextField
+              name="startDate"
+              label={mode === "maintain" ? "Maintaining since" : "Start date"}
+              type="date"
+              required
+              fullWidth
+              defaultValue={startDate ?? ""}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+
+            {mode === "maintain" ? (
+              <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
+                <NumberField
+                  name="goalWeight"
+                  label="Hold weight (lb)"
+                  decimalScale={1}
+                  defaultValue={goalWeight}
+                />
+                <NumberField
+                  name="rangeLb"
+                  label="Range ± (lb)"
+                  decimalScale={1}
+                  defaultValue={rangeLb ?? 3}
+                />
+              </Box>
             ) : (
-              <TextField
-                name="targetDate"
-                label="Hit goal by"
-                type="date"
-                fullWidth
-                defaultValue={endDate ?? ""}
-                helperText="Pace is figured out for you."
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
+              <>
+                <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
+                  <NumberField
+                    name="startWeight"
+                    label="Start weight (lb)"
+                    decimalScale={1}
+                    defaultValue={startWeight}
+                  />
+                  <NumberField
+                    name="goalWeight"
+                    label="Goal weight (lb)"
+                    decimalScale={1}
+                    defaultValue={goalWeight}
+                  />
+                </Box>
+
+                <Box>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
+                    Define the target by…
+                  </Typography>
+                  <ToggleButtonGroup
+                    size="small"
+                    exclusive
+                    fullWidth
+                    value={paceMode}
+                    onChange={(_, v) => {
+                      if (v) {
+                        setPaceMode(v);
+                        setDirty(true);
+                      }
+                    }}
+                  >
+                    <ToggleButton value="date">Target date</ToggleButton>
+                    <ToggleButton value="pace">Weekly pace</ToggleButton>
+                  </ToggleButtonGroup>
+                </Box>
+
+                {paceMode === "pace" ? (
+                  <NumberField
+                    name="perWeekPace"
+                    label="Pace (lb / week)"
+                    decimalScale={3}
+                    defaultValue={perWeekPace}
+                  />
+                ) : (
+                  <TextField
+                    name="targetDate"
+                    label="Hit goal by"
+                    type="date"
+                    fullWidth
+                    defaultValue={endDate ?? ""}
+                    helperText="Pace is figured out for you."
+                    slotProps={{ inputLabel: { shrink: true } }}
+                  />
+                )}
+              </>
             )}
           </Stack>
         </DialogContent>
@@ -146,7 +188,7 @@ export default function PlanDialog({
             Cancel
           </Button>
           <SubmitButton variant="contained" pendingLabel="Saving…" disabled={!dirty}>
-            {hasPlan ? "Save plan" : "Create plan"}
+            {submitLabel}
           </SubmitButton>
         </DialogActions>
       </form>

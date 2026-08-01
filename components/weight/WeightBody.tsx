@@ -8,8 +8,9 @@ import Paper from "@mui/material/Paper";
 import LinearProgress from "@mui/material/LinearProgress";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
+import Chip from "@mui/material/Chip";
 import { formatDate } from "@/lib/format";
-import type { Projection, WindowKey, WeightStats } from "@/lib/queries/weight";
+import type { Milestones, Projection, WindowKey, WeightStats } from "@/lib/queries/weight";
 import WeightChart from "./WeightChart";
 
 const WINDOWS: { key: WindowKey; label: string }[] = [
@@ -26,6 +27,21 @@ const WINDOW_LABEL: Record<WindowKey, string> = {
 };
 
 const signed = (n: number, unit = "") => `${n > 0 ? "+" : ""}${n}${unit}`;
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+// Slope (lb/week) of a trend line, from its first to last drawn point.
+function driftPerWeek(trend: (number | null)[]): number | null {
+  let firstI = -1;
+  let lastI = -1;
+  for (let i = 0; i < trend.length; i++) {
+    if (trend[i] != null) {
+      if (firstI < 0) firstI = i;
+      lastI = i;
+    }
+  }
+  if (firstI < 0 || lastI <= firstI) return null;
+  return (trend[lastI]! - trend[firstI]!) / (lastI - firstI);
+}
 
 function Tile({
   label,
@@ -64,8 +80,7 @@ function Tile({
   );
 }
 
-// Diverging meter for the pace buffer: fills right & green when ahead, left &
-// amber when behind. Centre = exactly on pace.
+// Diverging meter (pace buffer, lose): green ahead / amber behind, centre = on pace.
 function PaceGauge({ buffer }: { buffer: number }) {
   const MAX = 10;
   const clamped = Math.max(-MAX, Math.min(MAX, buffer));
@@ -101,8 +116,8 @@ function PaceGauge({ buffer }: { buffer: number }) {
   );
 }
 
-// Owns the timeframe window so the Projected-goal tile (top) and the chart's
-// trend line (below) stay in lockstep: flip the toggle and both re-project.
+// Owns the timeframe window so the trend line + the projection/drift box stay in
+// lockstep. Renders a lose OR a maintain layout depending on the plan mode.
 export default function WeightBody({
   stats,
   hasGoal,
@@ -112,8 +127,13 @@ export default function WeightBody({
   actual,
   target,
   movingAvg,
+  bandLow,
+  bandHigh,
+  holdWeight,
+  holdRange,
   trends,
   projections,
+  milestones,
 }: {
   stats: WeightStats;
   hasGoal: boolean;
@@ -123,19 +143,24 @@ export default function WeightBody({
   actual: (number | null)[];
   target: (number | null)[];
   movingAvg: (number | null)[];
+  bandLow: (number | null)[];
+  bandHigh: (number | null)[];
+  holdWeight?: number | null;
+  holdRange?: number | null;
   trends: Record<WindowKey, (number | null)[]>;
   projections: Record<WindowKey, Projection>;
+  milestones: Milestones;
 }) {
   const [win, setWin] = React.useState<WindowKey>("all");
+  const maintain = stats.mode === "maintain";
   const proj = projections[win];
 
-  // Projected-goal tile content, driven by the selected window.
+  // Projected-goal tile (lose), driven by the selected window.
   let projValue = "—";
   let projSub: string | undefined;
   let projColor: string | undefined;
-  if (hasGoal) {
+  if (hasGoal && !maintain) {
     if (!proj.enoughData) {
-      projValue = "—";
       projSub = "not enough data this window";
     } else if (proj.onTrack && proj.date) {
       projValue = formatDate(proj.date);
@@ -153,9 +178,37 @@ export default function WeightBody({
     }
   }
 
+  // Drift box (maintain): is the selected window trending up/down or holding?
+  const drift = maintain ? driftPerWeek(trends[win]) : null;
+  const holding = drift != null && Math.abs(drift) < 0.1;
+
+  // The 1–2 most notable badges, tucked under the chart (replaces the old full
+  // Milestones section). Priority-ordered; we take the top two that apply.
+  type Badge = { label: string; color: "success" | "warning" | "info" | "primary" };
+  const m = milestones;
+  const badges: Badge[] = [];
+  if (maintain) {
+    badges.push(
+      m.inRangeNow
+        ? { label: "In range ✓", color: "success" }
+        : { label: "Out of range", color: "warning" },
+    );
+    if (m.weeksInRange >= 2) badges.push({ label: `${m.weeksInRange} wk in range`, color: "success" });
+    if (m.loggingStreak >= 3) badges.push({ label: `📆 ${m.loggingStreak} wk logged`, color: "primary" });
+  } else {
+    if (m.currentStreak >= 2) badges.push({ label: `🔥 ${m.currentStreak}-wk streak`, color: "warning" });
+    if (m.newLow) badges.push({ label: "New low 🎯", color: "info" });
+    if (m.comeback) badges.push({ label: "Comeback 💪", color: "success" });
+    if (m.backOnPace) badges.push({ label: "Back on pace 🚀", color: "info" });
+    if (m.decadesCrossed.length) badges.push({ label: `Under ${m.decadesCrossed[0]}`, color: "success" });
+    if (m.earnedPct.length) badges.push({ label: `${Math.max(...m.earnedPct)}% to goal`, color: "success" });
+    if (m.earnedLoss.length) badges.push({ label: `${Math.max(...m.earnedLoss)} lb lost`, color: "success" });
+    if (m.loggingStreak >= 3) badges.push({ label: `📆 ${m.loggingStreak} wk logged`, color: "primary" });
+  }
+  const topBadges = badges.slice(0, 2);
+
   return (
     <>
-      {/* Six stat boxes */}
       <Box
         sx={{
           display: "grid",
@@ -181,36 +234,83 @@ export default function WeightBody({
           }
           sub={stats.wowPct != null ? signed(stats.wowPct, "%") : undefined}
         />
-        <Tile
-          label="Total lost"
-          value={`${stats.totalLost} lb`}
-          color={stats.totalLost > 0 ? "success.main" : undefined}
-          sub={`${signed(-stats.totalLostPct, "%")} since start`}
-        />
-        {hasGoal && stats.paceBuffer != null ? (
-          <Tile
-            label="Pace buffer"
-            value={`${Math.abs(stats.paceBuffer)} lb ${stats.paceBuffer >= 0 ? "ahead" : "behind"}`}
-            color={stats.paceBuffer >= 0 ? "success.main" : "warning.main"}
-          >
-            <PaceGauge buffer={stats.paceBuffer} />
-          </Tile>
-        ) : null}
-        {hasGoal && stats.percentToGoal != null ? (
-          <Tile label="Progress to goal" value={`${Math.round(stats.percentToGoal)}%`}>
-            <LinearProgress
-              variant="determinate"
-              value={Math.max(0, Math.min(100, stats.percentToGoal))}
-              sx={{ mt: 1.5, height: 8, borderRadius: 4 }}
+
+        {maintain ? (
+          <>
+            <Tile
+              label="From goal"
+              value={
+                stats.distanceFromCenter == null
+                  ? "—"
+                  : `${signed(stats.distanceFromCenter)} lb`
+              }
+              color={stats.inRange ? "success.main" : "warning.main"}
+              sub={
+                holdWeight != null && holdRange != null
+                  ? `hold ${holdWeight} ±${holdRange}`
+                  : undefined
+              }
             />
-          </Tile>
-        ) : null}
-        {hasGoal ? (
-          <Tile label="Projected goal" value={projValue} sub={projSub} color={projColor} />
-        ) : null}
+            <Tile
+              label="In range"
+              value={stats.inRange ? "Yes ✓" : "Out"}
+              color={stats.inRange ? "success.main" : "warning.main"}
+              sub={
+                stats.weeksInRange != null
+                  ? `${stats.weeksInRange} wk in a row`
+                  : undefined
+              }
+            />
+            <Tile
+              label="Total change"
+              value={`${signed(-stats.totalLost)} lb`}
+              color={stats.totalLost > 0 ? "success.main" : undefined}
+              sub="since this plan began"
+            />
+            <Tile
+              label="Trend"
+              value={drift == null ? "—" : holding ? "Holding ✓" : drift > 0 ? "Drifting up" : "Drifting down"}
+              color={drift == null ? undefined : holding ? "success.main" : "warning.main"}
+              sub={
+                drift != null && !holding
+                  ? `${signed(round1(drift))} lb/wk (${WINDOW_LABEL[win]})`
+                  : `${WINDOW_LABEL[win]} window`
+              }
+            />
+          </>
+        ) : (
+          <>
+            <Tile
+              label="Total lost"
+              value={`${stats.totalLost} lb`}
+              color={stats.totalLost > 0 ? "success.main" : undefined}
+              sub={`${signed(-stats.totalLostPct, "%")} since start`}
+            />
+            {hasGoal && stats.paceBuffer != null ? (
+              <Tile
+                label="Pace buffer"
+                value={`${Math.abs(stats.paceBuffer)} lb ${stats.paceBuffer >= 0 ? "ahead" : "behind"}`}
+                color={stats.paceBuffer >= 0 ? "success.main" : "warning.main"}
+              >
+                <PaceGauge buffer={stats.paceBuffer} />
+              </Tile>
+            ) : null}
+            {hasGoal && stats.percentToGoal != null ? (
+              <Tile label="Progress to goal" value={`${Math.round(stats.percentToGoal)}%`}>
+                <LinearProgress
+                  variant="determinate"
+                  value={Math.max(0, Math.min(100, stats.percentToGoal))}
+                  sx={{ mt: 1.5, height: 8, borderRadius: 4 }}
+                />
+              </Tile>
+            ) : null}
+            {hasGoal ? (
+              <Tile label="Projected goal" value={projValue} sub={projSub} color={projColor} />
+            ) : null}
+          </>
+        )}
       </Box>
 
-      {/* Chart with the timeframe toggle that drives the projection above */}
       <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 } }}>
         <Stack
           direction="row"
@@ -220,7 +320,7 @@ export default function WeightBody({
           flexWrap="wrap"
           sx={{ mb: 1.5, px: 1, rowGap: 1 }}
         >
-          <Typography variant="h6">Trend</Typography>
+          <Typography variant="h6">{maintain ? "Maintaining" : "Trend"}</Typography>
           <ToggleButtonGroup
             size="small"
             exclusive
@@ -242,14 +342,33 @@ export default function WeightBody({
           target={target}
           trend={trends[win]}
           movingAvg={movingAvg}
+          bandLow={bandLow}
+          bandHigh={bandHigh}
           color={color}
           hasGoal={hasGoal}
         />
-        {hasGoal && planPace != null ? (
-          <Typography variant="caption" color="text.secondary" sx={{ px: 1, display: "block", mt: 0.5 }}>
-            Plan pace {planPace} lb/wk · trend shows the {WINDOW_LABEL[win]} window
+        <Stack
+          direction="row"
+          justifyContent="space-between"
+          alignItems="center"
+          flexWrap="wrap"
+          sx={{ px: 1, mt: 0.5, gap: 1 }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            {maintain && holdWeight != null && holdRange != null
+              ? `Holding ${holdWeight} ±${holdRange} lb · ${WINDOW_LABEL[win]} trend`
+              : hasGoal && planPace != null
+                ? `Plan pace ${planPace} lb/wk · ${WINDOW_LABEL[win]} trend`
+                : ""}
           </Typography>
-        ) : null}
+          {topBadges.length > 0 ? (
+            <Stack direction="row" flexWrap="wrap" useFlexGap sx={{ gap: 0.75 }}>
+              {topBadges.map((b) => (
+                <Chip key={b.label} size="small" color={b.color} variant="filled" label={b.label} />
+              ))}
+            </Stack>
+          ) : null}
+        </Stack>
       </Paper>
     </>
   );

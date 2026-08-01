@@ -8,7 +8,6 @@ import { canEditProfile } from "@/lib/auth";
 import { getWeightDashboard } from "@/lib/queries/weight";
 import WeightActions from "@/components/weight/WeightActions";
 import WeightBody from "@/components/weight/WeightBody";
-import Milestones from "@/components/weight/Milestones";
 
 export const metadata = { title: "Weight" };
 
@@ -68,11 +67,14 @@ export default async function WeightDashboard({
             profileId={active.id}
             defaultDate={todayISO}
             hasPlan={!!plan}
+            mode={(plan?.mode as "lose" | "maintain" | undefined) ?? undefined}
+            currentWeight={stats?.current ?? null}
             startWeight={plan ? Number(plan.startWeight) : null}
             startDate={plan?.startDate ?? null}
             goalWeight={plan ? Number(plan.goalWeight) : null}
             perWeekPace={plan ? Number(plan.perWeekPace) : null}
             endDate={plan?.endDate ?? null}
+            rangeLb={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
           />
         ) : null}
       </Stack>
@@ -87,21 +89,23 @@ export default async function WeightDashboard({
           </Typography>
         </Paper>
       ) : (
-        <>
-          <WeightBody
-            stats={stats}
-            hasGoal={!!plan}
-            planPace={planPaceLbPerWeek}
-            color={accent}
-            dates={chart.dates}
-            actual={chart.actual}
-            target={chart.target}
-            movingAvg={chart.movingAvg}
-            trends={trends}
-            projections={projections}
-          />
-          {milestones ? <Milestones milestones={milestones} /> : null}
-        </>
+        <WeightBody
+          stats={stats}
+          hasGoal={!!plan}
+          planPace={planPaceLbPerWeek}
+          color={accent}
+          dates={chart.dates}
+          actual={chart.actual}
+          target={chart.target}
+          movingAvg={chart.movingAvg}
+          bandLow={chart.bandLow}
+          bandHigh={chart.bandHigh}
+          holdWeight={plan?.mode === "maintain" ? Number(plan.goalWeight) : null}
+          holdRange={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
+          trends={trends}
+          projections={projections}
+          milestones={milestones!}
+        />
       )}
     </Container>
   );

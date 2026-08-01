@@ -25,6 +25,8 @@ export type WeightChartProps = {
   target: (number | null)[];
   trend: (number | null)[];
   movingAvg: (number | null)[];
+  bandLow?: (number | null)[]; // per-week maintain band lower edge
+  bandHigh?: (number | null)[]; // per-week maintain band upper edge
   /** The active profile's color — the measured line's identity hue. */
   color: string;
   hasGoal: boolean;
@@ -40,6 +42,8 @@ export default function WeightChart({
   target,
   trend,
   movingAvg,
+  bandLow,
+  bandHigh,
   color,
   hasGoal,
 }: WeightChartProps) {
@@ -54,7 +58,7 @@ export default function WeightChart({
 
   // Tight, non-zero y-domain padded a few lbs past the data (never starts at 0).
   const { yMin, yMax } = React.useMemo(() => {
-    const vals = [...actual, ...target, ...trend].filter(
+    const vals = [...actual, ...target, ...trend, ...(bandLow ?? []), ...(bandHigh ?? [])].filter(
       (v): v is number => v != null,
     );
     if (!vals.length) return { yMin: undefined, yMax: undefined };
@@ -62,7 +66,7 @@ export default function WeightChart({
       yMin: Math.floor((Math.min(...vals) - 4) / 5) * 5,
       yMax: Math.ceil((Math.max(...vals) + 4) / 5) * 5,
     };
-  }, [actual, target, trend]);
+  }, [actual, target, trend, bandLow, bandHigh]);
 
   const referenceColor = theme.palette.text.secondary; // Target (the plan): neutral gray, dotted
   const trendColor = alpha(color, 0.5); // Trend: a lighter shade of the actual line, dashed
@@ -98,6 +102,28 @@ export default function WeightChart({
       showMark: false,
       curve: "linear" as const,
     },
+    ...(bandLow && bandHigh && bandLow.some((v) => v != null)
+      ? [
+          {
+            id: "bandLow",
+            label: "range",
+            data: bandLow,
+            color: referenceColor,
+            showMark: false,
+            curve: "linear" as const,
+            connectNulls: false,
+          },
+          {
+            id: "bandHigh",
+            label: "range",
+            data: bandHigh,
+            color: referenceColor,
+            showMark: false,
+            curve: "linear" as const,
+            connectNulls: false,
+          },
+        ]
+      : []),
     ...(showAvg
       ? [
           {
@@ -154,6 +180,11 @@ export default function WeightChart({
           },
           "& .MuiLineElement-series-actual": { strokeWidth: 2.5 },
           "& .MuiLineElement-series-movingAvg": { strokeWidth: 2 },
+          "& .MuiLineElement-series-bandLow, & .MuiLineElement-series-bandHigh": {
+            strokeDasharray: "1 4",
+            strokeWidth: 1,
+            opacity: 0.6,
+          },
         }}
       />
       ) : (

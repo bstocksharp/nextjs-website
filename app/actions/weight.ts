@@ -44,6 +44,34 @@ export async function logWeight(profileId: number, formData: FormData): Promise<
   revalidatePath("/weight/history");
 }
 
+/**
+ * Start a FRESH plan from a chosen date (default today), ending the current one
+ * the day before so plans never overlap. This is the "switch mode / new season"
+ * chaining tool (lose → maintain, or a dated cut). `mode` picks the shape:
+ *   • lose      → pace or target-date (same as savePlan)
+ *   • maintain  → hold weight (goalWeight) ± rangeLb band, pace 0
+ */
+export async function startPlan(profileId: number, formData: FormData): Promise<void> {
+  await requireEditorFor(profileId);
+  const values = buildPlanValues(formData);
+
+  // Close the current plan the day before the new one starts (no overlap).
+  const active = await getActivePlan(profileId);
+  if (active) {
+    const d = new Date(`${values.startDate}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() - 1);
+    await db
+      .update(weightPlans)
+      .set({ endDate: d.toISOString().slice(0, 10), updatedAt: new Date() })
+      .where(and(eq(weightPlans.id, active.id), eq(weightPlans.profileId, profileId)));
+  }
+
+  await db.insert(weightPlans).values({ ...values, profileId });
+
+  revalidatePath("/weight");
+  revalidatePath("/weight/history");
+}
+
 /** Edit an existing weigh-in by id (can change its date/weight/note). */
 export async function updateWeighIn(
   id: number,
@@ -83,49 +111,56 @@ export async function deleteWeighIn(
   revalidatePath("/weight/history");
 }
 
-/**
- * Create or edit the ACTIVE plan. Lose plans can be defined two ways:
- *   • by pace  → perWeekPace, open-ended (endDate null)
- *   • by date  → a targetDate deadline; pace is derived and endDate = deadline
- * (Maintain mode + starting a fresh plan land in 2b-2/2b-3.)
- */
-export async function savePlan(profileId: number, formData: FormData): Promise<void> {
-  await requireEditorFor(profileId);
-
+// Parse a plan form (lose or maintain) into DB values. Lose = pace OR a target
+// date (deadline → pace derived, endDate = deadline). Maintain = a flat band, so
+// startWeight = the hold weight (goalWeight), pace 0, and a rangeLb ± band.
+function buildPlanValues(formData: FormData) {
   const mode = str(formData, "mode") ?? "lose";
-  const startWeight = str(formData, "startWeight");
   const startDate = str(formData, "startDate");
   const goalWeight = str(formData, "goalWeight");
-  if (!startWeight || !startDate || !goalWeight) {
-    throw new Error("Start weight, start date, and goal weight are required.");
+  if (!startDate || !goalWeight) {
+    throw new Error("Start date and goal weight are required.");
   }
 
-  let perWeekPace = str(formData, "perWeekPace");
+  let startWeight = str(formData, "startWeight");
+  let perWeekPace = str(formData, "perWeekPace") ?? "0";
+  let rangeLb: string | null = null;
   let endDate: string | null = null;
 
-  if (mode === "lose") {
+  if (mode === "maintain") {
+    startWeight = startWeight ?? goalWeight; // start maintaining AT the hold weight
+    rangeLb = str(formData, "rangeLb") ?? "3";
+    perWeekPace = "0";
+  } else {
+    if (!startWeight) throw new Error("Start weight is required.");
     const paceMode = str(formData, "paceMode") ?? "pace";
     if (paceMode === "date") {
       const targetDate = str(formData, "targetDate");
       if (!targetDate) throw new Error("Target date is required.");
-      const lbs = Number(startWeight) - Number(goalWeight);
-      perWeekPace = (lbs / weeksBetween(startDate, targetDate)).toFixed(3);
+      perWeekPace = (
+        (Number(startWeight) - Number(goalWeight)) / weeksBetween(startDate, targetDate)
+      ).toFixed(3);
       endDate = targetDate;
-    } else if (!perWeekPace) {
+    } else if (!str(formData, "perWeekPace")) {
       throw new Error("Pace is required.");
     }
   }
 
-  const values = {
-    profileId,
+  return {
     mode,
-    startWeight,
+    startWeight: startWeight ?? goalWeight,
     startDate,
     goalWeight,
-    perWeekPace: perWeekPace ?? "0",
-    rangeLb: str(formData, "rangeLb"),
+    perWeekPace,
+    rangeLb,
     endDate,
   };
+}
+
+/** Create or edit the ACTIVE plan in place (same timeframe; lose or maintain). */
+export async function savePlan(profileId: number, formData: FormData): Promise<void> {
+  await requireEditorFor(profileId);
+  const values = buildPlanValues(formData);
 
   const active = await getActivePlan(profileId);
   if (active) {
@@ -134,7 +169,7 @@ export async function savePlan(profileId: number, formData: FormData): Promise<v
       .set({ ...values, updatedAt: new Date() })
       .where(and(eq(weightPlans.id, active.id), eq(weightPlans.profileId, profileId)));
   } else {
-    await db.insert(weightPlans).values(values);
+    await db.insert(weightPlans).values({ ...values, profileId });
   }
 
   revalidatePath("/weight");
