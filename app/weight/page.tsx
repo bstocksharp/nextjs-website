@@ -8,6 +8,7 @@ import { canEditProfile } from "@/lib/auth";
 import { getWeightDashboard } from "@/lib/queries/weight";
 import WeightActions from "@/components/weight/WeightActions";
 import WeightBody from "@/components/weight/WeightBody";
+import Milestones from "@/components/weight/Milestones";
 
 export const metadata = { title: "Weight" };
 
@@ -35,7 +36,8 @@ export default async function WeightDashboard({
     getWeightDashboard(active.id),
     canEditProfile(active.id),
   ]);
-  const { goal, weighIns, stats, chart, trends, projections, planPaceLbPerWeek } = dash;
+  const { goal, weighIns, stats, chart, trends, projections, planPaceLbPerWeek, milestones } =
+    dash;
   const accent = active.color ?? DEFAULT_ACCENT;
 
   // "Today" computed on the server so the log modal's date hydrates cleanly.
@@ -84,18 +86,21 @@ export default async function WeightDashboard({
           </Typography>
         </Paper>
       ) : (
-        <WeightBody
-          stats={stats}
-          hasGoal={!!goal}
-          planPace={planPaceLbPerWeek}
-          color={accent}
-          dates={chart.dates}
-          actual={chart.actual}
-          target={chart.target}
-          movingAvg={chart.movingAvg}
-          trends={trends}
-          projections={projections}
-        />
+        <>
+          <WeightBody
+            stats={stats}
+            hasGoal={!!goal}
+            planPace={planPaceLbPerWeek}
+            color={accent}
+            dates={chart.dates}
+            actual={chart.actual}
+            target={chart.target}
+            movingAvg={chart.movingAvg}
+            trends={trends}
+            projections={projections}
+          />
+          {milestones ? <Milestones milestones={milestones} /> : null}
+        </>
       )}
     </Container>
   );

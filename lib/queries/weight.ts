@@ -127,6 +127,24 @@ export type Projection = {
   enoughData: boolean; // false when the window has < MIN_TREND_POINTS points
 };
 
+export type Milestones = {
+  earnedLoss: number[]; // 5-lb thresholds reached: [5, 10, 15, …]
+  earnedPct: number[]; // % -of-goal reached: subset of [25, 50, 75, 100]
+  decadesCrossed: number[]; // "Under 220", "Under 210" — decade boundaries dropped below
+  atGoal: boolean; // hit (or passed) the goal weight
+  newLow: boolean; // latest weigh-in is an all-time low
+  backOnPace: boolean; // buffer just flipped from behind → ahead of plan
+  comeback: boolean; // new all-time low after a recent gain (pushed through a setback)
+  momentum: boolean; // down in ≥3 of the last 4 weeks (without a clean 3+ streak)
+  steadyLoser: boolean; // consistent small weekly losses, no big swings
+  bestWeekDrop: number | null; // biggest single-week loss (lbs)
+  currentStreak: number; // trailing consecutive down-weeks
+  bestStreak: number; // longest run of consecutive down-weeks ever
+  loggingStreak: number; // trailing consecutive weeks with a weigh-in
+  nextLossLb: number | null; // next 5-lb threshold
+  toNextLossLb: number | null; // lbs remaining to it
+};
+
 export type WeightDashboard = {
   goal: WeightGoal | null;
   weighIns: WeighIn[];
@@ -135,6 +153,7 @@ export type WeightDashboard = {
   trends: Record<WindowKey, (number | null)[]>;
   projections: Record<WindowKey, Projection>;
   planPaceLbPerWeek: number | null;
+  milestones: Milestones | null;
 };
 
 /** Least-squares slope+intercept of y over x; null if fewer than 2 points. */
@@ -194,6 +213,7 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
       trends: emptyTrends,
       projections: emptyProjections,
       planPaceLbPerWeek: pace,
+      milestones: null,
     };
   }
 
@@ -295,6 +315,113 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
         : null,
   };
 
+  // ── Milestones (window-independent; from actuals + goal) ─────────────────
+  const weightsAsc = series.map((s) => s.weight);
+  const allTimeLow = Math.min(...weightsAsc);
+  let best = 0;
+  let run = 0;
+  for (let i = 1; i < weightsAsc.length; i++) {
+    if (weightsAsc[i] < weightsAsc[i - 1]) {
+      run++;
+      best = Math.max(best, run);
+    } else run = 0;
+  }
+  let currentStreak = 0;
+  for (let i = weightsAsc.length - 1; i > 0; i--) {
+    if (weightsAsc[i] < weightsAsc[i - 1]) currentStreak++;
+    else break;
+  }
+  const earnedLoss: number[] = [];
+  for (let t = 5; t <= stats.totalLost + 1e-9; t += 5) earnedLoss.push(t);
+  const earnedPct =
+    goalWeight != null && stats.percentToGoal != null
+      ? [25, 50, 75, 100].filter((p) => stats.percentToGoal! >= p)
+      : [];
+  const atGoal = stats.percentToGoal != null && stats.percentToGoal >= 100;
+  const nextLossLb = atGoal ? null : (Math.floor(Math.max(0, stats.totalLost) / 5) + 1) * 5;
+
+  // Decade boundaries dropped below since the first weigh-in (230 → "Under 220").
+  const firstWeight = weightsAsc[0];
+  const decadesCrossed: number[] = [];
+  for (let d = Math.floor(firstWeight / 10) * 10; d > last.weight; d -= 10) {
+    if (d < firstWeight) decadesCrossed.push(d);
+  }
+  decadesCrossed.reverse(); // lowest (most impressive) first
+
+  // Biggest single-week loss.
+  let bestDrop = 0;
+  for (let i = 1; i < weightsAsc.length; i++) {
+    bestDrop = Math.max(bestDrop, weightsAsc[i - 1] - weightsAsc[i]);
+  }
+
+  // Back on pace: buffer at the latest weigh-in is ahead, but was behind at the prior one.
+  let backOnPace = false;
+  if (goalWeight != null && pace != null && series.length >= 2) {
+    const bufferAt = (wk: number, wt: number) =>
+      Math.max(goalWeight, startWeight - pace * wk) - wt;
+    const a = series[series.length - 1];
+    const b = series[series.length - 2];
+    backOnPace =
+      bufferAt(weeksBetween(startDate, a.date), a.weight) >= 0 &&
+      bufferAt(weeksBetween(startDate, b.date), b.weight) < 0;
+  }
+
+  // By-week sequence (deduped, ascending) for streak/consistency checks.
+  const byWeekWeights = ordered.map(([, w]) => w);
+  const weekIdxs = ordered.map(([w]) => w);
+
+  // Logging streak: trailing consecutive weeks that each have a weigh-in.
+  let loggingStreak = weekIdxs.length ? 1 : 0;
+  for (let i = weekIdxs.length - 1; i > 0; i--) {
+    if (weekIdxs[i] - weekIdxs[i - 1] === 1) loggingStreak++;
+    else break;
+  }
+
+  // Recent week-over-week changes (last up to 6) for steady/momentum/comeback.
+  const changes: number[] = [];
+  for (let i = Math.max(1, byWeekWeights.length - 6); i < byWeekWeights.length; i++) {
+    changes.push(byWeekWeights[i] - byWeekWeights[i - 1]); // negative = loss
+  }
+  const recentLosses = changes.filter((c) => c < 0).length;
+  const steadyLoser =
+    changes.length >= 4 &&
+    recentLosses >= changes.length - 1 && // at most one non-loss
+    !changes.some((c) => Math.abs(c) > 3) && // no big swing
+    changes.reduce((s, c) => s + c, 0) < 0; // net loss
+
+  let last4Down = 0;
+  let last4Total = 0;
+  for (let i = Math.max(1, byWeekWeights.length - 4); i < byWeekWeights.length; i++) {
+    last4Total++;
+    if (byWeekWeights[i] < byWeekWeights[i - 1]) last4Down++;
+  }
+  const momentum = last4Total >= 4 && last4Down >= 3 && currentStreak < 3;
+
+  let recentGain = false;
+  for (let i = Math.max(1, byWeekWeights.length - 5); i < byWeekWeights.length; i++) {
+    if (byWeekWeights[i] > byWeekWeights[i - 1]) recentGain = true;
+  }
+  const newLow = last.weight <= allTimeLow + 1e-9;
+  const comeback = newLow && recentGain;
+
+  const milestones: Milestones = {
+    earnedLoss,
+    earnedPct,
+    decadesCrossed,
+    atGoal,
+    newLow,
+    backOnPace,
+    comeback,
+    momentum,
+    steadyLoser,
+    bestWeekDrop: bestDrop > 0 ? round1(bestDrop) : null,
+    currentStreak,
+    bestStreak: best,
+    loggingStreak,
+    nextLossLb,
+    toNextLossLb: nextLossLb != null ? round1(nextLossLb - stats.totalLost) : null,
+  };
+
   return {
     goal,
     weighIns: rows,
@@ -303,5 +430,6 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     trends,
     projections,
     planPaceLbPerWeek: pace,
+    milestones,
   };
 }
