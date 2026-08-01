@@ -1,8 +1,8 @@
 import "server-only";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { weighIns, weightGoals } from "@/lib/db/schema";
-import type { WeighIn, WeightGoal } from "@/lib/db/schema";
+import { weighIns, weightPlans } from "@/lib/db/schema";
+import type { WeighIn, WeightPlan } from "@/lib/db/schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEIGHT — reads + all DERIVED metrics (nothing here is stored; same spirit as
@@ -59,12 +59,21 @@ export function listWeighIns(profileId: number): Promise<WeighIn[]> {
     .orderBy(asc(weighIns.measuredOn), asc(weighIns.id));
 }
 
-/** The one goal/plan row for a profile, or null. */
-export async function getWeightGoal(profileId: number): Promise<WeightGoal | null> {
+/** The active plan for a profile: its date window contains today (end_date null
+ *  = open-ended). If plans somehow overlap, the latest-starting one wins. */
+export async function getActivePlan(profileId: number): Promise<WeightPlan | null> {
+  const today = new Date().toISOString().slice(0, 10);
   const rows = await db
     .select()
-    .from(weightGoals)
-    .where(eq(weightGoals.profileId, profileId))
+    .from(weightPlans)
+    .where(
+      and(
+        eq(weightPlans.profileId, profileId),
+        lte(weightPlans.startDate, today),
+        or(isNull(weightPlans.endDate), gte(weightPlans.endDate, today)),
+      ),
+    )
+    .orderBy(desc(weightPlans.startDate), desc(weightPlans.id))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -146,7 +155,7 @@ export type Milestones = {
 };
 
 export type WeightDashboard = {
-  goal: WeightGoal | null;
+  plan: WeightPlan | null;
   weighIns: WeighIn[];
   stats: WeightStats | null;
   chart: ChartBase;
@@ -182,14 +191,14 @@ const emptyProjection = (enoughData: boolean): Projection => ({
 
 /** Everything the dashboard page needs for one profile, in a single call. */
 export async function getWeightDashboard(profileId: number): Promise<WeightDashboard> {
-  const [rows, goal] = await Promise.all([listWeighIns(profileId), getWeightGoal(profileId)]);
+  const [rows, plan] = await Promise.all([listWeighIns(profileId), getActivePlan(profileId)]);
 
   const series = rows.map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
 
-  const startDate = goal?.startDate ?? series[0]?.date ?? null;
-  const startWeight = goal ? Number(goal.startWeight) : (series[0]?.weight ?? null);
-  const goalWeight = goal ? Number(goal.goalWeight) : null;
-  const pace = goal ? Number(goal.perWeekPace) : null;
+  const startDate = plan?.startDate ?? series[0]?.date ?? null;
+  const startWeight = plan ? Number(plan.startWeight) : (series[0]?.weight ?? null);
+  const goalWeight = plan ? Number(plan.goalWeight) : null;
+  const pace = plan ? Number(plan.perWeekPace) : null;
 
   const emptyTrends = {
     all: [] as (number | null)[],
@@ -206,7 +215,7 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
 
   if (!startDate || startWeight == null) {
     return {
-      goal,
+      plan,
       weighIns: rows,
       stats: null,
       chart: { dates: [], weeks: [], actual: [], target: [], movingAvg: [] },
@@ -423,7 +432,7 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
   };
 
   return {
-    goal,
+    plan,
     weighIns: rows,
     stats,
     chart: { dates, weeks, actual, target, movingAvg },

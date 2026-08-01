@@ -5,32 +5,34 @@ import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import AddIcon from "@mui/icons-material/Add";
 import FlagOutlinedIcon from "@mui/icons-material/FlagOutlined";
-import { logWeight, setGoal } from "@/app/actions/weight";
+import { logWeight, savePlan } from "@/app/actions/weight";
 import LogWeightDialog from "./LogWeightDialog";
-import GoalDialog from "./GoalDialog";
+import PlanDialog from "./PlanDialog";
 
 // The dashboard's two header actions: "Log weigh-in" (primary) and "Re-plan"
-// (or "Set goal" if there's no plan yet). Both open modals. Editor-gated by the
+// (or "Set plan" if there's none yet). Both open modals. Editor-gated by the
 // caller — this only renders when the viewer can edit this profile.
 export default function WeightActions({
   profileId,
   defaultDate,
-  hasGoal,
+  hasPlan,
   startWeight,
   startDate,
   goalWeight,
   perWeekPace,
+  endDate,
 }: {
   profileId: number;
   defaultDate: string;
-  hasGoal: boolean;
+  hasPlan: boolean;
   startWeight?: number | null;
   startDate?: string | null;
   goalWeight?: number | null;
   perWeekPace?: number | null;
+  endDate?: string | null;
 }) {
   const [logOpen, setLogOpen] = React.useState(false);
-  const [goalOpen, setGoalOpen] = React.useState(false);
+  const [planOpen, setPlanOpen] = React.useState(false);
 
   return (
     <>
@@ -38,15 +40,11 @@ export default function WeightActions({
         <Button
           variant="outlined"
           startIcon={<FlagOutlinedIcon />}
-          onClick={() => setGoalOpen(true)}
+          onClick={() => setPlanOpen(true)}
         >
-          {hasGoal ? "Re-plan" : "Set goal"}
+          {hasPlan ? "Re-plan" : "Set plan"}
         </Button>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => setLogOpen(true)}
-        >
+        <Button variant="contained" startIcon={<AddIcon />} onClick={() => setLogOpen(true)}>
           Log
         </Button>
       </Stack>
@@ -60,15 +58,16 @@ export default function WeightActions({
         defaultDate={defaultDate}
       />
 
-      <GoalDialog
-        open={goalOpen}
-        onClose={() => setGoalOpen(false)}
-        action={setGoal.bind(null, profileId)}
-        hasGoal={hasGoal}
+      <PlanDialog
+        open={planOpen}
+        onClose={() => setPlanOpen(false)}
+        action={savePlan.bind(null, profileId)}
+        hasPlan={hasPlan}
         startWeight={startWeight}
         startDate={startDate}
         goalWeight={goalWeight}
         perWeekPace={perWeekPace}
+        endDate={endDate}
       />
     </>
   );

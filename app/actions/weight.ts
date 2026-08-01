@@ -3,8 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { weighIns, weightGoals } from "@/lib/db/schema";
+import { weighIns, weightPlans } from "@/lib/db/schema";
 import { requireEditorFor } from "@/lib/auth";
+import { getActivePlan } from "@/lib/queries/weight";
+
+// Whole weeks between two YYYY-MM-DD dates (≥1, so deadline math never divides by 0).
+function weeksBetween(startISO: string, endISO: string): number {
+  const ms = new Date(`${endISO}T12:00:00Z`).getTime() - new Date(`${startISO}T12:00:00Z`).getTime();
+  return Math.max(1, Math.round(ms / (7 * 86_400_000)));
+}
 
 // Weigh-ins & goals are OWNED by a profile (Bryce's ≠ Lauren's), so every write
 // goes through requireEditorFor(profileId) — the same owner-gate workouts use.
@@ -76,25 +83,59 @@ export async function deleteWeighIn(
   revalidatePath("/weight/history");
 }
 
-/** Create or re-plan the goal (one row per profile; overwrite on re-plan). */
-export async function setGoal(profileId: number, formData: FormData): Promise<void> {
+/**
+ * Create or edit the ACTIVE plan. Lose plans can be defined two ways:
+ *   • by pace  → perWeekPace, open-ended (endDate null)
+ *   • by date  → a targetDate deadline; pace is derived and endDate = deadline
+ * (Maintain mode + starting a fresh plan land in 2b-2/2b-3.)
+ */
+export async function savePlan(profileId: number, formData: FormData): Promise<void> {
   await requireEditorFor(profileId);
 
+  const mode = str(formData, "mode") ?? "lose";
   const startWeight = str(formData, "startWeight");
   const startDate = str(formData, "startDate");
   const goalWeight = str(formData, "goalWeight");
-  const perWeekPace = str(formData, "perWeekPace");
-  if (!startWeight || !startDate || !goalWeight || !perWeekPace) {
-    throw new Error("Start weight, start date, goal weight, and pace are all required.");
+  if (!startWeight || !startDate || !goalWeight) {
+    throw new Error("Start weight, start date, and goal weight are required.");
   }
 
-  await db
-    .insert(weightGoals)
-    .values({ profileId, startWeight, startDate, goalWeight, perWeekPace })
-    .onConflictDoUpdate({
-      target: weightGoals.profileId,
-      set: { startWeight, startDate, goalWeight, perWeekPace, updatedAt: new Date() },
-    });
+  let perWeekPace = str(formData, "perWeekPace");
+  let endDate: string | null = null;
+
+  if (mode === "lose") {
+    const paceMode = str(formData, "paceMode") ?? "pace";
+    if (paceMode === "date") {
+      const targetDate = str(formData, "targetDate");
+      if (!targetDate) throw new Error("Target date is required.");
+      const lbs = Number(startWeight) - Number(goalWeight);
+      perWeekPace = (lbs / weeksBetween(startDate, targetDate)).toFixed(3);
+      endDate = targetDate;
+    } else if (!perWeekPace) {
+      throw new Error("Pace is required.");
+    }
+  }
+
+  const values = {
+    profileId,
+    mode,
+    startWeight,
+    startDate,
+    goalWeight,
+    perWeekPace: perWeekPace ?? "0",
+    rangeLb: str(formData, "rangeLb"),
+    endDate,
+  };
+
+  const active = await getActivePlan(profileId);
+  if (active) {
+    await db
+      .update(weightPlans)
+      .set({ ...values, updatedAt: new Date() })
+      .where(and(eq(weightPlans.id, active.id), eq(weightPlans.profileId, profileId)));
+  } else {
+    await db.insert(weightPlans).values(values);
+  }
 
   revalidatePath("/weight");
   revalidatePath("/weight/history");

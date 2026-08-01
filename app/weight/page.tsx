@@ -36,7 +36,7 @@ export default async function WeightDashboard({
     getWeightDashboard(active.id),
     canEditProfile(active.id),
   ]);
-  const { goal, weighIns, stats, chart, trends, projections, planPaceLbPerWeek, milestones } =
+  const { plan, weighIns, stats, chart, trends, projections, planPaceLbPerWeek, milestones } =
     dash;
   const accent = active.color ?? DEFAULT_ACCENT;
 
@@ -60,18 +60,19 @@ export default async function WeightDashboard({
           </Typography>
           <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
             {active.name}
-            {goal ? ` · goal ${Number(goal.goalWeight)} lb` : " · no goal set yet"}
+            {plan ? ` · goal ${Number(plan.goalWeight)} lb` : " · no plan set yet"}
           </Typography>
         </Stack>
         {editor ? (
           <WeightActions
             profileId={active.id}
             defaultDate={todayISO}
-            hasGoal={!!goal}
-            startWeight={goal ? Number(goal.startWeight) : null}
-            startDate={goal?.startDate ?? null}
-            goalWeight={goal ? Number(goal.goalWeight) : null}
-            perWeekPace={goal ? Number(goal.perWeekPace) : null}
+            hasPlan={!!plan}
+            startWeight={plan ? Number(plan.startWeight) : null}
+            startDate={plan?.startDate ?? null}
+            goalWeight={plan ? Number(plan.goalWeight) : null}
+            perWeekPace={plan ? Number(plan.perWeekPace) : null}
+            endDate={plan?.endDate ?? null}
           />
         ) : null}
       </Stack>
@@ -89,7 +90,7 @@ export default async function WeightDashboard({
         <>
           <WeightBody
             stats={stats}
-            hasGoal={!!goal}
+            hasGoal={!!plan}
             planPace={planPaceLbPerWeek}
             color={accent}
             dates={chart.dates}

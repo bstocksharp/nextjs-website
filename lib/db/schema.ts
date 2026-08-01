@@ -419,6 +419,32 @@ export const weightGoals = pgTable("weight_goals", {
   createdAt: createdAt(),
 });
 
+// ── Weight plans (Phase 2b: many per profile, dated, with a mode) ─────────────
+// Supersedes weight_goals (one-per-profile). A plan is a dated segment you chain:
+// lose → maintain → lose, switched any time. `mode` picks the target shape —
+// 'lose' = a declining line to goalWeight at perWeekPace; 'maintain' = a flat
+// band at goalWeight ± rangeLb. `endDate` null = the active plan; set it (past OR
+// a future deadline like "lose 5 by the wedding") and the next plan takes over.
+export const weightPlans = pgTable(
+  "weight_plans",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    mode: varchar("mode", { length: 20 }).notNull().default("lose"), // lose | maintain
+    startWeight: numeric("start_weight", { precision: 5, scale: 1 }).notNull(),
+    startDate: date("start_date").notNull(),
+    goalWeight: numeric("goal_weight", { precision: 5, scale: 1 }).notNull(),
+    perWeekPace: numeric("per_week_pace", { precision: 5, scale: 3 }).notNull().default("0"), // lose
+    rangeLb: numeric("range_lb", { precision: 4, scale: 1 }), // maintain: ± band around goalWeight
+    endDate: date("end_date"), // null = active plan; else the segment's last day
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_weight_plans_profile").on(t.profileId, t.startDate)],
+);
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
@@ -456,3 +482,5 @@ export type WeighIn = typeof weighIns.$inferSelect;
 export type NewWeighIn = typeof weighIns.$inferInsert;
 export type WeightGoal = typeof weightGoals.$inferSelect;
 export type NewWeightGoal = typeof weightGoals.$inferInsert;
+export type WeightPlan = typeof weightPlans.$inferSelect;
+export type NewWeightPlan = typeof weightPlans.$inferInsert;
