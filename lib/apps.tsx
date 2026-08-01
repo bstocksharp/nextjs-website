@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { SvgIconProps } from "@mui/material/SvgIcon";
 import GarageIcon from "@mui/icons-material/Garage";
 import FitnessCenterIcon from "@mui/icons-material/FitnessCenter";
+import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
 
 // The registry of sub-apps in the hub. Add an app here (plus its route folder)
 // and it shows up in the Hub launcher and the header app-switcher automatically.
@@ -40,6 +41,18 @@ export const APPS: AppDef[] = [
       { label: "Today", href: "/workout/today" },
       { label: "Week", href: "/workout" },
       { label: "Catalog", href: "/workout/catalog" },
+    ],
+  },
+  {
+    slug: "weight",
+    name: "Weight",
+    tagline: "Weekly weigh-ins, trend & goal pace",
+    href: "/weight",
+    Icon: MonitorWeightIcon,
+    accent: "#4f86e0",
+    nav: [
+      { label: "Dashboard", href: "/weight" },
+      { label: "History", href: "/weight/history" },
     ],
   },
 ];

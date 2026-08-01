@@ -372,6 +372,79 @@ export const workoutItems = pgTable(
   (t) => [index("idx_workout_items_workout").on(t.workoutId)],
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WEIGHT TRACKER — weekly weigh-ins per profile + a goal/pace plan. Everything
+// derived (WoW, total lost, the target line, pace buffer, trend, projected goal
+// date) is COMPUTED in lib/queries/weight.ts, never stored — same spirit as MPG
+// living in the fuel queries. Owned by a profile (Bryce's data ≠ Lauren's),
+// gated for writes via requireEditorFor(profileId) like the rest of the hub.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── Weigh-ins (one row per profile per day; re-logging a day UPDATES it) ───────
+// weight is text-free numeric(5,1): scales are 0.2-lb granularity in practice,
+// one decimal is plenty (e.g. 224.6). The unique (profile, day) index is what
+// makes "log today" idempotent — a second entry for a date overwrites the first.
+export const weighIns = pgTable(
+  "weigh_ins",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    measuredOn: date("measured_on").notNull(),
+    weight: numeric("weight", { precision: 5, scale: 1 }).notNull(), // lbs, e.g. 224.6
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("uniq_weigh_in_profile_date").on(t.profileId, t.measuredOn)],
+);
+
+// ── Weight goal / plan (ONE per profile; "re-plan" overwrites this row) ────────
+// The target line is startWeight declining by perWeekPace lbs/week from startDate,
+// flattening once it reaches goalWeight. Pace is numeric(5,3) so the seeded line
+// reproduces the spreadsheet exactly ((start − goal) / 52 weeks, e.g. 0.577).
+export const weightGoals = pgTable("weight_goals", {
+  id: serial("id").primaryKey(),
+  profileId: integer("profile_id")
+    .notNull()
+    .unique()
+    .references(() => profiles.id, { onDelete: "cascade" }),
+  startWeight: numeric("start_weight", { precision: 5, scale: 1 }).notNull(),
+  startDate: date("start_date").notNull(),
+  goalWeight: numeric("goal_weight", { precision: 5, scale: 1 }).notNull(),
+  perWeekPace: numeric("per_week_pace", { precision: 5, scale: 3 }).notNull(), // lbs/week
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  createdAt: createdAt(),
+});
+
+// ── Weight plans (Phase 2b: many per profile, dated, with a mode) ─────────────
+// Supersedes weight_goals (one-per-profile). A plan is a dated segment you chain:
+// lose → maintain → lose, switched any time. `mode` picks the target shape —
+// 'lose' = a declining line to goalWeight at perWeekPace; 'maintain' = a flat
+// band at goalWeight ± rangeLb. `endDate` null = the active plan; set it (past OR
+// a future deadline like "lose 5 by the wedding") and the next plan takes over.
+export const weightPlans = pgTable(
+  "weight_plans",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    mode: varchar("mode", { length: 20 }).notNull().default("lose"), // lose | maintain
+    startWeight: numeric("start_weight", { precision: 5, scale: 1 }).notNull(),
+    startDate: date("start_date").notNull(),
+    goalWeight: numeric("goal_weight", { precision: 5, scale: 1 }).notNull(),
+    perWeekPace: numeric("per_week_pace", { precision: 5, scale: 3 }).notNull().default("0"), // lose
+    rangeLb: numeric("range_lb", { precision: 4, scale: 1 }), // maintain: ± band around goalWeight
+    endDate: date("end_date"), // null = active plan; else the segment's last day
+    createdAt: createdAt(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("idx_weight_plans_profile").on(t.profileId, t.startDate)],
+);
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
@@ -405,3 +478,9 @@ export type WorkoutItem = typeof workoutItems.$inferSelect;
 export type NewWorkoutItem = typeof workoutItems.$inferInsert;
 export type WorkoutAssignment = typeof workoutAssignments.$inferSelect;
 export type NewWorkoutAssignment = typeof workoutAssignments.$inferInsert;
+export type WeighIn = typeof weighIns.$inferSelect;
+export type NewWeighIn = typeof weighIns.$inferInsert;
+export type WeightGoal = typeof weightGoals.$inferSelect;
+export type NewWeightGoal = typeof weightGoals.$inferInsert;
+export type WeightPlan = typeof weightPlans.$inferSelect;
+export type NewWeightPlan = typeof weightPlans.$inferInsert;
