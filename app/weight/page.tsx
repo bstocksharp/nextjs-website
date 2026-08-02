@@ -8,7 +8,8 @@ import { canEditProfile } from "@/lib/auth";
 import { getWeightDashboard } from "@/lib/queries/weight";
 import WeightActions from "@/components/weight/WeightActions";
 import WeightBody from "@/components/weight/WeightBody";
-import YearSummaryCard from "@/components/weight/YearSummary";
+import YearSwitcher from "@/components/weight/YearSwitcher";
+import Wrapped from "@/components/weight/Wrapped";
 
 export const metadata = { title: "Weight" };
 
@@ -17,9 +18,9 @@ const DEFAULT_ACCENT = "#4f86e0";
 export default async function WeightDashboard({
   searchParams,
 }: {
-  searchParams: Promise<{ profile?: string }>;
+  searchParams: Promise<{ profile?: string; year?: string }>;
 }) {
-  const { profile } = await searchParams;
+  const { profile, year } = await searchParams;
   const active = await getActiveProfile(profile);
 
   if (!active) {
@@ -33,7 +34,7 @@ export default async function WeightDashboard({
   }
 
   const [dash, editor] = await Promise.all([
-    getWeightDashboard(active.id),
+    getWeightDashboard(active.id, year ? Number(year) : undefined),
     canEditProfile(active.id),
   ]);
   const {
@@ -46,6 +47,9 @@ export default async function WeightDashboard({
     planPaceLbPerWeek,
     milestones,
     yearSummary,
+    year: viewYear,
+    availableYears,
+    celebrate,
   } = dash;
   const accent = active.color ?? DEFAULT_ACCENT;
 
@@ -53,6 +57,7 @@ export default async function WeightDashboard({
   const now = new Date();
   now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
   const todayISO = now.toISOString().slice(0, 10);
+  const isCurrentYear = viewYear === now.getFullYear();
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -69,10 +74,14 @@ export default async function WeightDashboard({
           </Typography>
           <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
             {active.name}
-            {plan ? ` · goal ${Number(plan.goalWeight)} lb` : " · no plan set yet"}
+            {plan
+              ? ` · goal ${Number(plan.goalWeight)} lb`
+              : isCurrentYear
+                ? " · no plan set yet"
+                : ""}
           </Typography>
         </Stack>
-        {editor ? (
+        {editor && isCurrentYear ? (
           <WeightActions
             profileId={active.id}
             defaultDate={todayISO}
@@ -86,8 +95,18 @@ export default async function WeightDashboard({
             endDate={plan?.endDate ?? null}
             rangeLb={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
           />
+        ) : !isCurrentYear && yearSummary ? (
+          <Wrapped summary={yearSummary} accent={accent} mode="button" />
         ) : null}
       </Stack>
+
+      {availableYears.length > 1 ? (
+        <Stack direction="row" sx={{ mb: 3 }}>
+          <YearSwitcher years={availableYears} current={viewYear} profile={profile} />
+        </Stack>
+      ) : null}
+
+      {celebrate ? <Wrapped summary={celebrate} accent={accent} mode="celebrate" /> : null}
 
       {weighIns.length === 0 || !stats ? (
         <Paper variant="outlined" sx={{ p: 5, textAlign: "center" }}>
@@ -99,27 +118,24 @@ export default async function WeightDashboard({
           </Typography>
         </Paper>
       ) : (
-        <>
-          <WeightBody
-            stats={stats}
-            hasGoal={!!plan}
-            planPace={planPaceLbPerWeek}
-            color={accent}
-            dates={chart.dates}
-            actual={chart.actual}
-            target={chart.target}
-            movingAvg={chart.movingAvg}
-            bandLow={chart.bandLow}
-            bandHigh={chart.bandHigh}
-            ghost={chart.ghost}
-            holdWeight={plan?.mode === "maintain" ? Number(plan.goalWeight) : null}
-            holdRange={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
-            trends={trends}
-            projections={projections}
-            milestones={milestones!}
-          />
-          {yearSummary ? <YearSummaryCard summary={yearSummary} /> : null}
-        </>
+        <WeightBody
+          stats={stats}
+          hasGoal={!!plan}
+          planPace={planPaceLbPerWeek}
+          color={accent}
+          dates={chart.dates}
+          actual={chart.actual}
+          target={chart.target}
+          movingAvg={chart.movingAvg}
+          bandLow={chart.bandLow}
+          bandHigh={chart.bandHigh}
+          ghost={chart.ghost}
+          holdWeight={plan?.mode === "maintain" ? Number(plan.goalWeight) : null}
+          holdRange={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
+          trends={trends}
+          projections={projections}
+          milestones={milestones!}
+        />
       )}
     </Container>
   );

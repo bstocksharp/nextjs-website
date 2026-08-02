@@ -133,6 +133,9 @@ export type YearSummary = {
   totalChange: number; // + = lost this year
   totalChangePct: number;
   weighIns: number; // count this year
+  low: number; // lightest weigh-in of the year
+  high: number; // heaviest weigh-in of the year
+  bestWeekDrop: number | null; // biggest single-week loss this year
   lastYearAtNow: number | null; // last year's weight at the same week-of-year
 };
 
@@ -192,6 +195,9 @@ export type WeightDashboard = {
   planPaceLbPerWeek: number | null;
   milestones: Milestones | null;
   yearSummary: YearSummary | null;
+  year: number; // the calendar year being viewed
+  availableYears: number[]; // years that have any weigh-ins (newest first)
+  celebrate: YearSummary | null; // a just-finished year to auto-popup (turn window only)
 };
 
 /** Least-squares slope+intercept of y over x; null if fewer than 2 points. */
@@ -218,16 +224,61 @@ const emptyProjection = (enoughData: boolean): Projection => ({
   enoughData,
 });
 
+/** A year's Wrapped summary from raw weigh-ins; null if that year has none. */
+function yearSummaryFor(rows: WeighIn[], year: number): YearSummary | null {
+  const inYear = rows.filter(
+    (r) => r.measuredOn >= `${year}-01-01` && r.measuredOn <= `${year}-12-31`,
+  );
+  if (inYear.length === 0) return null;
+  const w = inYear.map((r) => Number(r.weight));
+  const first = w[0];
+  const last = w[w.length - 1];
+  let bestDrop = 0;
+  for (let i = 1; i < w.length; i++) bestDrop = Math.max(bestDrop, w[i - 1] - w[i]);
+
+  // Last year's weight at the same week-of-year as this year's latest weigh-in.
+  const lastWk = weeksBetween(inYear[0].measuredOn, inYear[inYear.length - 1].measuredOn);
+  const prev = rows.filter(
+    (r) => r.measuredOn >= `${year - 1}-01-01` && r.measuredOn <= `${year - 1}-12-31`,
+  );
+  const pAnchor = prev[0]?.measuredOn ?? `${year - 1}-01-01`;
+  const pMap = new Map<number, number>();
+  for (const r of prev) pMap.set(weeksBetween(pAnchor, r.measuredOn), Number(r.weight));
+
+  return {
+    year,
+    startWeight: first,
+    currentWeight: last,
+    totalChange: round1(first - last),
+    totalChangePct: first ? round1(((first - last) / first) * 100) : 0,
+    weighIns: w.length,
+    low: round1(Math.min(...w)),
+    high: round1(Math.max(...w)),
+    bestWeekDrop: bestDrop > 0 ? round1(bestDrop) : null,
+    lastYearAtNow: pMap.has(lastWk) ? pMap.get(lastWk)! : null,
+  };
+}
+
 /** Everything the dashboard page needs for one profile, in a single call. */
-export async function getWeightDashboard(profileId: number): Promise<WeightDashboard> {
+export async function getWeightDashboard(
+  profileId: number,
+  year?: number,
+): Promise<WeightDashboard> {
   const [rows, plans] = await Promise.all([listWeighIns(profileId), listPlans(profileId)]);
   const today = new Date().toISOString().slice(0, 10);
+  const currentYear = Number(today.slice(0, 4));
+  const viewYear = year ?? currentYear;
+  // Newest year first, so the leftmost switcher button is always the latest year.
+  const availableYears = [...new Set(rows.map((r) => Number(r.measuredOn.slice(0, 4))))].sort(
+    (a, b) => b - a,
+  );
 
-  // Active plan = the one whose window contains today (latest start wins). Kept
-  // as a `const` so TypeScript narrows it inside the closures below.
+  // The plan in effect for the viewed year: the one covering `refDate` (today for
+  // the current year, else Dec 31 of that year). Const so TS narrows it below.
+  const refDate = viewYear >= currentYear ? today : `${viewYear}-12-31`;
   let active: WeightPlan | null = null;
   for (const p of plans) {
-    if (p.startDate <= today && (p.endDate == null || p.endDate >= today)) active = p;
+    if (p.startDate <= refDate && (p.endDate == null || p.endDate >= refDate)) active = p;
   }
   const plan = active;
   const isMaintain = plan?.mode === "maintain";
@@ -235,9 +286,7 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
   const pace = plan ? Number(plan.perWeekPace) : null;
   const rangeLb = plan?.rangeLb != null ? Number(plan.rangeLb) : null;
 
-  // The dashboard shows ONE calendar year (the current year); last year is
-  // ghosted behind for comparison. New year = fresh chart.
-  const viewYear = Number(today.slice(0, 4));
+  // The dashboard shows ONE calendar year; last year ghosts behind for comparison.
   const yStart = `${viewYear}-01-01`;
   const yEnd = `${viewYear}-12-31`;
   const allSeries = rows
@@ -291,6 +340,9 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
       planPaceLbPerWeek: pace,
       milestones: null,
       yearSummary: null,
+      year: viewYear,
+      availableYears,
+      celebrate: null,
     };
   }
 
@@ -574,19 +626,19 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     loggingStreak,
   };
 
-  const yearSummary: YearSummary = {
-    year: viewYear,
-    startWeight: allSeries[0].weight,
-    currentWeight: allSeries[allSeries.length - 1].weight,
-    totalChange: round1(allSeries[0].weight - allSeries[allSeries.length - 1].weight),
-    totalChangePct: allSeries[0].weight
-      ? round1(
-          ((allSeries[0].weight - allSeries[allSeries.length - 1].weight) / allSeries[0].weight) * 100,
-        )
-      : 0,
-    weighIns: allSeries.length,
-    lastYearAtNow: ghostByWeek.has(lastWeek) ? ghostByWeek.get(lastWeek)! : null,
-  };
+  const yearSummary = yearSummaryFor(rows, viewYear);
+
+  // A "just-finished" year to auto-celebrate, but only in the turn window (last
+  // week of December, or the first week of January). Else null — no popup.
+  const nowMonth = Number(today.slice(5, 7));
+  const nowDay = Number(today.slice(8, 10));
+  const celebrateYear =
+    nowMonth === 12 && nowDay >= 25
+      ? currentYear
+      : nowMonth === 1 && nowDay <= 7
+        ? currentYear - 1
+        : null;
+  const celebrate = celebrateYear ? yearSummaryFor(rows, celebrateYear) : null;
 
   return {
     plan,
@@ -598,5 +650,8 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     planPaceLbPerWeek: pace,
     milestones,
     yearSummary,
+    year: viewYear,
+    availableYears,
+    celebrate,
   };
 }

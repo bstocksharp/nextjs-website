@@ -99,6 +99,7 @@ export default function WeightChart({
       data: actual,
       color,
       showMark: true,
+      shape: "circle" as const, // MUI X cycles shapes per series; pin actual to circles
       curve: "linear" as const,
       connectNulls: false,
     },
