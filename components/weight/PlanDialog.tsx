@@ -48,7 +48,8 @@ export default function PlanDialog({
 }) {
   const [error, setError] = React.useState<string | null>(null);
   const [mode, setMode] = React.useState<"lose" | "maintain">(initialMode);
-  const [paceMode, setPaceMode] = React.useState<"pace" | "date">(endDate ? "date" : "pace");
+  // Target date is the default way to define a lose plan (Bryce's preference).
+  const [paceMode, setPaceMode] = React.useState<"pace" | "date">("date");
   // New plans are ready to save immediately; edits enable Save only once changed.
   const [dirty, setDirty] = React.useState(isNew);
 

@@ -123,6 +123,20 @@ export type ChartBase = {
   movingAvg: (number | null)[];
   bandLow: (number | null)[]; // per-week maintain band lower edge (null off-band)
   bandHigh: (number | null)[]; // per-week maintain band upper edge (null off-band)
+  ghost: (number | null)[]; // last year's actuals, aligned by week-of-year (faded)
+};
+
+export type YearSummary = {
+  year: number;
+  startWeight: number; // first weigh-in of the year
+  currentWeight: number; // latest weigh-in of the year
+  totalChange: number; // + = lost this year
+  totalChangePct: number;
+  weighIns: number; // count this year
+  low: number; // lightest weigh-in of the year
+  high: number; // heaviest weigh-in of the year
+  bestWeekDrop: number | null; // biggest single-week loss this year
+  lastYearAtNow: number | null; // last year's weight at the same week-of-year
 };
 
 export type WeightStats = {
@@ -180,6 +194,10 @@ export type WeightDashboard = {
   projections: Record<WindowKey, Projection>;
   planPaceLbPerWeek: number | null;
   milestones: Milestones | null;
+  yearSummary: YearSummary | null;
+  year: number; // the calendar year being viewed
+  availableYears: number[]; // years that have any weigh-ins (newest first)
+  celebrate: YearSummary | null; // a just-finished year to auto-popup (turn window only)
 };
 
 /** Least-squares slope+intercept of y over x; null if fewer than 2 points. */
@@ -206,16 +224,61 @@ const emptyProjection = (enoughData: boolean): Projection => ({
   enoughData,
 });
 
+/** A year's Wrapped summary from raw weigh-ins; null if that year has none. */
+function yearSummaryFor(rows: WeighIn[], year: number): YearSummary | null {
+  const inYear = rows.filter(
+    (r) => r.measuredOn >= `${year}-01-01` && r.measuredOn <= `${year}-12-31`,
+  );
+  if (inYear.length === 0) return null;
+  const w = inYear.map((r) => Number(r.weight));
+  const first = w[0];
+  const last = w[w.length - 1];
+  let bestDrop = 0;
+  for (let i = 1; i < w.length; i++) bestDrop = Math.max(bestDrop, w[i - 1] - w[i]);
+
+  // Last year's weight at the same week-of-year as this year's latest weigh-in.
+  const lastWk = weeksBetween(inYear[0].measuredOn, inYear[inYear.length - 1].measuredOn);
+  const prev = rows.filter(
+    (r) => r.measuredOn >= `${year - 1}-01-01` && r.measuredOn <= `${year - 1}-12-31`,
+  );
+  const pAnchor = prev[0]?.measuredOn ?? `${year - 1}-01-01`;
+  const pMap = new Map<number, number>();
+  for (const r of prev) pMap.set(weeksBetween(pAnchor, r.measuredOn), Number(r.weight));
+
+  return {
+    year,
+    startWeight: first,
+    currentWeight: last,
+    totalChange: round1(first - last),
+    totalChangePct: first ? round1(((first - last) / first) * 100) : 0,
+    weighIns: w.length,
+    low: round1(Math.min(...w)),
+    high: round1(Math.max(...w)),
+    bestWeekDrop: bestDrop > 0 ? round1(bestDrop) : null,
+    lastYearAtNow: pMap.has(lastWk) ? pMap.get(lastWk)! : null,
+  };
+}
+
 /** Everything the dashboard page needs for one profile, in a single call. */
-export async function getWeightDashboard(profileId: number): Promise<WeightDashboard> {
+export async function getWeightDashboard(
+  profileId: number,
+  year?: number,
+): Promise<WeightDashboard> {
   const [rows, plans] = await Promise.all([listWeighIns(profileId), listPlans(profileId)]);
   const today = new Date().toISOString().slice(0, 10);
+  const currentYear = Number(today.slice(0, 4));
+  const viewYear = year ?? currentYear;
+  // Newest year first, so the leftmost switcher button is always the latest year.
+  const availableYears = [...new Set(rows.map((r) => Number(r.measuredOn.slice(0, 4))))].sort(
+    (a, b) => b - a,
+  );
 
-  // Active plan = the one whose window contains today (latest start wins). Kept
-  // as a `const` so TypeScript narrows it inside the closures below.
+  // The plan in effect for the viewed year: the one covering `refDate` (today for
+  // the current year, else Dec 31 of that year). Const so TS narrows it below.
+  const refDate = viewYear >= currentYear ? today : `${viewYear}-12-31`;
   let active: WeightPlan | null = null;
   for (const p of plans) {
-    if (p.startDate <= today && (p.endDate == null || p.endDate >= today)) active = p;
+    if (p.startDate <= refDate && (p.endDate == null || p.endDate >= refDate)) active = p;
   }
   const plan = active;
   const isMaintain = plan?.mode === "maintain";
@@ -223,7 +286,19 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
   const pace = plan ? Number(plan.perWeekPace) : null;
   const rangeLb = plan?.rangeLb != null ? Number(plan.rangeLb) : null;
 
-  const allSeries = rows.map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
+  // The dashboard shows ONE calendar year; last year ghosts behind for comparison.
+  const yStart = `${viewYear}-01-01`;
+  const yEnd = `${viewYear}-12-31`;
+  const allSeries = rows
+    .filter((r) => r.measuredOn >= yStart && r.measuredOn <= yEnd)
+    .map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
+
+  // Prior-year weigh-ins → the faded ghost line (aligned by week-of-year).
+  const pStart = `${viewYear - 1}-01-01`;
+  const pEnd = `${viewYear - 1}-12-31`;
+  const prevSeries = rows
+    .filter((r) => r.measuredOn >= pStart && r.measuredOn <= pEnd)
+    .map((r) => ({ date: r.measuredOn, weight: Number(r.weight) }));
 
   const emptyTrends = {
     all: [] as (number | null)[],
@@ -245,18 +320,16 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     movingAvg: [],
     bandLow: [],
     bandHigh: [],
+    ghost: [],
   };
 
-  // Anchor the 1-year window at the earliest weigh-in / plan start.
-  const firstPlanStart = plans[0]?.startDate ?? null;
-  const anchorDate =
-    allSeries[0] && firstPlanStart
-      ? firstPlanStart < allSeries[0].date
-        ? firstPlanStart
-        : allSeries[0].date
-      : (allSeries[0]?.date ?? firstPlanStart ?? null);
+  // Anchor the year window at the first weigh-in of the year (or Jan 1).
+  const anchorDate = allSeries[0]?.date ?? yStart;
+  const prevAnchor = prevSeries[0]?.date ?? pStart;
+  const ghostByWeek = new Map<number, number>();
+  for (const s of prevSeries) ghostByWeek.set(weeksBetween(prevAnchor, s.date), s.weight);
 
-  if (!anchorDate || allSeries.length === 0) {
+  if (allSeries.length === 0) {
     return {
       plan,
       weighIns: rows,
@@ -266,6 +339,10 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
       projections: emptyProjections,
       planPaceLbPerWeek: pace,
       milestones: null,
+      yearSummary: null,
+      year: viewYear,
+      availableYears,
+      celebrate: null,
     };
   }
 
@@ -298,11 +375,13 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
   const movingAvg: (number | null)[] = [];
   const bandLow: (number | null)[] = [];
   const bandHigh: (number | null)[] = [];
+  const ghost: (number | null)[] = [];
   for (let w = 0; w <= axisEnd; w++) {
     weeks.push(w);
     const date = addWeeks(anchorDate, w);
     dates.push(date);
     actual.push(actualByWeek.has(w) ? actualByWeek.get(w)! : null);
+    ghost.push(ghostByWeek.has(w) ? ghostByWeek.get(w)! : null);
     movingAvg.push(maByWeek.has(w) ? maByWeek.get(w)! : null);
 
     const p = planCovering(date);
@@ -547,14 +626,32 @@ export async function getWeightDashboard(profileId: number): Promise<WeightDashb
     loggingStreak,
   };
 
+  const yearSummary = yearSummaryFor(rows, viewYear);
+
+  // A "just-finished" year to auto-celebrate, but only in the turn window (last
+  // week of December, or the first week of January). Else null — no popup.
+  const nowMonth = Number(today.slice(5, 7));
+  const nowDay = Number(today.slice(8, 10));
+  const celebrateYear =
+    nowMonth === 12 && nowDay >= 25
+      ? currentYear
+      : nowMonth === 1 && nowDay <= 7
+        ? currentYear - 1
+        : null;
+  const celebrate = celebrateYear ? yearSummaryFor(rows, celebrateYear) : null;
+
   return {
     plan,
     weighIns: rows,
     stats,
-    chart: { dates, weeks, actual, target, movingAvg, bandLow, bandHigh },
+    chart: { dates, weeks, actual, target, movingAvg, bandLow, bandHigh, ghost },
     trends,
     projections,
     planPaceLbPerWeek: pace,
     milestones,
+    yearSummary,
+    year: viewYear,
+    availableYears,
+    celebrate,
   };
 }
