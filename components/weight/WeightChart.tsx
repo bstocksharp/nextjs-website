@@ -27,6 +27,7 @@ export type WeightChartProps = {
   movingAvg: (number | null)[];
   bandLow?: (number | null)[]; // per-week maintain band lower edge
   bandHigh?: (number | null)[]; // per-week maintain band upper edge
+  ghost?: (number | null)[]; // last year's actuals, aligned by week-of-year (faded)
   /** The active profile's color — the measured line's identity hue. */
   color: string;
   hasGoal: boolean;
@@ -44,6 +45,7 @@ export default function WeightChart({
   movingAvg,
   bandLow,
   bandHigh,
+  ghost,
   color,
   hasGoal,
 }: WeightChartProps) {
@@ -58,21 +60,39 @@ export default function WeightChart({
 
   // Tight, non-zero y-domain padded a few lbs past the data (never starts at 0).
   const { yMin, yMax } = React.useMemo(() => {
-    const vals = [...actual, ...target, ...trend, ...(bandLow ?? []), ...(bandHigh ?? [])].filter(
-      (v): v is number => v != null,
-    );
+    const vals = [
+      ...actual,
+      ...target,
+      ...trend,
+      ...(bandLow ?? []),
+      ...(bandHigh ?? []),
+      ...(ghost ?? []),
+    ].filter((v): v is number => v != null);
     if (!vals.length) return { yMin: undefined, yMax: undefined };
     return {
       yMin: Math.floor((Math.min(...vals) - 4) / 5) * 5,
       yMax: Math.ceil((Math.max(...vals) + 4) / 5) * 5,
     };
-  }, [actual, target, trend, bandLow, bandHigh]);
+  }, [actual, target, trend, bandLow, bandHigh, ghost]);
 
   const referenceColor = theme.palette.text.secondary; // Target (the plan): neutral gray, dotted
   const trendColor = alpha(color, 0.5); // Trend: a lighter shade of the actual line, dashed
   const avgColor = theme.palette.secondary.main;
 
   const series = [
+    ...(ghost && ghost.some((v) => v != null)
+      ? [
+          {
+            id: "ghost",
+            label: "last year",
+            data: ghost,
+            color: alpha(color, 0.3),
+            showMark: false,
+            curve: "linear" as const,
+            connectNulls: false,
+          },
+        ]
+      : []),
     {
       id: "actual",
       label: "Actual",
@@ -185,6 +205,7 @@ export default function WeightChart({
             strokeWidth: 1,
             opacity: 0.6,
           },
+          "& .MuiLineElement-series-ghost": { strokeDasharray: "4 4", strokeWidth: 1.5 },
         }}
       />
       ) : (

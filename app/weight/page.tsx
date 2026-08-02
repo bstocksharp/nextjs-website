@@ -8,6 +8,7 @@ import { canEditProfile } from "@/lib/auth";
 import { getWeightDashboard } from "@/lib/queries/weight";
 import WeightActions from "@/components/weight/WeightActions";
 import WeightBody from "@/components/weight/WeightBody";
+import YearSummaryCard from "@/components/weight/YearSummary";
 
 export const metadata = { title: "Weight" };
 
@@ -35,8 +36,17 @@ export default async function WeightDashboard({
     getWeightDashboard(active.id),
     canEditProfile(active.id),
   ]);
-  const { plan, weighIns, stats, chart, trends, projections, planPaceLbPerWeek, milestones } =
-    dash;
+  const {
+    plan,
+    weighIns,
+    stats,
+    chart,
+    trends,
+    projections,
+    planPaceLbPerWeek,
+    milestones,
+    yearSummary,
+  } = dash;
   const accent = active.color ?? DEFAULT_ACCENT;
 
   // "Today" computed on the server so the log modal's date hydrates cleanly.
@@ -89,23 +99,27 @@ export default async function WeightDashboard({
           </Typography>
         </Paper>
       ) : (
-        <WeightBody
-          stats={stats}
-          hasGoal={!!plan}
-          planPace={planPaceLbPerWeek}
-          color={accent}
-          dates={chart.dates}
-          actual={chart.actual}
-          target={chart.target}
-          movingAvg={chart.movingAvg}
-          bandLow={chart.bandLow}
-          bandHigh={chart.bandHigh}
-          holdWeight={plan?.mode === "maintain" ? Number(plan.goalWeight) : null}
-          holdRange={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
-          trends={trends}
-          projections={projections}
-          milestones={milestones!}
-        />
+        <>
+          <WeightBody
+            stats={stats}
+            hasGoal={!!plan}
+            planPace={planPaceLbPerWeek}
+            color={accent}
+            dates={chart.dates}
+            actual={chart.actual}
+            target={chart.target}
+            movingAvg={chart.movingAvg}
+            bandLow={chart.bandLow}
+            bandHigh={chart.bandHigh}
+            ghost={chart.ghost}
+            holdWeight={plan?.mode === "maintain" ? Number(plan.goalWeight) : null}
+            holdRange={plan?.rangeLb != null ? Number(plan.rangeLb) : null}
+            trends={trends}
+            projections={projections}
+            milestones={milestones!}
+          />
+          {yearSummary ? <YearSummaryCard summary={yearSummary} /> : null}
+        </>
       )}
     </Container>
   );

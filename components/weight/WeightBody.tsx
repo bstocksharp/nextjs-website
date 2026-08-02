@@ -129,6 +129,7 @@ export default function WeightBody({
   movingAvg,
   bandLow,
   bandHigh,
+  ghost,
   holdWeight,
   holdRange,
   trends,
@@ -145,6 +146,7 @@ export default function WeightBody({
   movingAvg: (number | null)[];
   bandLow: (number | null)[];
   bandHigh: (number | null)[];
+  ghost: (number | null)[];
   holdWeight?: number | null;
   holdRange?: number | null;
   trends: Record<WindowKey, (number | null)[]>;
@@ -344,6 +346,7 @@ export default function WeightBody({
           movingAvg={movingAvg}
           bandLow={bandLow}
           bandHigh={bandHigh}
+          ghost={ghost}
           color={color}
           hasGoal={hasGoal}
         />
