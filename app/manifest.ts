@@ -7,8 +7,8 @@ import { getActiveProfile } from "@/lib/profile";
 // generated PNGs from /manifest-icon (profile color + initial — same family as
 // apple-icon/profile-icon): PNG at 192/512 is what Android/Chrome installability
 // expects, and the maskable variant keeps the glyph inside the crop-safe zone.
-// NOTE for Phase A (login): the middleware allowlist must include
-// /manifest.webmanifest and /manifest-icon, or installs break when logged out.
+// NOTE: proxy.ts (the login gate) must keep /manifest.webmanifest and
+// /manifest-icon on its allowlist, or installs break when logged out.
 export const dynamic = "force-dynamic";
 
 export default async function manifest(): Promise<MetadataRoute.Manifest> {

@@ -27,6 +27,7 @@ import {
 } from "node:crypto";
 import { getActiveProfile } from "@/lib/profile";
 import { getProfile } from "@/lib/queries/profiles";
+import { requireSession } from "@/lib/session";
 
 // Signed list of unlocked profile IDs. (Renamed from the old single-token cookie;
 // the old "garage_editor" cookie simply stops being read — everyone re-unlocks.)
@@ -143,6 +144,7 @@ export const isEditor = isEditMode;
 
 /** Guard for COMMUNAL writes (catalog, shared cars): active profile in edit mode. */
 export async function requireEditor(): Promise<void> {
+  await requireSession(); // global login first (the proxy's belt, this is the suspenders)
   if (!(await isEditMode())) {
     throw new Error("Not in edit mode — unlock editing first.");
   }
@@ -152,6 +154,7 @@ export async function requireEditor(): Promise<void> {
 export async function requireEditorFor(
   ownerId: number | null | undefined,
 ): Promise<void> {
+  await requireSession(); // global login first (the proxy's belt, this is the suspenders)
   if (!(await canEditProfile(ownerId))) {
     throw new Error("Not authorized — unlock this profile to edit its stuff.");
   }

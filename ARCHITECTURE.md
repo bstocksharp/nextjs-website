@@ -26,8 +26,9 @@ app/
   manifest.ts           web app manifest (installable / standalone)
   apple-icon.tsx        iOS home-screen icon (generated via next/og)
   error.tsx, loading.tsx
-  unlock/               shared editor password screen
-  actions/*.ts          "use server" mutations, one file per domain (auth, vehicles, …, workout)
+  login/                the global sign-in page (the only page reachable signed out)
+  unlock/               per-profile edit-password screen (behind the login)
+  actions/*.ts          "use server" mutations, one file per domain (session, auth, vehicles, …)
   garage/**             the Garage app (its own layout/error + CRUD routes)
   workout/**            the Workout app
 
@@ -39,9 +40,13 @@ components/
   garage/    car-specific (Vehicle*, Build*, Maintenance*, Fuel*, Parts*, Wishlist*, Journal*)
   workout/   workout-specific (WorkoutRunner, WeekSchedule, CatalogList, builder forms, …)
 
+proxy.ts                the login gate (session check + redirect, rolling renewal)
+
 lib/
   apps.tsx              the app registry (drives the hub grid + header switcher)
-  auth.ts               password-to-edit (HMAC cookie)
+  session-core.ts       session-token mint/verify (WebCrypto — shared w/ the proxy)
+  session.ts            session cookie helpers + requireSession() (server-only)
+  auth.ts               per-profile edit locks (password-to-edit, HMAC cookie)
   db/index.ts           Drizzle client (Neon HTTP, server-only)
   db/schema.ts          ONE file, every table
   queries/*.ts          server-only reads, one file per domain
@@ -67,14 +72,30 @@ scripts/                node utilities (seed-workout.mjs, inspect-db.mjs) — ra
 4. **Components** go in `components/<slug>/`; only cross-app/generic ones go in
    `components/shared/`.
 
-## Auth — public to view, password to edit
+## Auth — two layers: a global login, then per-profile edit locks
 
-[`lib/auth.ts`](lib/auth.ts): there are no user accounts. A single shared
-`EDIT_PASSWORD` unlocks editing for everyone; the cookie value is an HMAC of
-`"editor"` keyed by `COOKIE_SECRET` (unforgeable). `isEditor()` gates UI; every
-mutating action calls `requireEditor()`. Missing secrets degrade to read-only
-(never crash). Unlock at `/unlock`. **Editing is the *only* real security
-boundary** — see Profiles below for why profile scoping is organization, not auth.
+**Layer 1 — the login (the real security boundary).** The hub is **private**:
+[`proxy.ts`](proxy.ts) (Next 16.3's rename of the `middleware` convention)
+redirects signed-out visitors to `/login` (allowlisting only the manifest/icon
+routes a PWA install needs). Sessions are 90-day **rolling** signed cookies
+(`hub_session`, HMAC via [`lib/session-core.ts`](lib/session-core.ts) — WebCrypto
+so the same code runs in the proxy and actions; server helpers in
+[`lib/session.ts`](lib/session.ts)). Any visit past the half-life re-issues the
+cookie, so devices in regular use never log out. Accounts (`accounts` table) are
+login identities, distinct from profiles; there is **no signup UI** — create one
+with `node scripts/create-account.mjs <username>` (`--reset` to change a
+password). The proxy fails **closed** (no `COOKIE_SECRET` → nobody in), and the
+write guards call `requireSession()` too, so a proxy bypass still can't mutate
+anything.
+
+**Layer 2 — edit locks (social, not security).** [`lib/auth.ts`](lib/auth.ts):
+behind the login, viewing is open to the household; *editing* is gated per
+profile by an **optional** edit password (`profiles.editPasswordHash`, scrypt).
+Unlocked profile ids ride in the signed `hub_edit_unlocks` cookie. `isEditMode()`
+gates UI; every mutating action calls `requireEditor()` (communal) or
+`requireEditorFor(owner)` (owned) — see [`lib/authz.ts`](lib/authz.ts) for
+resource-aware guards. It's a forgiving "hands off my stuff" layer for a trusted
+household, not a boundary.
 
 ## Profiles, visibility & access
 
@@ -86,10 +107,9 @@ cookie — [`lib/profile.ts`](lib/profile.ts) `getActiveProfile()`, precedence:
 [`ProfileMenu`](components/shared/ProfileMenu.tsx)); unlocked editors can add people.
 It renders in every app header, so identity is consistent hub-wide.
 
-**Profiles are NOT a security boundary (by design).** There are no per-profile
-passwords and anyone may switch profiles freely — so profile-level "permissions"
-would be unenforceable theater. The only real gate is the site-wide `EDIT_PASSWORD`.
-Two consequences:
+**Profiles are NOT a security boundary (by design).** Anyone signed in may switch
+profiles freely; the optional per-profile edit passwords are a courtesy lock, not
+a permission system. The real gate is the global login above. Two consequences:
 
 - **Visibility = organization, not permission.** A vehicle has an **owner**
   (`vehicles.profile_id`) and a **visibility** (`vehicles.visibility`: `shared` |
@@ -112,12 +132,13 @@ deactivate the last active profile or delete without an heir, and
 `workouts.createdByProfileId` is `ON DELETE RESTRICT` so a delete can never nuke
 shared routines out from under someone.
 
-**Future direction:** if this grows into a multi-tenant product, an **account login**
-becomes the real security boundary with profiles living *under* an account.
-`visibility` then grows a `custom` value backed by a `vehicle_shares` join table
-(vehicleId, profileId, canEdit) — no rework of the owner/visibility columns.
-Per-profile passwords are intentionally omitted (a profile wanting true privacy = its
-own account); revisit only if that product direction changes.
+**Future direction (auth roadmap):** the account login above is Phase A. Phase B
+adds passkeys (WebAuthn/Face ID) on top of it; Phase C adds **groups** (one group
+= a household holding accounts + profiles + all data) so a demo account can exist
+with its own sandboxed, reseed-on-login data — that's when every query gains a
+tenant filter. `visibility` can then grow a `custom` value backed by a
+`vehicle_shares` join table (vehicleId, profileId, canEdit) — no rework of the
+owner/visibility columns.
 
 ## Data layer
 
@@ -194,10 +215,10 @@ builder and the runner consume.
 
 - `npm run dev` · `npm run db:push` · `npm run db:studio` · `node scripts/seed-workout.mjs`
 - **Env** (`.env.local`, gitignored): `POSTGRES_URL` / `POSTGRES_URL_NON_POOLING`
-  (Neon, auto from the Vercel integration), `COOKIE_SECRET` + `EDIT_PASSWORD`
-  (editor auth). ⚠️ The auth vars are **local-only today** — add them in Vercel →
-  Environment Variables for editing to work on the deployed site (viewing/running
-  works without).
+  (Neon, auto from the Vercel integration), `COOKIE_SECRET` (signs the session +
+  edit-unlock cookies). ⚠️ `COOKIE_SECRET` must be set in Vercel → Environment
+  Variables **before deploying the login gate** — the proxy fails closed
+  without it, so nobody (including us) can sign in.
 - **PWA:** the hub is installable ("Add to Home Screen") and runs standalone via
   `app/manifest.ts` + `app/manifest-icon/route.tsx` (generated PNG icons, profile
   color + initial) + `app/apple-icon.tsx` (iOS). `public/icon.svg` is a static

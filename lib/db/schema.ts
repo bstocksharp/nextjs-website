@@ -235,6 +235,21 @@ export const resources = pgTable("resources", {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// ACCOUNTS — the global login (Phase A of the auth roadmap). An account is a
+// LOGIN IDENTITY for the whole hub, distinct from profiles (the household's
+// people/data — a kid can have a profile with no login). Today one account =
+// the household; Phase C adds groups so one group can hold several accounts
+// and a demo account gets its own sandboxed data. No signup UI by design —
+// accounts are created with `node scripts/create-account.mjs <username>`.
+// ─────────────────────────────────────────────────────────────────────────────
+export const accounts = pgTable("accounts", {
+  id: serial("id").primaryKey(),
+  username: varchar("username", { length: 80 }).notNull().unique(), // stored lowercase
+  passwordHash: text("password_hash").notNull(), // scrypt "scrypt$salt$hash" (lib/auth)
+  createdAt: createdAt(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROFILES — the hub-wide people (Bryce, Lauren). Data, not accounts. NOT a
 // security boundary (no passwords, free switching) — see ARCHITECTURE. First used
 // by the workout app; now hub-wide (vehicles.profile_id, active_profile cookie).
@@ -446,6 +461,8 @@ export const weightPlans = pgTable(
 );
 
 // ── Inferred types for use across the app ─────────────────────────────────────
+export type Account = typeof accounts.$inferSelect;
+export type NewAccount = typeof accounts.$inferInsert;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
 export type MaintenanceRecord = typeof maintenanceRecords.$inferSelect;

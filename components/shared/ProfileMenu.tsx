@@ -27,11 +27,13 @@ import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import LogoutIcon from "@mui/icons-material/Logout";
 import CheckIcon from "@mui/icons-material/Check";
 import SubmitButton from "./SubmitButton";
 import ColorSwatches, { PROFILE_SWATCHES } from "./ColorSwatches";
 import { switchProfile, addPerson } from "@/app/actions/profile";
 import { lockAction, unlockInlineAction } from "@/app/actions/auth";
+import { logoutAction } from "@/app/actions/session";
 
 export type ProfilePick = { id: number; name: string; color: string | null };
 
@@ -222,6 +224,21 @@ export default function ProfileMenu({
             </MenuItem>
           )
         ) : null}
+
+        <Divider />
+
+        {/* The global login (whole household) — not the per-profile edit lock. */}
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            startTransition(() => logoutAction());
+          }}
+        >
+          <ListItemIcon>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Sign out</ListItemText>
+        </MenuItem>
       </Menu>
 
       <AddPersonDialog
