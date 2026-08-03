@@ -199,4 +199,6 @@ builder and the runner consume.
   Environment Variables for editing to work on the deployed site (viewing/running
   works without).
 - **PWA:** the hub is installable ("Add to Home Screen") and runs standalone via
-  `app/manifest.ts` + `public/icon.svg` + `app/apple-icon.tsx`.
+  `app/manifest.ts` + `app/manifest-icon/route.tsx` (generated PNG icons, profile
+  color + initial) + `app/apple-icon.tsx` (iOS). `public/icon.svg` is a static
+  fallback kept for reference, no longer referenced by the manifest.
