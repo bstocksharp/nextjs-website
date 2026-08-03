@@ -27,7 +27,9 @@ app/
   apple-icon.tsx        iOS home-screen icon (generated via next/og)
   error.tsx, loading.tsx
   login/                the global sign-in page (the only page reachable signed out)
-  unlock/               per-profile edit-password screen (behind the login)
+  group/                the household: logins, people & claims (Phase E: invites)
+  passkeys/             per-device passkey management (add/remove)
+  unlock/               "you're in view mode" → one-click edit-mode toggle
   actions/*.ts          "use server" mutations, one file per domain (session, auth, vehicles, …)
   garage/**             the Garage app (its own layout/error + CRUD routes)
   workout/**            the Workout app
@@ -114,14 +116,22 @@ Host, so localhost and production each keep their own passkeys (WebAuthn binds
 credentials per-domain by design). The password is always the fallback — losing
 every passkey never locks anyone out.
 
-**Layer 2 — edit locks (social, not security).** [`lib/auth.ts`](lib/auth.ts):
-behind the login, viewing is open to the household; *editing* is gated per
-profile by an **optional** edit password (`profiles.editPasswordHash`, scrypt).
-Unlocked profile ids ride in the signed `hub_edit_unlocks` cookie. `isEditMode()`
-gates UI; every mutating action calls `requireEditor()` (communal) or
-`requireEditorFor(owner)` (owned) — see [`lib/authz.ts`](lib/authz.ts) for
-resource-aware guards. It's a forgiving "hands off my stuff" layer for a trusted
-household, not a boundary.
+**Layer 2 — edit mode + the claim.** [`lib/auth.ts`](lib/auth.ts): behind the
+login, viewing is open to the household; *writes* need two things.
+**Edit mode** is a passwordless per-device toggle (profile menu → *Enter edit
+mode*, `hub_edit_mode` cookie) that starts OFF so browsing never edits by
+accident — it's a preference, not a permission (every guard also checks the
+session). **The claim** is the protection: an account may claim a profile
+(`accounts.profileId`, self-service at `/group`), and a claimed profile's stuff
+is editable **only by its claiming account**; an unclaimed profile (a kid) stays
+open to the whole group. Signing in as a claimed account auto-switches the
+active profile to that person. Every mutating action calls `requireEditor()`
+(communal) or `requireEditorFor(owner)` (owned) — see
+[`lib/authz.ts`](lib/authz.ts) for resource-aware guards.
+
+*(Phase D retired the per-profile edit passwords: the login already proves who
+you are, so the claim does that job. `hashPassword`/`verifyPassword` in
+`lib/auth.ts` now serve ACCOUNT passwords only.)*
 
 ## Profiles, visibility & access
 
@@ -134,8 +144,9 @@ cookie — [`lib/profile.ts`](lib/profile.ts) `getActiveProfile()`, precedence:
 It renders in every app header, so identity is consistent hub-wide.
 
 **Profiles are NOT a security boundary (by design).** Anyone signed in may switch
-profiles freely; the optional per-profile edit passwords are a courtesy lock, not
-a permission system. The real gate is the global login above. Two consequences:
+profiles freely — *viewing* another person was never gated, and their claimed
+stuff stays hands-off regardless. The real gates are the group (tenancy) and the
+claim (ownership). Two consequences:
 
 - **Visibility = organization, not permission.** A vehicle has an **owner**
   (`vehicles.profile_id`) and a **visibility** (`vehicles.visibility`: `shared` |
@@ -148,8 +159,9 @@ a permission system. The real gate is the global login above. Two consequences:
 - **Editing stays gated by the one site password**, regardless of profile — any
   unlocked person can edit any car they can see.
 
-**Lifecycle:** editors add people (profile menu → *Add person*) and manage them at
-**`/people`** (linked from the switcher). *Deactivate* soft-deletes
+**Lifecycle:** all household management lives on **`/group`** (profile menu →
+*Manage group*; `/people` redirects there): add people, rename the group, edit a
+person, claim/release. *Deactivate* soft-deletes
 (`profiles.archived_at`) — hidden from the switcher, can't be active, **all data
 kept**; *Reactivate* restores. *Delete forever* is irreversible: it reassigns the
 person's **shared** cars + authored workouts to a chosen **heir**, then deletes their
@@ -158,12 +170,14 @@ deactivate the last active profile or delete without an heir, and
 `workouts.createdByProfileId` is `ON DELETE RESTRICT` so a delete can never nuke
 shared routines out from under someone.
 
-**Future direction (auth roadmap):** Phases A (login), B (passkeys), and C
-(groups + demo tenant) are done. Phase D links accounts to a default profile
-(sign in as Lauren → hub switches to Lauren), at which point the per-profile
-edit passwords can retire — the system will know who's at the keyboard.
-`visibility` can also grow a `custom` value backed by a `vehicle_shares` join
-table (vehicleId, profileId, canEdit) — no rework of the owner/visibility columns.
+**Future direction (auth roadmap):** Phases A (login), B (passkeys), C (groups +
+demo tenant) and D (claims) are done. **Phase E** is product-mode: a group
+**owner** (`groups.ownerAccountId`) who can invite and remove members, signed
+expiring **invite links** (`/join?token=…` — the only self-serve account
+creation; today it's `scripts/create-account.mjs`), and seats/billing hanging off
+the group. `/group` is the page that grows those. `visibility` can also grow a
+`custom` value backed by a `vehicle_shares` join table (vehicleId, profileId,
+canEdit) — no rework of the owner/visibility columns.
 
 ## Data layer
 

@@ -2,60 +2,30 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { unlockProfile, lockProfile, type UnlockResult } from "@/lib/auth";
-import { getActiveProfile } from "@/lib/profile";
+import { enterEditMode, exitEditMode } from "@/lib/auth";
 
-// Edit mode is per-profile now: these all act on whoever's ACTIVE. Switch profile
-// first (that's open to everyone), then unlock that person to edit their stuff.
+// Edit mode is a passwordless per-device toggle (Phase D — the old per-profile
+// unlock passwords are gone; a CLAIMED profile is protected by its claim, see
+// lib/auth). These just flip the cookie and refresh in place.
 
-export type UnlockState = UnlockResult | null;
-
-/**
- * Inline unlock — the profile-menu password dialog. Unlocks the active profile;
- * returns a result so the dialog can show an error in place, and revalidates on
- * success so edit permissions refresh without navigating away.
- */
-export async function unlockInlineAction(
-  _prev: UnlockState,
-  formData: FormData,
-): Promise<UnlockState> {
-  const active = await getActiveProfile();
-  if (!active) return { ok: false, error: "No active profile to unlock." };
-
-  const result = await unlockProfile(active.id, String(formData.get("password") ?? ""));
-  if (result.ok) revalidatePath("/", "layout");
-  return result;
-}
-
-/**
- * Enter edit mode for a PASSWORDLESS active profile — one click, no dialog. (If
- * the profile actually has a password, unlockProfile refuses and nothing changes.)
- */
+/** Turn editing on and refresh in place (profile-menu toggle). */
 export async function enterEditModeAction(): Promise<void> {
-  const active = await getActiveProfile();
-  if (!active) return;
-  const result = await unlockProfile(active.id);
-  if (result.ok) revalidatePath("/", "layout");
+  await enterEditMode();
+  revalidatePath("/", "layout");
+}
+
+/** Turn editing off and refresh in place. */
+export async function exitEditModeAction(): Promise<void> {
+  await exitEditMode();
+  revalidatePath("/", "layout");
 }
 
 /**
- * Full-page unlock — the `/unlock` fallback route. Unlocks the active profile; on
- * success, home.
+ * The `/unlock` screen's button — edit-gated pages still redirect there when
+ * you're in view mode; one click turns editing on and heads home.
  */
-export async function unlockAction(formData: FormData): Promise<void> {
-  const active = await getActiveProfile();
-  if (!active) redirect("/");
-
-  const result = await unlockProfile(active.id, String(formData.get("password") ?? ""));
-  if (!result.ok) redirect("/unlock?error=1");
-
+export async function unlockScreenAction(): Promise<void> {
+  await enterEditMode();
   revalidatePath("/", "layout");
   redirect("/");
-}
-
-/** Leave edit mode for the active profile, and refresh in place. */
-export async function lockAction(): Promise<void> {
-  const active = await getActiveProfile();
-  if (active) await lockProfile(active.id);
-  revalidatePath("/", "layout");
 }

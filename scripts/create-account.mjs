@@ -1,9 +1,15 @@
 // Create (or password-reset) a GLOBAL LOGIN account — the only way accounts are
-// made; there's deliberately no signup UI. Plain JS + raw SQL on the Neon HTTP
-// client, same zero-build-step pattern as the seed scripts.
+// made until Phase E's invite links; there's deliberately no signup UI. Plain JS
+// + raw SQL on the Neon HTTP client, same zero-build-step pattern as the seeds.
 //
-//   node scripts/create-account.mjs <username>            create (prompts for password)
-//   node scripts/create-account.mjs <username> --reset    change an existing password
+//   node scripts/create-account.mjs <username>              new login + ITS OWN new group
+//   node scripts/create-account.mjs <username> --join <id>  new login INTO an existing group
+//   node scripts/create-account.mjs <username> --reset      change an existing password
+//
+// The group decides what they see: their own group = a fresh empty hub (a
+// friend like Val); --join = full member of that household (sees its data,
+// claims a profile at /group). Run without --join when in doubt — joining can't
+// be undone from the app yet.
 //
 // The password is prompted with echo muted (never on the command line — shell
 // history is forever). Hash format matches lib/auth.ts: "scrypt$salt$hash".
@@ -24,10 +30,17 @@ const sql = neon(url);
 
 const args = process.argv.slice(2);
 const reset = args.includes("--reset");
-const username = args.find((a) => !a.startsWith("--"))?.trim().toLowerCase();
+const joinIndex = args.indexOf("--join");
+const joinGroupId = joinIndex >= 0 ? Number(args[joinIndex + 1]) : null;
+const username = args
+  .filter((a, i) => !a.startsWith("--") && (joinIndex < 0 || i !== joinIndex + 1))[0]
+  ?.trim()
+  .toLowerCase();
 
-if (!username) {
-  console.error("Usage: node scripts/create-account.mjs <username> [--reset]");
+if (!username || (joinIndex >= 0 && !Number.isInteger(joinGroupId))) {
+  console.error(
+    "Usage: node scripts/create-account.mjs <username> [--join <groupId>] [--reset]",
+  );
   process.exit(1);
 }
 
@@ -107,6 +120,29 @@ async function main() {
     process.exit(1);
   }
 
+  // Resolve the group BEFORE prompting — a bad --join should fail fast, not
+  // after someone has typed a password twice. --join puts the login INSIDE an
+  // existing household (they see its data); default is a brand-new empty group.
+  let group = null;
+  if (!existing) {
+    if (joinGroupId !== null) {
+      [group] = await sql`SELECT id, name, is_demo FROM groups WHERE id = ${joinGroupId}`;
+      if (!group) {
+        const all = await sql`SELECT id, name FROM groups WHERE is_demo = false ORDER BY id`;
+        console.error(
+          `No group #${joinGroupId}. Existing: ${all.map((g) => `#${g.id} "${g.name}"`).join(", ")}`,
+        );
+        process.exit(1);
+      }
+      if (group.is_demo) {
+        console.error(
+          "Refusing to add a real login to the demo group (it gets wiped on every demo sign-in).",
+        );
+        process.exit(1);
+      }
+    }
+  }
+
   const password = await promptHidden(
     `${reset ? "New" : ""} password for "${username}" (typing is hidden): `.trimStart(),
   );
@@ -126,10 +162,18 @@ async function main() {
   if (existing) {
     await sql`UPDATE accounts SET password_hash = ${passwordHash} WHERE id = ${existing.id}`;
     console.log(`Password updated for "${username}".`);
-  } else {
-    await sql`INSERT INTO accounts (username, password_hash) VALUES (${username}, ${passwordHash})`;
-    console.log(`Account "${username}" created. Sign in at /login.`);
+    return;
   }
+
+  if (!group) {
+    [group] = await sql`INSERT INTO groups (name) VALUES (${`${username}'s hub`}) RETURNING id, name`;
+  }
+
+  await sql`INSERT INTO accounts (username, password_hash, group_id)
+            VALUES (${username}, ${passwordHash}, ${group.id})`;
+  console.log(
+    `Account "${username}" created in group #${group.id} "${group.name}"${joinGroupId === null ? " (new)" : ""}. Sign in at /login.`,
+  );
 }
 
 main().catch((err) => {

@@ -16,6 +16,7 @@ import {
 import { db } from "@/lib/db";
 import { accounts, passkeys } from "@/lib/db/schema";
 import { createSession, requireSession } from "@/lib/session";
+import { setActiveProfileCookie } from "@/lib/profile";
 import { relyingParty, storeChallenge, takeChallenge } from "@/lib/webauthn";
 import { listPasskeys, getPasskey } from "@/lib/queries/passkeys";
 
@@ -179,12 +180,14 @@ export async function finishPasskeyLogin(
 
   // The session needs the account's group — one lookup at login time only.
   const [account] = await db
-    .select({ groupId: accounts.groupId })
+    .select({ groupId: accounts.groupId, profileId: accounts.profileId })
     .from(accounts)
     .where(eq(accounts.id, passkey.accountId))
     .limit(1);
   if (!account) return { ok: false, error: "Account not found." };
   await createSession(passkey.accountId, account.groupId);
+  // Signing in as a claimed account means "I am that person" — switch to them.
+  if (account.profileId !== null) await setActiveProfileCookie(account.profileId);
   return { ok: true };
 }
 

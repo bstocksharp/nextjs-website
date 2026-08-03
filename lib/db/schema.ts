@@ -270,6 +270,15 @@ export const accounts = pgTable("accounts", {
   groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   username: varchar("username", { length: 80 }).notNull().unique(), // stored lowercase
   passwordHash: text("password_hash").notNull(), // scrypt "scrypt$salt$hash" (lib/auth)
+  // THE CLAIM (Phase D): this login IS this person. Signing in auto-switches to
+  // the claimed profile, and a claimed profile's stuff is editable ONLY by its
+  // claiming account — "claim is the lock", replacing the old per-profile edit
+  // passwords. Unclaimed profiles (a kid) stay open to the whole group. unique:
+  // one account per profile; nullable: an account may claim nothing. Managed at
+  // /group; set null when the profile is deleted.
+  profileId: integer("profile_id")
+    .unique()
+    .references(() => profiles.id, { onDelete: "set null" }),
   createdAt: createdAt(),
 });
 
@@ -323,12 +332,8 @@ export const profiles = pgTable("profiles", {
   // [] = "not set up yet" → nothing is filtered (show everything). Editor-gated to
   // change, so the read-only showcase stays read-only — see auth notes.
   equipment: jsonb("equipment").$type<string[]>().notNull().default([]),
-  // OPTIONAL edit-lock password (scrypt hash, "scrypt$salt$hash"). Null = no
-  // password → anyone can enter edit mode for this profile. Set → you must enter
-  // it to edit this profile's own stuff (its workouts, schedule, private cars,
-  // settings). NOT a login (viewing/running is always open) and NOT real security
-  // — a forgiving per-person lock. See lib/auth + [[auth-single-login-no-roles]].
-  editPasswordHash: text("edit_password_hash"),
+  // (Phase D removed the per-profile edit passwords — a profile is protected by
+  // being CLAIMED by an account instead; see accounts.profileId.)
   // Soft-delete: "Deactivate" sets this (hidden from the switcher, can't be
   // active) but keeps all their data. "Delete forever" removes the row after
   // reassigning shared cars/workouts. null = active.

@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { accounts, groups } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { createSession, destroySession } from "@/lib/session";
+import { setActiveProfileCookie } from "@/lib/profile";
 import { reseedDemoGroup } from "@/lib/demo";
 
 // The global login/logout. Accounts are created only via
@@ -55,6 +56,8 @@ export async function loginAction(
   if (group?.isDemo) await reseedDemoGroup(group.id);
 
   await createSession(account.id, account.groupId);
+  // Signing in as a claimed account means "I am that person" — switch to them.
+  if (account.profileId !== null) await setActiveProfileCookie(account.profileId);
   // Only same-site paths — never a full URL (open-redirect guard).
   redirect(from.startsWith("/") && !from.startsWith("//") ? from : "/");
 }
