@@ -27,6 +27,7 @@ import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import FingerprintIcon from "@mui/icons-material/Fingerprint";
 import LogoutIcon from "@mui/icons-material/Logout";
 import CheckIcon from "@mui/icons-material/Check";
 import SubmitButton from "./SubmitButton";
@@ -228,6 +229,12 @@ export default function ProfileMenu({
         <Divider />
 
         {/* The global login (whole household) — not the per-profile edit lock. */}
+        <MenuItem component={Link} href="/passkeys" onClick={closeMenu}>
+          <ListItemIcon>
+            <FingerprintIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Passkeys…</ListItemText>
+        </MenuItem>
         <MenuItem
           onClick={() => {
             closeMenu();

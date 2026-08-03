@@ -88,6 +88,17 @@ password). The proxy fails **closed** (no `COOKIE_SECRET` → nobody in), and th
 write guards call `requireSession()` too, so a proxy bypass still can't mutate
 anything.
 
+**Passkeys (WebAuthn / Face ID)** ride on top of the login: manage at
+`/passkeys` (add this device, remove lost ones), sign in usernameless from
+`/login` — the platform's discoverable credential identifies the account.
+`@simplewebauthn/{server,browser}` do the heavy lifting; flows are two server
+actions each ([`app/actions/passkeys.ts`](app/actions/passkeys.ts)) with the
+challenge riding in a one-shot signed cookie between them
+([`lib/webauthn.ts`](lib/webauthn.ts)). The rpID/origin derive from the request
+Host, so localhost and production each keep their own passkeys (WebAuthn binds
+credentials per-domain by design). The password is always the fallback — losing
+every passkey never locks anyone out.
+
 **Layer 2 — edit locks (social, not security).** [`lib/auth.ts`](lib/auth.ts):
 behind the login, viewing is open to the household; *editing* is gated per
 profile by an **optional** edit password (`profiles.editPasswordHash`, scrypt).

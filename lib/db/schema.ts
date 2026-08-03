@@ -249,6 +249,36 @@ export const accounts = pgTable("accounts", {
   createdAt: createdAt(),
 });
 
+// ── Passkeys (Phase B: WebAuthn / Face ID) ────────────────────────────────────
+// One row per registered authenticator; an account can have several (one per
+// device, or one synced iCloud/Google passkey shared across devices). The
+// password stays as the fallback — a passkey is an ADDITIONAL door key, and
+// deleting the last one must never lock anyone out. Registered at /passkeys
+// (signed in); usernameless login via the discoverable credential ("resident
+// key") that Face ID picks for you. Sign/verify flows: app/actions/passkeys.ts.
+export const passkeys = pgTable(
+  "passkeys",
+  {
+    // The credential's own WebAuthn ID (base64url) — globally unique by spec,
+    // and what the authenticator sends at login, so it's the natural PK.
+    id: text("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    publicKey: text("public_key").notNull(), // base64url COSE public key bytes
+    // Signature counter — SimpleWebAuthn compares it to catch cloned
+    // authenticators. Apple platform authenticators always report 0; store it anyway.
+    counter: integer("counter").notNull().default(0),
+    transports: jsonb("transports").$type<string[]>().notNull().default([]), // e.g. ["internal","hybrid"]
+    deviceType: varchar("device_type", { length: 20 }), // singleDevice | multiDevice (synced)
+    backedUp: boolean("backed_up").notNull().default(false), // synced to iCloud/Google
+    label: varchar("label", { length: 120 }), // human name shown at /passkeys
+    createdAt: createdAt(),
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [index("idx_passkeys_account").on(t.accountId)],
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PROFILES — the hub-wide people (Bryce, Lauren). Data, not accounts. NOT a
 // security boundary (no passwords, free switching) — see ARCHITECTURE. First used
@@ -463,6 +493,8 @@ export const weightPlans = pgTable(
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
+export type Passkey = typeof passkeys.$inferSelect;
+export type NewPasskey = typeof passkeys.$inferInsert;
 export type Vehicle = typeof vehicles.$inferSelect;
 export type NewVehicle = typeof vehicles.$inferInsert;
 export type MaintenanceRecord = typeof maintenanceRecords.$inferSelect;

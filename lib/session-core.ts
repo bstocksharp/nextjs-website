@@ -46,8 +46,13 @@ function fromB64url(s: string): Uint8Array | null {
   }
 }
 
-export async function mintSessionToken(
-  payload: SessionPayload,
+// ── Generic signed tokens ─────────────────────────────────────────────────────
+// The session cookie and the WebAuthn challenge cookie (lib/webauthn.ts) share
+// this: any JSON payload with an `exp`, signed and expiry-checked the same way.
+
+/** Sign any payload (must carry `exp`, epoch seconds) → `body.signature`. */
+export async function mintToken(
+  payload: { exp: number } & Record<string, unknown>,
   secret: string,
 ): Promise<string> {
   const body = toB64url(enc.encode(JSON.stringify(payload)));
@@ -56,10 +61,10 @@ export async function mintSessionToken(
 }
 
 /** Verify signature + expiry → the payload, or null for anything invalid. */
-export async function readSessionToken(
+export async function readToken<T extends { exp: number }>(
   token: string | undefined | null,
   secret: string,
-): Promise<SessionPayload | null> {
+): Promise<T | null> {
   if (!token) return null;
   const dot = token.lastIndexOf(".");
   if (dot < 0) return null;
@@ -80,10 +85,27 @@ export async function readSessionToken(
   if (!bytes) return null;
   try {
     const p = JSON.parse(new TextDecoder().decode(bytes));
-    if (typeof p?.accountId !== "number" || typeof p?.exp !== "number") return null;
+    if (typeof p?.exp !== "number") return null;
     if (p.exp * 1000 <= Date.now()) return null; // expired
-    return { accountId: p.accountId, exp: p.exp };
+    return p as T;
   } catch {
     return null;
   }
+}
+
+// ── The session token specifically ────────────────────────────────────────────
+export function mintSessionToken(
+  payload: SessionPayload,
+  secret: string,
+): Promise<string> {
+  return mintToken(payload, secret);
+}
+
+export async function readSessionToken(
+  token: string | undefined | null,
+  secret: string,
+): Promise<SessionPayload | null> {
+  const p = await readToken<SessionPayload>(token, secret);
+  if (!p || typeof p.accountId !== "number") return null;
+  return { accountId: p.accountId, exp: p.exp };
 }
