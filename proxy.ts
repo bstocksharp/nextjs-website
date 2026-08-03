@@ -69,7 +69,11 @@ export async function proxy(req: NextRequest) {
   const now = Math.floor(Date.now() / 1000);
   if (secret && session.exp - now < SESSION_TTL_SECONDS / 2) {
     const token = await mintSessionToken(
-      { accountId: session.accountId, exp: now + SESSION_TTL_SECONDS },
+      {
+        accountId: session.accountId,
+        groupId: session.groupId,
+        exp: now + SESSION_TTL_SECONDS,
+      },
       secret,
     );
     res.cookies.set(SESSION_COOKIE, token, {

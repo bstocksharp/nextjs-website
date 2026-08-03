@@ -14,7 +14,9 @@ import type { Exercise } from "@/lib/db/schema";
 import { requireEditor, requireEditorFor } from "@/lib/auth";
 import { requireWorkoutEditor } from "@/lib/authz";
 import { getActiveProfile } from "@/lib/profile";
-import { countExerciseUsage } from "@/lib/queries/workout";
+import { requireGroupId } from "@/lib/session";
+import { getProfile } from "@/lib/queries/profiles";
+import { countExerciseUsage, getExercise, getWorkout } from "@/lib/queries/workout";
 import { RUN_TIMING } from "@/lib/workout-config";
 import { cleanEquipment } from "@/lib/workout";
 
@@ -64,7 +66,9 @@ export async function addExercise(formData: FormData): Promise<void> {
   const data = parseExercise(formData);
   if (!data.name) throw new Error("Exercise name is required.");
 
-  await db.insert(exercises).values({ ...data, name: data.name });
+  await db
+    .insert(exercises)
+    .values({ ...data, name: data.name, groupId: await requireGroupId() });
 
   revalidatePath(CATALOG);
   redirect(CATALOG);
@@ -78,7 +82,10 @@ export async function updateExercise(
   const data = parseExercise(formData);
   if (!data.name) throw new Error("Exercise name is required.");
 
-  await db.update(exercises).set({ ...data, name: data.name }).where(eq(exercises.id, id));
+  await db
+    .update(exercises)
+    .set({ ...data, name: data.name })
+    .where(and(eq(exercises.id, id), eq(exercises.groupId, await requireGroupId())));
 
   revalidatePath(CATALOG);
   redirect(CATALOG);
@@ -97,7 +104,9 @@ export async function deleteExercise(
     redirect(`${CATALOG}?blocked=${id}&uses=${uses}`);
   }
 
-  await db.delete(exercises).where(eq(exercises.id, id));
+  await db
+    .delete(exercises)
+    .where(and(eq(exercises.id, id), eq(exercises.groupId, await requireGroupId())));
 
   revalidatePath(CATALOG);
   redirect(CATALOG);
@@ -159,6 +168,11 @@ export async function updateWorkout(
     parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
 
+  // Reassigning "saved by" must stay within the group.
+  if (createdByProfileId && !(await getProfile(createdByProfileId))) {
+    throw new Error("Profile not found.");
+  }
+
   await db
     .update(workouts)
     .set({
@@ -200,11 +214,7 @@ export async function copyWorkout(
   if (!active) throw new Error("No active profile to copy to.");
   await requireEditorFor(active.id);
 
-  const [src] = await db
-    .select()
-    .from(workouts)
-    .where(eq(workouts.id, sourceId))
-    .limit(1);
+  const src = await getWorkout(sourceId); // group-scoped: no copying across groups
   if (!src) throw new Error("Workout not found.");
 
   const [copy] = await db
@@ -262,6 +272,8 @@ export async function addWorkoutItem(
   const exerciseId = int(formData, "exerciseId");
   const section = str(formData, "section") ?? "main";
   if (!exerciseId) throw new Error("Pick an exercise to add.");
+  // Only OUR catalog's exercises can be added (foreign id → not found).
+  if (!(await getExercise(exerciseId))) throw new Error("Exercise not found.");
 
   // New items inherit the catalog defaults (all overrides null).
   await db.insert(workoutItems).values({
@@ -304,19 +316,20 @@ export async function updateWorkoutItem(
 ): Promise<void> {
   await requireWorkoutEditor(workoutId);
   // Fetch the item's catalog exercise so we can diff each field against its
-  // default and only persist genuine overrides.
+  // default and only persist genuine overrides. The item lookup is BOUND to the
+  // guarded workoutId so a foreign item id can't ride in on our own workout.
   const [row] = await db
     .select({ exercise: exercises })
     .from(workoutItems)
     .innerJoin(exercises, eq(workoutItems.exerciseId, exercises.id))
-    .where(eq(workoutItems.id, itemId))
+    .where(and(eq(workoutItems.id, itemId), eq(workoutItems.workoutId, workoutId)))
     .limit(1);
   if (!row) return;
 
   await db
     .update(workoutItems)
     .set(parseItemOverrides(formData, row.exercise))
-    .where(eq(workoutItems.id, itemId));
+    .where(and(eq(workoutItems.id, itemId), eq(workoutItems.workoutId, workoutId)));
 
   revalidatePath(`/workout/${workoutId}`);
   revalidatePath(builderPath(workoutId));
@@ -328,7 +341,9 @@ export async function removeWorkoutItem(
   _formData: FormData,
 ): Promise<void> {
   await requireWorkoutEditor(workoutId);
-  await db.delete(workoutItems).where(eq(workoutItems.id, itemId));
+  await db
+    .delete(workoutItems)
+    .where(and(eq(workoutItems.id, itemId), eq(workoutItems.workoutId, workoutId)));
 
   revalidatePath(`/workout/${workoutId}`);
   revalidatePath(builderPath(workoutId));
@@ -377,6 +392,10 @@ export async function setAssignment(
 ): Promise<void> {
   await requireEditorFor(profileId); // your own week — you must be unlocked
   const workoutId = int(formData, "workoutId");
+  // Only OUR group's workouts can be scheduled (foreign id → not found).
+  if (workoutId && !(await getWorkout(workoutId))) {
+    throw new Error("Workout not found.");
+  }
 
   if (!workoutId) {
     await db

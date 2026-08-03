@@ -33,7 +33,7 @@ export type PasskeyResult = { ok: true } | { ok: false; error: string };
 
 // ── Registration (signed in: add a passkey for YOUR account) ──────────────────
 export async function startPasskeyRegistration(): Promise<PublicKeyCredentialCreationOptionsJSON> {
-  const accountId = await requireSession();
+  const { accountId } = await requireSession();
   const [account] = await db
     .select()
     .from(accounts)
@@ -71,7 +71,7 @@ export async function startPasskeyRegistration(): Promise<PublicKeyCredentialCre
 export async function finishPasskeyRegistration(
   response: RegistrationResponseJSON,
 ): Promise<PasskeyResult> {
-  const accountId = await requireSession();
+  const { accountId } = await requireSession();
   const pending = await takeChallenge("registration");
   if (!pending || pending.accountId !== accountId) {
     return { ok: false, error: "Registration expired — try again." };
@@ -176,14 +176,22 @@ export async function finishPasskeyLogin(
     .update(passkeys)
     .set({ counter: newCounter, lastUsedAt: new Date() })
     .where(eq(passkeys.id, passkey.id));
-  await createSession(passkey.accountId);
+
+  // The session needs the account's group — one lookup at login time only.
+  const [account] = await db
+    .select({ groupId: accounts.groupId })
+    .from(accounts)
+    .where(eq(accounts.id, passkey.accountId))
+    .limit(1);
+  if (!account) return { ok: false, error: "Account not found." };
+  await createSession(passkey.accountId, account.groupId);
   return { ok: true };
 }
 
 // ── Management ────────────────────────────────────────────────────────────────
 /** Remove one of YOUR passkeys (scoped to the session's account). */
 export async function deletePasskey(id: string): Promise<void> {
-  const accountId = await requireSession();
+  const { accountId } = await requireSession();
   await db
     .delete(passkeys)
     .where(and(eq(passkeys.id, id), eq(passkeys.accountId, accountId)));

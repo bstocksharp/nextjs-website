@@ -16,6 +16,10 @@ export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 90; // 90 days, rolling (the p
 
 export type SessionPayload = {
   accountId: number;
+  // The account's group (tenancy boundary), baked in at login so no request
+  // ever needs a DB query to know whose data it may touch. Trade-off: moving
+  // an account between groups requires that person to sign in again.
+  groupId: number;
   exp: number; // epoch seconds
 };
 
@@ -106,6 +110,10 @@ export async function readSessionToken(
   secret: string,
 ): Promise<SessionPayload | null> {
   const p = await readToken<SessionPayload>(token, secret);
-  if (!p || typeof p.accountId !== "number") return null;
-  return { accountId: p.accountId, exp: p.exp };
+  // Pre-groups tokens (no groupId) are rejected — that one-time re-login is
+  // how existing sessions pick up the tenancy claim.
+  if (!p || typeof p.accountId !== "number" || typeof p.groupId !== "number") {
+    return null;
+  }
+  return { accountId: p.accountId, groupId: p.groupId, exp: p.exp };
 }

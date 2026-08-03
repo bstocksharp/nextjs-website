@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { maintenanceRecords } from "@/lib/db/schema";
 import { requireVehicleEditor } from "@/lib/authz";
@@ -67,7 +67,7 @@ export async function updateMaintenance(
   await db
     .update(maintenanceRecords)
     .set({ ...data, serviceType: data.serviceType, serviceDate: data.serviceDate })
-    .where(eq(maintenanceRecords.id, id));
+    .where(and(eq(maintenanceRecords.id, id), eq(maintenanceRecords.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -79,7 +79,7 @@ export async function deleteMaintenance(
   _formData: FormData,
 ): Promise<void> {
   await requireVehicleEditor(vehicleId);
-  await db.delete(maintenanceRecords).where(eq(maintenanceRecords.id, id));
+  await db.delete(maintenanceRecords).where(and(eq(maintenanceRecords.id, id), eq(maintenanceRecords.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));

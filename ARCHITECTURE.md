@@ -72,7 +72,22 @@ scripts/                node utilities (seed-workout.mjs, inspect-db.mjs) — ra
 4. **Components** go in `components/<slug>/`; only cross-app/generic ones go in
    `components/shared/`.
 
-## Auth — two layers: a global login, then per-profile edit locks
+## Auth — groups own everything; a global login, then per-profile edit locks
+
+**Layer 0 — groups (the tenancy boundary).** A `group` is a household owning its
+**accounts** (logins), **profiles** (people), and all data — accounts
+authenticate, profiles identify, groups own. Six tables carry `group_id`
+directly (accounts, profiles, vehicles, exercises, resources, checklists);
+everything else inherits scope through its owning row. **Every query in
+`lib/queries/` scopes itself** to the session's group (`requireGroupId()` +
+the `vehicleInGroup`/`profileInGroup` fragments in
+[`lib/queries/scope.ts`](lib/queries/scope.ts)) — tenancy is enforced in the
+data layer, so a page can't forget it, and a foreign group's id reads as
+"not found". Child mutations bind their WHERE to the guarded parent
+(`and(eq(id), eq(vehicleId))`) so a forged child id can't ride in on your own
+parent. The **demo tenant** (`demo`/`demo`, `groups.isDemo`) gets wiped and
+re-planted with tour data on every sign-in ([`lib/demo.ts`](lib/demo.ts),
+hooked in the login action; `scripts/seed-demo.mjs` creates it).
 
 **Layer 1 — the login (the real security boundary).** The hub is **private**:
 [`proxy.ts`](proxy.ts) (Next 16.3's rename of the `middleware` convention)
@@ -143,13 +158,12 @@ deactivate the last active profile or delete without an heir, and
 `workouts.createdByProfileId` is `ON DELETE RESTRICT` so a delete can never nuke
 shared routines out from under someone.
 
-**Future direction (auth roadmap):** the account login above is Phase A. Phase B
-adds passkeys (WebAuthn/Face ID) on top of it; Phase C adds **groups** (one group
-= a household holding accounts + profiles + all data) so a demo account can exist
-with its own sandboxed, reseed-on-login data — that's when every query gains a
-tenant filter. `visibility` can then grow a `custom` value backed by a
-`vehicle_shares` join table (vehicleId, profileId, canEdit) — no rework of the
-owner/visibility columns.
+**Future direction (auth roadmap):** Phases A (login), B (passkeys), and C
+(groups + demo tenant) are done. Phase D links accounts to a default profile
+(sign in as Lauren → hub switches to Lauren), at which point the per-profile
+edit passwords can retire — the system will know who's at the keyboard.
+`visibility` can also grow a `custom` value backed by a `vehicle_shares` join
+table (vehicleId, profileId, canEdit) — no rework of the owner/visibility columns.
 
 ## Data layer
 

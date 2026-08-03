@@ -11,15 +11,24 @@ import {
 } from "@/lib/db/schema";
 import { requireEditor, requireEditorFor, hashPassword, lockAll } from "@/lib/auth";
 import { getActiveProfile, setActiveProfileCookie } from "@/lib/profile";
+import { requireGroupId } from "@/lib/session";
+import { getProfile } from "@/lib/queries/profiles";
 import { APPS } from "@/lib/apps";
 import { cleanEquipment } from "@/lib/workout";
 
-/** First active profile other than `exceptId`, or null. */
+/** First active profile in OUR group other than `exceptId`, or null. */
 async function otherActiveProfile(exceptId: number) {
+  const groupId = await requireGroupId();
   const rows = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(and(isNull(profiles.archivedAt), ne(profiles.id, exceptId)))
+    .where(
+      and(
+        eq(profiles.groupId, groupId),
+        isNull(profiles.archivedAt),
+        ne(profiles.id, exceptId),
+      ),
+    )
     .orderBy(profiles.sortOrder, profiles.id)
     .limit(1);
   return rows[0] ?? null;
@@ -35,6 +44,11 @@ async function otherActiveProfile(exceptId: number) {
  * stay open.
  */
 export async function switchProfile(id: number): Promise<void> {
+  // Only switch to one of OUR (active) profiles — a foreign or archived id is a
+  // no-op. getActiveProfile would neutralize a bad cookie anyway; this keeps it
+  // from ever being written.
+  const target = await getProfile(id); // group-scoped
+  if (!target || target.archivedAt) return;
   await lockAll();
   await setActiveProfileCookie(id);
   revalidatePath("/", "layout");
@@ -52,6 +66,7 @@ export async function addPerson(formData: FormData): Promise<void> {
   const [created] = await db
     .insert(profiles)
     .values({
+      groupId: await requireGroupId(),
       name,
       color,
       editPasswordHash: password ? hashPassword(password) : null,
@@ -152,7 +167,10 @@ function parseHiddenApps(raw: FormDataEntryValue | null): string[] {
 export async function deactivateProfile(id: number): Promise<void> {
   await requireEditorFor(id); // deactivate a person you've unlocked
 
-  const activeCount = await db.$count(profiles, isNull(profiles.archivedAt));
+  const activeCount = await db.$count(
+    profiles,
+    and(eq(profiles.groupId, await requireGroupId()), isNull(profiles.archivedAt)),
+  );
   if (activeCount <= 1) {
     throw new Error("Can't deactivate the only active profile.");
   }
@@ -194,10 +212,18 @@ export async function deleteProfileForever(
   await requireEditorFor(id); // delete a person you've unlocked
 
   if (heirId === id) throw new Error("Pick a different profile to inherit.");
+  // Heir must be one of OUR active profiles — shared cars/workouts must never
+  // transfer across the group boundary.
   const [heir] = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(and(eq(profiles.id, heirId), isNull(profiles.archivedAt)))
+    .where(
+      and(
+        eq(profiles.id, heirId),
+        eq(profiles.groupId, await requireGroupId()),
+        isNull(profiles.archivedAt),
+      ),
+    )
     .limit(1);
   if (!heir) throw new Error("Heir profile not found.");
 

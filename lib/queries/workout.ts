@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   profiles,
@@ -10,32 +10,53 @@ import {
 } from "@/lib/db/schema";
 import type { Workout, WorkoutItem, Exercise } from "@/lib/db/schema";
 import { resolveItem, type ResolvedItem } from "@/lib/workout";
+import { requireGroupId } from "@/lib/session";
+import { profileInGroup } from "./scope";
 // Profiles are hub-wide now — reads live in ./profiles.
 import { getProfile } from "./profiles";
 
+// TENANCY: the catalog carries group_id directly; workouts inherit their group
+// through the creator's profile (createdByProfileId), items/assignments through
+// their workout/profile. Item queries take a workoutId that has already been
+// validated by a scoped getWorkout — the joins here are belt-and-suspenders.
+
 // ── Exercise catalog ──────────────────────────────────────────────────────────
-export function listExercises() {
+export async function listExercises() {
+  const groupId = await requireGroupId();
   return db
     .select()
     .from(exercises)
+    .where(eq(exercises.groupId, groupId))
     .orderBy(asc(exercises.category), asc(exercises.name));
 }
 
 export async function getExercise(id: number) {
+  const groupId = await requireGroupId();
   const rows = await db
     .select()
     .from(exercises)
-    .where(eq(exercises.id, id))
+    .where(and(eq(exercises.id, id), eq(exercises.groupId, groupId)))
     .limit(1);
   return rows[0] ?? null;
 }
 
 /** How many workout items reference an exercise (guards catalog deletes). */
-export function countExerciseUsage(id: number): Promise<number> {
-  return db.$count(workoutItems, eq(workoutItems.exerciseId, id));
+export async function countExerciseUsage(id: number): Promise<number> {
+  const groupId = await requireGroupId();
+  const [row] = await db
+    .select({ n: count() })
+    .from(workoutItems)
+    .innerJoin(workouts, eq(workoutItems.workoutId, workouts.id))
+    .where(
+      and(
+        eq(workoutItems.exerciseId, id),
+        profileInGroup(workouts.createdByProfileId, groupId),
+      ),
+    );
+  return row?.n ?? 0;
 }
 
-// ── Workouts (shared library) ─────────────────────────────────────────────────
+// ── Workouts (a library shared within the group) ──────────────────────────────
 export type WorkoutListRow = {
   id: number;
   name: string;
@@ -44,8 +65,9 @@ export type WorkoutListRow = {
   createdByName: string | null;
 };
 
-/** Every workout in the shared library, tagged with who saved it. */
-export function listWorkoutsWithCreator(): Promise<WorkoutListRow[]> {
+/** Every workout in the group's library, tagged with who saved it. */
+export async function listWorkoutsWithCreator(): Promise<WorkoutListRow[]> {
+  const groupId = await requireGroupId();
   return db
     .select({
       id: workouts.id,
@@ -55,18 +77,19 @@ export function listWorkoutsWithCreator(): Promise<WorkoutListRow[]> {
       createdByName: profiles.name,
     })
     .from(workouts)
-    .leftJoin(
-      profiles,
-      eq(workouts.createdByProfileId, profiles.id),
-    )
+    .innerJoin(profiles, eq(workouts.createdByProfileId, profiles.id))
+    .where(eq(profiles.groupId, groupId))
     .orderBy(asc(workouts.sortOrder), asc(workouts.id));
 }
 
-export async function getWorkout(id: number) {
+export async function getWorkout(id: number): Promise<Workout | null> {
+  const groupId = await requireGroupId();
   const rows = await db
     .select()
     .from(workouts)
-    .where(eq(workouts.id, id))
+    .where(
+      and(eq(workouts.id, id), profileInGroup(workouts.createdByProfileId, groupId)),
+    )
     .limit(1);
   return rows[0] ?? null;
 }
@@ -81,7 +104,7 @@ export type WorkoutWithItems = {
 export async function getWorkoutWithItems(
   id: number,
 ): Promise<WorkoutWithItems | null> {
-  const workout = await getWorkout(id);
+  const workout = await getWorkout(id); // group-scoped
   if (!workout) return null;
 
   const creator = await getProfile(workout.createdByProfileId);
@@ -101,14 +124,21 @@ export async function getWorkoutWithItems(
 }
 
 /** All items of a workout with their catalog exercises, in order (for the builder). */
-export function getWorkoutItemsWithExercises(
+export async function getWorkoutItemsWithExercises(
   workoutId: number,
 ): Promise<{ item: WorkoutItem; exercise: Exercise }[]> {
+  const groupId = await requireGroupId();
   return db
     .select({ item: workoutItems, exercise: exercises })
     .from(workoutItems)
     .innerJoin(exercises, eq(workoutItems.exerciseId, exercises.id))
-    .where(eq(workoutItems.workoutId, workoutId))
+    .innerJoin(workouts, eq(workoutItems.workoutId, workouts.id))
+    .where(
+      and(
+        eq(workoutItems.workoutId, workoutId),
+        profileInGroup(workouts.createdByProfileId, groupId),
+      ),
+    )
     .orderBy(asc(workoutItems.sortOrder), asc(workoutItems.id));
 }
 
@@ -121,7 +151,8 @@ export type AssignmentRow = {
 };
 
 /** A profile's assigned days (only weekdays that have a workout). */
-export function getAssignments(profileId: number): Promise<AssignmentRow[]> {
+export async function getAssignments(profileId: number): Promise<AssignmentRow[]> {
+  const groupId = await requireGroupId();
   return db
     .select({
       weekday: workoutAssignments.weekday,
@@ -131,6 +162,11 @@ export function getAssignments(profileId: number): Promise<AssignmentRow[]> {
     })
     .from(workoutAssignments)
     .innerJoin(workouts, eq(workoutAssignments.workoutId, workouts.id))
-    .where(eq(workoutAssignments.profileId, profileId))
+    .where(
+      and(
+        eq(workoutAssignments.profileId, profileId),
+        profileInGroup(workoutAssignments.profileId, groupId),
+      ),
+    )
     .orderBy(asc(workoutAssignments.weekday));
 }

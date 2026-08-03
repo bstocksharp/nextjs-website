@@ -3,9 +3,10 @@
 import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { accounts } from "@/lib/db/schema";
+import { accounts, groups } from "@/lib/db/schema";
 import { hashPassword, verifyPassword } from "@/lib/auth";
 import { createSession, destroySession } from "@/lib/session";
+import { reseedDemoGroup } from "@/lib/demo";
 
 // The global login/logout. Accounts are created only via
 // scripts/create-account.mjs (no signup UI by design — see the schema notes).
@@ -44,7 +45,16 @@ export async function loginAction(
     return { error: "Incorrect username or password." };
   }
 
-  await createSession(account.id);
+  // Demo groups get wiped + reseeded on every sign-in, so each visitor tours
+  // pristine data no matter what the previous one did.
+  const [group] = await db
+    .select()
+    .from(groups)
+    .where(eq(groups.id, account.groupId))
+    .limit(1);
+  if (group?.isDemo) await reseedDemoGroup(group.id);
+
+  await createSession(account.id, account.groupId);
   // Only same-site paths — never a full URL (open-redirect guard).
   redirect(from.startsWith("/") && !from.startsWith("//") ? from : "/");
 }

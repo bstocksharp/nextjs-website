@@ -3,6 +3,8 @@ import { and, asc, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { weighIns, weightPlans } from "@/lib/db/schema";
 import type { WeighIn, WeightPlan } from "@/lib/db/schema";
+import { requireGroupId } from "@/lib/session";
+import { profileInGroup } from "./scope";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // WEIGHT — reads + all DERIVED metrics (nothing here is stored; same spirit as
@@ -46,18 +48,25 @@ function weeksBetween(startISO: string, iso: string): number {
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 // ── Raw reads ─────────────────────────────────────────────────────────────────
+// TENANCY: these four raw reads carry the group check (profileInGroup); every
+// derived/composite function below goes through them, so it inherits the scope.
+
 /** All weigh-ins for a profile, oldest first (chart + series order). */
-export function listWeighIns(profileId: number): Promise<WeighIn[]> {
+export async function listWeighIns(profileId: number): Promise<WeighIn[]> {
+  const groupId = await requireGroupId();
   return db
     .select()
     .from(weighIns)
-    .where(eq(weighIns.profileId, profileId))
+    .where(
+      and(eq(weighIns.profileId, profileId), profileInGroup(weighIns.profileId, groupId)),
+    )
     .orderBy(asc(weighIns.measuredOn), asc(weighIns.id));
 }
 
 /** The active plan for a profile: its date window contains today (end_date null
  *  = open-ended). If plans somehow overlap, the latest-starting one wins. */
 export async function getActivePlan(profileId: number): Promise<WeightPlan | null> {
+  const groupId = await requireGroupId();
   const today = new Date().toISOString().slice(0, 10);
   const rows = await db
     .select()
@@ -65,6 +74,7 @@ export async function getActivePlan(profileId: number): Promise<WeightPlan | nul
     .where(
       and(
         eq(weightPlans.profileId, profileId),
+        profileInGroup(weightPlans.profileId, groupId),
         lte(weightPlans.startDate, today),
         or(isNull(weightPlans.endDate), gte(weightPlans.endDate, today)),
       ),
@@ -75,20 +85,33 @@ export async function getActivePlan(profileId: number): Promise<WeightPlan | nul
 }
 
 /** All plans for a profile, oldest first (for the continuous multi-plan chart). */
-export function listPlans(profileId: number): Promise<WeightPlan[]> {
+export async function listPlans(profileId: number): Promise<WeightPlan[]> {
+  const groupId = await requireGroupId();
   return db
     .select()
     .from(weightPlans)
-    .where(eq(weightPlans.profileId, profileId))
+    .where(
+      and(
+        eq(weightPlans.profileId, profileId),
+        profileInGroup(weightPlans.profileId, groupId),
+      ),
+    )
     .orderBy(asc(weightPlans.startDate), asc(weightPlans.id));
 }
 
 /** A single weigh-in by (id, profile) — scoped so one person can't edit another's. */
 export async function getWeighIn(id: number, profileId: number): Promise<WeighIn | null> {
+  const groupId = await requireGroupId();
   const rows = await db
     .select()
     .from(weighIns)
-    .where(and(eq(weighIns.id, id), eq(weighIns.profileId, profileId)))
+    .where(
+      and(
+        eq(weighIns.id, id),
+        eq(weighIns.profileId, profileId),
+        profileInGroup(weighIns.profileId, groupId),
+      ),
+    )
     .limit(1);
   return rows[0] ?? null;
 }

@@ -29,6 +29,7 @@ const createdAt = () =>
 // Owned cars, sold cars, and the future dream Miata (status = 'dream').
 export const vehicles = pgTable("vehicles", {
   id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 120 }).notNull(),
   status: varchar("status", { length: 20 }).notNull().default("owned"), // owned | prospect | dream | sold
   make: varchar("make", { length: 80 }),
@@ -172,6 +173,7 @@ export const journalEntries = pgTable("journal_entries", {
 // ── Inspection checklists (one per candidate car you go look at) ───────────────
 export const checklists = pgTable("checklists", {
   id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   title: varchar("title", { length: 200 }).notNull(),
   vehicleId: integer("vehicle_id").references(() => vehicles.id, {
     onDelete: "set null",
@@ -206,6 +208,9 @@ export const checklistItems = pgTable(
 );
 
 // ── Attachments (photos / receipts) — polymorphic owner ───────────────────────
+// No group_id ON PURPOSE: the polymorphic (ownerType, ownerId) parent is always
+// a group-scoped row, and attachments are only ever fetched through an already-
+// authorized owner. Revisit if attachments ever get a standalone listing.
 export const attachments = pgTable(
   "attachments",
   {
@@ -226,6 +231,7 @@ export const attachments = pgTable(
 // ── Resources (links / specs you collect over time) ───────────────────────────
 export const resources = pgTable("resources", {
   id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   category: varchar("category", { length: 60 }),
   title: varchar("title", { length: 200 }).notNull(),
   url: text("url"),
@@ -235,15 +241,33 @@ export const resources = pgTable("resources", {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GROUPS — the tenancy boundary (Phase C of the auth roadmap). A group is a
+// household: it owns ACCOUNTS (logins), PROFILES (people), and all data. The
+// mental model: accounts authenticate, profiles identify, groups own. Tables
+// carry group_id either directly (profiles, vehicles, exercises, resources,
+// checklists) or by inheritance through an owning row (everything hanging off
+// a vehicle/profile/workout/account). Every query in lib/queries scopes to the
+// session's group — the session token carries groupId (lib/session).
+// ─────────────────────────────────────────────────────────────────────────────
+export const groups = pgTable("groups", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 120 }).notNull(),
+  // Demo groups are wiped + reseeded on every demo login (lib/demo.ts) so each
+  // visitor gets a pristine tour no matter what the last one deleted.
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: createdAt(),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ACCOUNTS — the global login (Phase A of the auth roadmap). An account is a
 // LOGIN IDENTITY for the whole hub, distinct from profiles (the household's
-// people/data — a kid can have a profile with no login). Today one account =
-// the household; Phase C adds groups so one group can hold several accounts
-// and a demo account gets its own sandboxed data. No signup UI by design —
+// people/data — a kid can have a profile with no login). A group can hold
+// several accounts (Bryce + Lauren each get a key). No signup UI by design —
 // accounts are created with `node scripts/create-account.mjs <username>`.
 // ─────────────────────────────────────────────────────────────────────────────
 export const accounts = pgTable("accounts", {
   id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   username: varchar("username", { length: 80 }).notNull().unique(), // stored lowercase
   passwordHash: text("password_hash").notNull(), // scrypt "scrypt$salt$hash" (lib/auth)
   createdAt: createdAt(),
@@ -286,6 +310,7 @@ export const passkeys = pgTable(
 // ─────────────────────────────────────────────────────────────────────────────
 export const profiles = pgTable("profiles", {
   id: serial("id").primaryKey(),
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 80 }).notNull(),
   color: varchar("color", { length: 20 }), // tile accent / avatar color
   sortOrder: integer("sort_order").default(0),
@@ -320,6 +345,8 @@ export const profiles = pgTable("profiles", {
 // on purpose — real workouts say "10-12", "8 each leg", "15s", "5 or 8s".
 export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
+  // Each group has its own catalog ("shared" means shared within the household).
+  groupId: integer("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   name: varchar("name", { length: 120 }).notNull(),
   category: varchar("category", { length: 40 }), // warmup|legs|push|pull|core|cardio|carry|mobility
   // Recommended defaults; a workout item can override reps/time/weight. Mode is
@@ -491,6 +518,8 @@ export const weightPlans = pgTable(
 );
 
 // ── Inferred types for use across the app ─────────────────────────────────────
+export type Group = typeof groups.$inferSelect;
+export type NewGroup = typeof groups.$inferInsert;
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Passkey = typeof passkeys.$inferSelect;

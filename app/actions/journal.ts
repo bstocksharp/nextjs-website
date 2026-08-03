@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { journalEntries } from "@/lib/db/schema";
 import { requireVehicleEditor } from "@/lib/authz";
@@ -62,7 +62,7 @@ export async function updateJournal(
   await db
     .update(journalEntries)
     .set({ ...data, entryDate: data.entryDate, body: data.body })
-    .where(eq(journalEntries.id, id));
+    .where(and(eq(journalEntries.id, id), eq(journalEntries.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -74,7 +74,7 @@ export async function deleteJournal(
   _formData: FormData,
 ): Promise<void> {
   await requireVehicleEditor(vehicleId);
-  await db.delete(journalEntries).where(eq(journalEntries.id, id));
+  await db.delete(journalEntries).where(and(eq(journalEntries.id, id), eq(journalEntries.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));

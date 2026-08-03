@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { getSessionAccountId } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import LoginForm from "./LoginForm";
 
 // The one page a signed-out visitor can reach (proxy.ts allowlists it).
@@ -15,7 +15,7 @@ export default async function LoginPage({
   searchParams: Promise<{ from?: string }>;
 }) {
   // Already signed in? (e.g. a second tab) — nothing to do here.
-  if ((await getSessionAccountId()) !== null) redirect("/");
+  if ((await getSession()) !== null) redirect("/");
 
   const { from } = await searchParams;
   return <LoginForm from={from ?? ""} />;

@@ -8,7 +8,7 @@ import Paper from "@mui/material/Paper";
 import Chip from "@mui/material/Chip";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import FingerprintIcon from "@mui/icons-material/Fingerprint";
-import { getSessionAccountId } from "@/lib/session";
+import { getSession } from "@/lib/session";
 import { listPasskeys } from "@/lib/queries/passkeys";
 import { deletePasskey } from "@/app/actions/passkeys";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
@@ -27,10 +27,10 @@ const fmtDate = new Intl.DateTimeFormat("en-US", {
 // password always remains as a fallback, so deleting every passkey just means
 // signing in the old way.
 export default async function PasskeysPage() {
-  const accountId = await getSessionAccountId();
-  if (accountId === null) redirect("/login"); // proxy already gates; belt anyway
+  const session = await getSession();
+  if (session === null) redirect("/login"); // proxy already gates; belt anyway
 
-  const keys = await listPasskeys(accountId);
+  const keys = await listPasskeys(session.accountId);
 
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { wishlistItems } from "@/lib/db/schema";
 import { requireVehicleEditor } from "@/lib/authz";
@@ -65,7 +65,7 @@ export async function updateWishlistItem(
   await db
     .update(wishlistItems)
     .set({ ...data, item: data.item })
-    .where(eq(wishlistItems.id, id));
+    .where(and(eq(wishlistItems.id, id), eq(wishlistItems.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -77,7 +77,7 @@ export async function deleteWishlistItem(
   _formData: FormData,
 ): Promise<void> {
   await requireVehicleEditor(vehicleId);
-  await db.delete(wishlistItems).where(eq(wishlistItems.id, id));
+  await db.delete(wishlistItems).where(and(eq(wishlistItems.id, id), eq(wishlistItems.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -93,7 +93,7 @@ export async function toggleWishlistPurchased(
   await db
     .update(wishlistItems)
     .set({ purchased, purchasedDate: purchased ? todayISO() : null })
-    .where(eq(wishlistItems.id, id));
+    .where(and(eq(wishlistItems.id, id), eq(wishlistItems.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
 }
