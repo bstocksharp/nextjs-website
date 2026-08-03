@@ -1,0 +1,384 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// DEMO GROUP RESEED — wipes and re-plants the demo group's data on EVERY demo
+// login (hooked in app/actions/session.ts), so each visitor tours a pristine,
+// alive-looking hub no matter what the previous visitor edited or deleted.
+//
+// Safety: refuses to touch any group whose isDemo flag isn't set — this
+// function must never be able to wipe a real household, even if miscalled.
+//
+// All dates are computed relative to "today" (weigh-ins on the last ~14
+// Mondays, maintenance spread over the past year), so the demo never looks
+// stale. Data is fictional: profiles Alex & Sam, a '94 Miata + a CR-V daily.
+// ─────────────────────────────────────────────────────────────────────────────
+
+import "server-only";
+import { eq, inArray } from "drizzle-orm";
+import { db } from "@/lib/db";
+import {
+  groups,
+  profiles,
+  vehicles,
+  maintenanceRecords,
+  fuelLogs,
+  buildTasks,
+  wishlistItems,
+  journalEntries,
+  exercises,
+  workouts,
+  workoutItems,
+  workoutAssignments,
+  weighIns,
+  weightPlans,
+  resources,
+  checklists,
+} from "@/lib/db/schema";
+
+// ── Date helpers (all ISO YYYY-MM-DD, anchored at noon UTC) ───────────────────
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - n);
+  return d.toISOString().slice(0, 10);
+}
+/** The Monday `weeksBack` weeks ago (0 = this week's Monday). */
+function mondaysAgo(weeksBack: number): string {
+  const d = new Date();
+  const day = d.getUTCDay(); // 0 Sun .. 6 Sat
+  d.setUTCDate(d.getUTCDate() - ((day + 6) % 7) - weeksBack * 7);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function reseedDemoGroup(groupId: number): Promise<void> {
+  const [group] = await db.select().from(groups).where(eq(groups.id, groupId)).limit(1);
+  if (!group?.isDemo) {
+    throw new Error("reseedDemoGroup called on a non-demo group — refusing.");
+  }
+
+  // ── Wipe (order matters: workouts RESTRICT on their creator profile) ────────
+  const groupProfiles = db
+    .select({ id: profiles.id })
+    .from(profiles)
+    .where(eq(profiles.groupId, groupId));
+  await db.delete(workouts).where(inArray(workouts.createdByProfileId, groupProfiles));
+  await db.delete(profiles).where(eq(profiles.groupId, groupId)); // cascades weight, schedule
+  await db.delete(vehicles).where(eq(vehicles.groupId, groupId)); // cascades records/fuel/…
+  await db.delete(exercises).where(eq(exercises.groupId, groupId));
+  await db.delete(resources).where(eq(resources.groupId, groupId));
+  await db.delete(checklists).where(eq(checklists.groupId, groupId));
+
+  // ── People ───────────────────────────────────────────────────────────────────
+  const [alex, sam] = await db
+    .insert(profiles)
+    .values([
+      { groupId, name: "Alex", color: "#4caf7d", sortOrder: 0 },
+      { groupId, name: "Sam", color: "#7d6bd4", sortOrder: 1 },
+    ])
+    .returning({ id: profiles.id });
+
+  // ── Garage: the project Miata + the daily ───────────────────────────────────
+  const [miata, daily] = await db
+    .insert(vehicles)
+    .values([
+      {
+        groupId,
+        name: "Project Miata",
+        status: "owned",
+        make: "Mazda",
+        model: "MX-5 Miata",
+        year: 1994,
+        trim: "Base",
+        color: "Classic Red",
+        interiorColor: "Black",
+        transmission: "5-speed manual",
+        purchaseDate: daysAgo(320),
+        purchasePrice: "6800.00",
+        purchaseMileage: 84200,
+        currentMileage: 87450,
+        notes:
+          "Weekend project car. Bought with a soft top in decent shape and a folder of old receipts. Plan: reliability first, then handling, then fun.",
+        profileId: alex.id,
+        visibility: "shared",
+      },
+      {
+        groupId,
+        name: "The Daily",
+        status: "owned",
+        make: "Honda",
+        model: "CR-V",
+        year: 2019,
+        color: "Modern Steel",
+        transmission: "CVT",
+        purchaseDate: daysAgo(1500),
+        purchasePrice: "24500.00",
+        purchaseMileage: 12000,
+        currentMileage: 58200,
+        profileId: sam.id,
+        visibility: "shared",
+      },
+    ])
+    .returning({ id: vehicles.id });
+
+  await db.insert(maintenanceRecords).values([
+    {
+      vehicleId: miata.id,
+      serviceType: "Timing belt + water pump",
+      category: "maintenance",
+      serviceDate: daysAgo(210),
+      mileage: 85100,
+      cost: "420.00",
+      vendor: "DIY (weekend #3)",
+      notes: "Preventive — no service history past 60k. Did cam seals while in there.",
+    },
+    {
+      vehicleId: miata.id,
+      serviceType: "Oil change",
+      category: "maintenance",
+      serviceDate: daysAgo(45),
+      mileage: 87100,
+      cost: "38.50",
+      vendor: "DIY",
+      nextDueDate: daysAgo(-135), // ~3 months out
+      nextDueMileage: 90100,
+    },
+    {
+      vehicleId: miata.id,
+      serviceType: "Tires (4) — Falken RT660",
+      category: "upgrade",
+      serviceDate: daysAgo(90),
+      mileage: 86600,
+      cost: "612.00",
+      vendor: "Discount Tire",
+      notes: "200TW for autocross season.",
+    },
+    {
+      vehicleId: daily.id,
+      serviceType: "Oil change + rotation",
+      category: "maintenance",
+      serviceDate: daysAgo(30),
+      mileage: 57800,
+      cost: "89.00",
+      vendor: "Dealer",
+      nextDueMileage: 62800,
+    },
+    {
+      vehicleId: daily.id,
+      serviceType: "Cabin air filter",
+      category: "maintenance",
+      serviceDate: daysAgo(30),
+      mileage: 57800,
+      cost: "24.00",
+      vendor: "DIY",
+    },
+  ]);
+
+  await db.insert(buildTasks).values([
+    {
+      vehicleId: miata.id,
+      phase: 1,
+      title: "Timing belt + water pump",
+      category: "maintenance",
+      priority: "high",
+      status: "done",
+      actualCost: "420.00",
+      completedDate: daysAgo(210),
+      sortOrder: 0,
+    },
+    {
+      vehicleId: miata.id,
+      phase: 1,
+      title: "Replace rear main seal",
+      category: "maintenance",
+      priority: "medium",
+      status: "in_progress",
+      costEstimate: "60.00",
+      sortOrder: 1,
+    },
+    {
+      vehicleId: miata.id,
+      phase: 2,
+      title: "Coilovers (Xida entry or Bilstein/FM springs)",
+      category: "suspension",
+      priority: "high",
+      status: "planned",
+      costEstimate: "1400.00",
+      sortOrder: 2,
+    },
+    {
+      vehicleId: miata.id,
+      phase: 2,
+      title: "Front sway bar + endlinks",
+      category: "suspension",
+      priority: "medium",
+      status: "planned",
+      costEstimate: "220.00",
+      sortOrder: 3,
+    },
+    {
+      vehicleId: miata.id,
+      phase: 3,
+      title: "Frog Arms + frame rails",
+      description: "Chassis stiffening before any power goals.",
+      category: "chassis",
+      priority: "low",
+      status: "planned",
+      costEstimate: "450.00",
+      sortOrder: 4,
+    },
+  ]);
+
+  await db.insert(wishlistItems).values([
+    {
+      vehicleId: miata.id,
+      item: "OEM hardtop",
+      price: "1800.00",
+      rating: 5,
+      priority: "high",
+      notes: "The white whale. Watching marketplace weekly.",
+    },
+    {
+      vehicleId: miata.id,
+      item: "Nardi Classic 330mm",
+      brand: "Nardi",
+      price: "330.00",
+      rating: 4,
+      priority: "medium",
+    },
+    {
+      vehicleId: miata.id,
+      item: "RoadsterSport Race exhaust",
+      brand: "Good-Win Racing",
+      price: "465.00",
+      rating: 4,
+      priority: "low",
+      purchased: true,
+      purchasedDate: daysAgo(60),
+    },
+  ]);
+
+  await db.insert(fuelLogs).values([
+    { vehicleId: miata.id, fillDate: daysAgo(74), odometer: 86750, gallons: "9.8", pricePerGallon: "3.899", totalCost: "38.21" },
+    { vehicleId: miata.id, fillDate: daysAgo(47), odometer: 87020, gallons: "9.2", pricePerGallon: "3.759", totalCost: "34.58" },
+    { vehicleId: miata.id, fillDate: daysAgo(18), odometer: 87290, gallons: "9.5", pricePerGallon: "3.699", totalCost: "35.14" },
+    { vehicleId: daily.id, fillDate: daysAgo(12), odometer: 58050, gallons: "12.1", pricePerGallon: "3.599", totalCost: "43.55" },
+  ]);
+
+  await db.insert(journalEntries).values([
+    {
+      vehicleId: miata.id,
+      entryDate: daysAgo(120),
+      title: "First autocross!",
+      body: "Ran the local SCCA event on the old tires. Mid-pack in ES but grinning the whole drive home. The car needs shocks badly — everything else can wait.",
+      mileage: 86400,
+    },
+    {
+      vehicleId: miata.id,
+      entryDate: daysAgo(38),
+      title: "Exhaust on",
+      body: "RoadsterSport installed in the driveway in an hour. Sounds like a proper roadster now without droning on the highway.",
+      mileage: 87150,
+    },
+  ]);
+
+  // ── Workout catalog + routines ───────────────────────────────────────────────
+  const cat = await db
+    .insert(exercises)
+    .values([
+      { groupId, name: "Jumping jacks", category: "warmup", defaultDuration: 45 },
+      { groupId, name: "Arm circles", category: "warmup", defaultReps: "10 each way" },
+      { groupId, name: "Bodyweight squat", category: "legs", defaultReps: "12-15" },
+      { groupId, name: "Push-up", category: "push", defaultReps: "10-12" },
+      { groupId, name: "Dumbbell row", category: "pull", defaultReps: "10 each side", defaultWeight: "25 lb", sides: 2, equipment: ["dumbbells"] },
+      { groupId, name: "Reverse lunge", category: "legs", defaultReps: "8 each leg", sides: 2 },
+      { groupId, name: "Plank", category: "core", defaultDuration: 45 },
+      { groupId, name: "Dead bug", category: "core", defaultReps: "8 each side" },
+      { groupId, name: "Glute bridge", category: "core", defaultReps: "15" },
+      { groupId, name: "Hamstring stretch", category: "mobility", defaultDuration: 30, sides: 2 },
+    ])
+    .returning({ id: exercises.id, name: exercises.name });
+  const ex = Object.fromEntries(cat.map((e) => [e.name, e.id]));
+
+  const [fullBody, quickCore] = await db
+    .insert(workouts)
+    .values([
+      {
+        createdByProfileId: alex.id,
+        name: "Full Body Circuit",
+        rounds: 3,
+        restBetweenRounds: 60,
+        notes: "The default — 25 minutes, no excuses.",
+        sortOrder: 0,
+      },
+      {
+        createdByProfileId: sam.id,
+        name: "Quick Core",
+        rounds: 2,
+        restBetweenRounds: 45,
+        sortOrder: 1,
+      },
+    ])
+    .returning({ id: workouts.id });
+
+  await db.insert(workoutItems).values([
+    { workoutId: fullBody.id, exerciseId: ex["Jumping jacks"], section: "warmup", sortOrder: 0 },
+    { workoutId: fullBody.id, exerciseId: ex["Arm circles"], section: "warmup", sortOrder: 1 },
+    { workoutId: fullBody.id, exerciseId: ex["Bodyweight squat"], section: "main", sortOrder: 2 },
+    { workoutId: fullBody.id, exerciseId: ex["Push-up"], section: "main", sortOrder: 3 },
+    { workoutId: fullBody.id, exerciseId: ex["Dumbbell row"], section: "main", sortOrder: 4 },
+    { workoutId: fullBody.id, exerciseId: ex["Reverse lunge"], section: "main", sortOrder: 5 },
+    { workoutId: fullBody.id, exerciseId: ex["Plank"], section: "main", sortOrder: 6 },
+    { workoutId: fullBody.id, exerciseId: ex["Hamstring stretch"], section: "cooldown", sortOrder: 7 },
+    { workoutId: quickCore.id, exerciseId: ex["Dead bug"], section: "main", sortOrder: 0 },
+    { workoutId: quickCore.id, exerciseId: ex["Plank"], section: "main", sortOrder: 1 },
+    { workoutId: quickCore.id, exerciseId: ex["Glute bridge"], section: "main", sortOrder: 2 },
+  ]);
+
+  await db.insert(workoutAssignments).values([
+    { profileId: alex.id, weekday: 1, workoutId: fullBody.id },
+    { profileId: alex.id, weekday: 3, workoutId: fullBody.id },
+    { profileId: alex.id, weekday: 5, workoutId: fullBody.id },
+    { profileId: sam.id, weekday: 2, workoutId: quickCore.id },
+    { profileId: sam.id, weekday: 4, workoutId: quickCore.id },
+  ]);
+
+  // ── Weight: Alex cutting, Sam maintaining (shows both plan modes) ───────────
+  // Weekly Monday weigh-ins, newest ~this week. Wobble is a fixed pattern so the
+  // charts look human without being random on every reseed.
+  const WEEKS = 14;
+  const wobble = [0.4, -0.3, 0.6, -0.5, 0.2, -0.2, 0.8, -0.4, 0.1, -0.6, 0.5, -0.1, 0.3, -0.2];
+  const rows: (typeof weighIns.$inferInsert)[] = [];
+  for (let i = 0; i < WEEKS; i++) {
+    const weeksBack = WEEKS - 1 - i;
+    // Alex: 196 → ~185, losing ~0.8/week.
+    rows.push({
+      profileId: alex.id,
+      measuredOn: mondaysAgo(weeksBack),
+      weight: (196 - i * 0.8 + wobble[i]).toFixed(1),
+    });
+    // Sam: holding ~151 ± the wobble.
+    rows.push({
+      profileId: sam.id,
+      measuredOn: mondaysAgo(weeksBack),
+      weight: (151 + wobble[(i + 5) % WEEKS]).toFixed(1),
+    });
+  }
+  await db.insert(weighIns).values(rows);
+
+  await db.insert(weightPlans).values([
+    {
+      profileId: alex.id,
+      mode: "lose",
+      startWeight: "196.0",
+      startDate: mondaysAgo(WEEKS - 1),
+      goalWeight: "180.0",
+      perWeekPace: "0.800",
+    },
+    {
+      profileId: sam.id,
+      mode: "maintain",
+      startWeight: "151.0",
+      startDate: mondaysAgo(WEEKS - 1),
+      goalWeight: "151.0",
+      perWeekPace: "0",
+      rangeLb: "3.0",
+    },
+  ]);
+}

@@ -1,6 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { listProfiles } from "@/lib/queries/profiles";
+import { getSessionGroupId } from "@/lib/session";
 import type { Profile } from "@/lib/db/schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -22,7 +23,11 @@ const COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 1 year — it's a preference, not 
 export async function getActiveProfile(
   override?: string | number | null,
 ): Promise<Profile | null> {
-  const profiles = await listProfiles();
+  // Signed out (login page shell, manifest, icon routes) → neutral identity.
+  // Deliberate: pre-login surfaces must leak no profile names or colors.
+  if ((await getSessionGroupId()) === null) return null;
+
+  const profiles = await listProfiles(); // group-scoped (lib/queries/profiles)
   if (profiles.length === 0) return null;
 
   const pick = (raw: string | number | null | undefined) => {

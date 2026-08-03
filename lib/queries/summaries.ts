@@ -2,17 +2,27 @@ import "server-only";
 import { and, eq, isNotNull, or, sum } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { maintenanceRecords, fuelLogs, vehicles } from "@/lib/db/schema";
+import { requireGroupId } from "@/lib/session";
+import { vehicleInGroup } from "./scope";
 
 /** Total spend for a vehicle, split maintenance vs fuel. */
 export async function vehicleSpend(vehicleId: number) {
+  const groupId = await requireGroupId();
   const [m] = await db
     .select({ total: sum(maintenanceRecords.cost) })
     .from(maintenanceRecords)
-    .where(eq(maintenanceRecords.vehicleId, vehicleId));
+    .where(
+      and(
+        eq(maintenanceRecords.vehicleId, vehicleId),
+        vehicleInGroup(maintenanceRecords.vehicleId, groupId),
+      ),
+    );
   const [f] = await db
     .select({ total: sum(fuelLogs.totalCost) })
     .from(fuelLogs)
-    .where(eq(fuelLogs.vehicleId, vehicleId));
+    .where(
+      and(eq(fuelLogs.vehicleId, vehicleId), vehicleInGroup(fuelLogs.vehicleId, groupId)),
+    );
 
   const maintenance = Number(m?.total ?? 0);
   const fuel = Number(f?.total ?? 0);
@@ -20,7 +30,8 @@ export async function vehicleSpend(vehicleId: number) {
 }
 
 /** Service records for one vehicle that carry a next-due reminder. */
-export function listVehicleDueRecords(vehicleId: number) {
+export async function listVehicleDueRecords(vehicleId: number) {
+  const groupId = await requireGroupId();
   return db
     .select({
       id: maintenanceRecords.id,
@@ -32,6 +43,7 @@ export function listVehicleDueRecords(vehicleId: number) {
     .where(
       and(
         eq(maintenanceRecords.vehicleId, vehicleId),
+        vehicleInGroup(maintenanceRecords.vehicleId, groupId),
         or(
           isNotNull(maintenanceRecords.nextDueDate),
           isNotNull(maintenanceRecords.nextDueMileage),
@@ -44,7 +56,8 @@ export function listVehicleDueRecords(vehicleId: number) {
  * Next-due records for the vehicles a profile can see (for garage-grid badges).
  * Joins vehicles so badges match the same shared-OR-owned scope as the grid.
  */
-export function listAllDueRecords(profileId: number) {
+export async function listAllDueRecords(profileId: number) {
+  const groupId = await requireGroupId();
   return db
     .select({
       vehicleId: maintenanceRecords.vehicleId,
@@ -55,6 +68,7 @@ export function listAllDueRecords(profileId: number) {
     .innerJoin(vehicles, eq(maintenanceRecords.vehicleId, vehicles.id))
     .where(
       and(
+        eq(vehicles.groupId, groupId),
         or(eq(vehicles.visibility, "shared"), eq(vehicles.profileId, profileId)),
         or(
           isNotNull(maintenanceRecords.nextDueDate),

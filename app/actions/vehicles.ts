@@ -8,6 +8,15 @@ import { vehicles } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
 import { requireVehicleEditor } from "@/lib/authz";
 import { getActiveProfile } from "@/lib/profile";
+import { requireGroupId } from "@/lib/session";
+import { getProfile } from "@/lib/queries/profiles";
+
+/** The form's owner pick must be one of OUR profiles (or null). */
+async function validOwner(profileId: number | null): Promise<number | null> {
+  if (profileId === null) return null;
+  if (!(await getProfile(profileId))) throw new Error("Owner profile not found.");
+  return profileId;
+}
 
 /** Pull vehicle fields out of a submitted form (empty strings → null). */
 function parseVehicle(formData: FormData) {
@@ -50,11 +59,12 @@ export async function addVehicle(formData: FormData): Promise<void> {
   if (!data.name) throw new Error("Name is required.");
 
   // Default the owner to whoever's active if the form didn't specify one.
-  const profileId = data.profileId ?? (await getActiveProfile())?.id ?? null;
+  const profileId =
+    (await validOwner(data.profileId)) ?? (await getActiveProfile())?.id ?? null;
 
   const [row] = await db
     .insert(vehicles)
-    .values({ ...data, profileId })
+    .values({ ...data, profileId, groupId: await requireGroupId() })
     .returning({ id: vehicles.id });
 
   revalidatePath("/garage");
@@ -65,9 +75,10 @@ export async function updateVehicle(
   id: number,
   formData: FormData,
 ): Promise<void> {
-  await requireVehicleEditor(id);
+  await requireVehicleEditor(id); // group-scoped (foreign id → "not found")
   const data = parseVehicle(formData);
   if (!data.name) throw new Error("Name is required.");
+  data.profileId = await validOwner(data.profileId);
 
   await db.update(vehicles).set(data).where(eq(vehicles.id, id));
 

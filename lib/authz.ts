@@ -1,32 +1,31 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // RESOURCE-AWARE EDIT GUARDS — map a resource to "who owns it", then apply the
 // right gate from lib/auth. Keeps ownership logic in one place instead of every
-// action re-deriving it. Viewing/running is always open; these gate WRITES only.
+// action re-deriving it. These gate WRITES only.
+//
+// TENANCY: both guards resolve their row through lib/queries (group-scoped), so
+// a foreign group's id fails with "not found" before any ownership question —
+// an action guarded here can never write across groups, even with a forged id.
 //   • Workouts  → owned by their creator (only the owner, unlocked, may edit).
 //   • Vehicles  → shared = communal (any active editor); private = owner only.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "server-only";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { workouts, vehicles } from "@/lib/db/schema";
 import {
   requireEditor,
   requireEditorFor,
   canEditProfile,
   isEditMode,
 } from "@/lib/auth";
+import { getVehicle } from "@/lib/queries/vehicles";
+import { getWorkout } from "@/lib/queries/workout";
 
 // ── Workouts ──────────────────────────────────────────────────────────────────
 /** Guard a write to a workout (and its items): the creator must be unlocked. */
 export async function requireWorkoutEditor(workoutId: number): Promise<void> {
-  const [row] = await db
-    .select({ owner: workouts.createdByProfileId })
-    .from(workouts)
-    .where(eq(workouts.id, workoutId))
-    .limit(1);
-  if (!row) throw new Error("Workout not found.");
-  await requireEditorFor(row.owner);
+  const workout = await getWorkout(workoutId); // group-scoped
+  if (!workout) throw new Error("Workout not found.");
+  await requireEditorFor(workout.createdByProfileId);
 }
 
 /** UI check: can the current user edit this workout? (owner unlocked) */
@@ -37,13 +36,9 @@ export function canEditWorkout(ownerProfileId: number): Promise<boolean> {
 // ── Vehicles ──────────────────────────────────────────────────────────────────
 /** Guard a write scoped to a vehicle: shared = communal, private = owner-only. */
 export async function requireVehicleEditor(vehicleId: number): Promise<void> {
-  const [row] = await db
-    .select({ owner: vehicles.profileId, visibility: vehicles.visibility })
-    .from(vehicles)
-    .where(eq(vehicles.id, vehicleId))
-    .limit(1);
-  if (!row) throw new Error("Vehicle not found.");
-  if (row.visibility === "private") await requireEditorFor(row.owner);
+  const vehicle = await getVehicle(vehicleId); // group-scoped
+  if (!vehicle) throw new Error("Vehicle not found.");
+  if (vehicle.visibility === "private") await requireEditorFor(vehicle.profileId);
   else await requireEditor(); // shared → any active editor
 }
 

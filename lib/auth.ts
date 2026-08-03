@@ -1,54 +1,37 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH — public to view, per-profile password to edit. No accounts, no logins.
+// AUTH LAYER 2 — edit mode + "claim is the lock" (behind the global login).
 //
-// The model (see [[auth-single-login-no-roles]]): viewing & running are ALWAYS
-// open. Editing is gated per profile. A profile MAY have an optional edit
-// password; null = no password (anyone can edit it). "Edit mode" is turned on per
-// profile and starts OFF — you unlock a profile (entering its password if it has
-// one) and that profile joins the unlocked set carried in a signed cookie.
+// The hub's real security boundary is the login + group tenancy (lib/session,
+// proxy.ts, lib/queries). Behind it, WRITES are gated by two things:
 //
-// Two gates:
-//   • requireEditor()          — communal/shared writes: the ACTIVE profile must
-//                                be in edit mode (the catalog, shared cars, …).
-//   • requireEditorFor(owner)  — OWNED writes: the owning profile must be unlocked
-//                                (your workouts, schedule, private cars, settings).
+//   1. EDIT MODE — a passwordless per-device toggle (the profile menu's
+//      "Enter edit mode"). Starts OFF so browsing never edits by accident; a
+//      plain preference cookie, deliberately unsigned — it grants nothing by
+//      itself, every guard also checks the session and the claim.
+//   2. THE CLAIM — an account may claim a profile (accounts.profileId, managed
+//      at /group). A CLAIMED profile's stuff is editable only by its claiming
+//      account; an UNCLAIMED profile (a kid) is open to the whole group.
 //
-// This is NOT real security (cookie-based, single trusted household). It's a
-// forgiving "hands off my stuff" lock, forward-looking to a multi-person hub.
+// Phase D retired the per-profile edit passwords: the login already proves who
+// you are, so the claim replaces the password. hashPassword/verifyPassword
+// remain here for ACCOUNT passwords (login + scripts/create-account.mjs).
+//
+// Two gates, same names as always (every write action calls one):
+//   • requireEditor()          — communal writes (catalog, shared cars, …).
+//   • requireEditorFor(owner)  — owned writes (workouts, private cars, weight).
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "server-only";
 import { cookies } from "next/headers";
-import {
-  createHmac,
-  timingSafeEqual,
-  randomBytes,
-  scryptSync,
-} from "node:crypto";
-import { getActiveProfile } from "@/lib/profile";
+import { eq } from "drizzle-orm";
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { db } from "@/lib/db";
+import { accounts } from "@/lib/db/schema";
+import { getSession, requireSession } from "@/lib/session";
 import { getProfile } from "@/lib/queries/profiles";
 
-// Signed list of unlocked profile IDs. (Renamed from the old single-token cookie;
-// the old "garage_editor" cookie simply stops being read — everyone re-unlocks.)
-const COOKIE_NAME = "hub_edit_unlocks";
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
-
-function secret(): string {
-  const s = process.env.COOKIE_SECRET;
-  if (!s) throw new Error("COOKIE_SECRET is not set (check .env.local)");
-  return s;
-}
-
-/** Constant-time equality for two hex strings. */
-function safeEqualHex(a: string, b: string): boolean {
-  const ab = Buffer.from(a);
-  const bb = Buffer.from(b);
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
-
-// ── Password hashing (scrypt via node:crypto — no deps) ───────────────────────
-/** Hash a plaintext edit password → "scrypt$<saltHex>$<hashHex>". */
+// ── Password hashing (scrypt via node:crypto — no deps). ACCOUNT passwords. ───
+/** Hash a plaintext password → "scrypt$<saltHex>$<hashHex>". */
 export function hashPassword(plain: string): string {
   const salt = randomBytes(16);
   const hash = scryptSync(plain, salt, 64);
@@ -65,127 +48,81 @@ export function verifyPassword(plain: string, stored: string | null): boolean {
   return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 
-// ── The unlocked-profiles cookie (signed) ─────────────────────────────────────
-function sign(payload: string): string {
-  return createHmac("sha256", secret()).update(payload).digest("hex");
+// ── Edit mode (per-device toggle) ─────────────────────────────────────────────
+const EDIT_MODE_COOKIE = "hub_edit_mode";
+const EDIT_MODE_MAX_AGE = 60 * 60 * 24 * 30; // re-flip once a month, tops
+
+/** Is this device in edit mode? (Signed-out is never editing.) */
+export async function isEditMode(): Promise<boolean> {
+  if ((await getSession()) === null) return false;
+  return (await cookies()).get(EDIT_MODE_COOKIE)?.value === "1";
 }
 
-/** Read + verify the cookie → the list of currently-unlocked profile IDs. */
-async function readUnlocked(): Promise<number[]> {
-  const raw = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!raw || !process.env.COOKIE_SECRET) return [];
-  const dot = raw.lastIndexOf(".");
-  if (dot < 0) return [];
-  const payload = raw.slice(0, dot);
-  if (!safeEqualHex(raw.slice(dot + 1), sign(payload))) return [];
-  try {
-    const ids = JSON.parse(Buffer.from(payload, "base64").toString("utf8"));
-    return Array.isArray(ids) ? ids.filter((n) => Number.isInteger(n)) : [];
-  } catch {
-    return [];
-  }
-}
+// Back-compat alias: existing pages read isEditor() to mean "am I editing now".
+export const isEditor = isEditMode;
 
-async function writeUnlocked(ids: number[]): Promise<void> {
-  const payload = Buffer.from(JSON.stringify([...new Set(ids)])).toString(
-    "base64",
-  );
-  (await cookies()).set(COOKIE_NAME, `${payload}.${sign(payload)}`, {
+/** Flip edit mode on (call from a Server Action). */
+export async function enterEditMode(): Promise<void> {
+  (await cookies()).set(EDIT_MODE_COOKIE, "1", {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production", // allow http on localhost
+    secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: COOKIE_MAX_AGE,
+    maxAge: EDIT_MODE_MAX_AGE,
   });
 }
 
-// ── Queries ───────────────────────────────────────────────────────────────────
-/** Is a specific profile currently unlocked (edit mode on for it)? */
-export async function isProfileUnlocked(id: number): Promise<boolean> {
-  return (await readUnlocked()).includes(id);
+/** Flip edit mode off. */
+export async function exitEditMode(): Promise<void> {
+  (await cookies()).delete(EDIT_MODE_COOKIE);
+}
+
+// ── Claims ────────────────────────────────────────────────────────────────────
+/** The account id claiming this profile, or null if unclaimed. */
+export async function claimedBy(profileId: number): Promise<number | null> {
+  const [row] = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.profileId, profileId))
+    .limit(1);
+  return row?.id ?? null;
 }
 
 /**
- * Can we edit the resources OWNED by this profile? Rules (active-profile-centric):
- *   1. You must be in edit mode as the ACTIVE profile at all (preserves read-only).
- *   2. Your OWN (active) stuff → yes.
- *   3. Someone ELSE's stuff → only if that profile is OPEN (no password). A
- *      password-protected profile can only be edited while it's the active one
- *      (switch to it + unlock) — you can't reach into it from another profile.
+ * Can the signed-in account edit the resources OWNED by this profile?
+ *   1. Must be in edit mode at all (keeps browsing read-only).
+ *   2. Profile must exist IN OUR GROUP (scoped getProfile — foreign ids fail).
+ *   3. Unclaimed profile → open to everyone in the group (the kid case).
+ *      Claimed profile → only its claiming account ("claim is the lock").
  */
 export async function canEditProfile(
   id: number | null | undefined,
 ): Promise<boolean> {
   if (id == null) return false;
-  if (!(await isEditMode())) return false; // active not editing → nothing
-  const active = await getActiveProfile();
-  if (active && active.id === id) return true; // your own stuff
-  const owner = await getProfile(id);
-  return !!owner && !owner.editPasswordHash; // someone else's: only if open
+  const session = await getSession();
+  if (!session) return false;
+  if (!(await isEditMode())) return false;
+  if (!(await getProfile(id))) return false; // not ours → not editable
+  const owner = await claimedBy(id);
+  return owner === null || owner === session.accountId;
 }
 
-/**
- * Is the ACTIVE profile editable right now? True if it has no password (open) or
- * it's been unlocked. Drives the header toggle + communal edits (catalog, shared
- * cars). getActiveProfile already carries editPasswordHash, so this is query-free
- * in the common path.
- */
-export async function isEditMode(): Promise<boolean> {
-  const active = await getActiveProfile();
-  if (!active) return false;
-  if (!active.editPasswordHash) return true; // no password → editing is open
-  return isProfileUnlocked(active.id);
-}
-
-// Back-compat alias: existing callers read isEditor() to mean "am I editing now".
-// Under the per-profile model that's "the active profile is in edit mode".
-export const isEditor = isEditMode;
-
-/** Guard for COMMUNAL writes (catalog, shared cars): active profile in edit mode. */
+// ── Guards (call from Server Actions) ─────────────────────────────────────────
+/** Guard for COMMUNAL writes (catalog, shared cars): signed in + edit mode. */
 export async function requireEditor(): Promise<void> {
+  await requireSession();
   if (!(await isEditMode())) {
-    throw new Error("Not in edit mode — unlock editing first.");
+    throw new Error("Not in edit mode — turn on editing first.");
   }
 }
 
-/** Guard for OWNED writes: the owning profile must be unlocked. */
+/** Guard for OWNED writes: unclaimed-or-yours, in edit mode. */
 export async function requireEditorFor(
   ownerId: number | null | undefined,
 ): Promise<void> {
   if (!(await canEditProfile(ownerId))) {
-    throw new Error("Not authorized — unlock this profile to edit its stuff.");
+    throw new Error(
+      "Not authorized — this profile is claimed by another account.",
+    );
   }
-}
-
-// ── Unlock / lock (mutations — call from Server Actions) ───────────────────────
-export type UnlockResult = { ok: true } | { ok: false; error: string };
-
-/** Turn edit mode ON for a profile (verifying its password if it has one). */
-export async function unlockProfile(
-  id: number,
-  password?: string,
-): Promise<UnlockResult> {
-  const profile = await getProfile(id);
-  if (!profile) return { ok: false, error: "Profile not found." };
-  if (profile.editPasswordHash) {
-    if (!password || !verifyPassword(password, profile.editPasswordHash)) {
-      return { ok: false, error: "Incorrect password." };
-    }
-  }
-  await writeUnlocked([...(await readUnlocked()), id]);
-  return { ok: true };
-}
-
-/** Turn edit mode OFF for one profile. */
-export async function lockProfile(id: number): Promise<void> {
-  await writeUnlocked((await readUnlocked()).filter((x) => x !== id));
-}
-
-/**
- * Lock every profile (clear the unlocked set). Called when switching profiles so
- * an unlocked password-protected profile doesn't linger once you've stepped away.
- * Passwordless profiles stay editable (they're open regardless of the set).
- */
-export async function lockAll(): Promise<void> {
-  await writeUnlocked([]);
 }

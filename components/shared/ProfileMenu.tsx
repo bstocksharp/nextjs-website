@@ -11,27 +11,20 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import TextField from "@mui/material/TextField";
-import Alert from "@mui/material/Alert";
-import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
-import PersonAddAlt1Icon from "@mui/icons-material/PersonAddAlt1";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import DarkModeIcon from "@mui/icons-material/DarkModeOutlined";
 import LightModeIcon from "@mui/icons-material/LightModeOutlined";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import LockOpenOutlinedIcon from "@mui/icons-material/LockOpenOutlined";
+import GroupsIcon from "@mui/icons-material/Groups";
+import FingerprintIcon from "@mui/icons-material/Fingerprint";
+import LogoutIcon from "@mui/icons-material/Logout";
 import CheckIcon from "@mui/icons-material/Check";
-import SubmitButton from "./SubmitButton";
-import ColorSwatches, { PROFILE_SWATCHES } from "./ColorSwatches";
-import { switchProfile, addPerson } from "@/app/actions/profile";
-import { lockAction, unlockInlineAction } from "@/app/actions/auth";
+import { switchProfile } from "@/app/actions/profile";
+import { enterEditModeAction, exitEditModeAction } from "@/app/actions/auth";
+import { logoutAction } from "@/app/actions/session";
 
 export type ProfilePick = { id: number; name: string; color: string | null };
 
@@ -66,25 +59,20 @@ function ProfileAvatar({
   );
 }
 
-// The account menu for the whole hub: who you are (switch/add/manage people),
-// plus the two app-wide settings that used to be separate top-bar icons — the
-// light/dark toggle and the editing lock. The trigger always renders, so those
-// settings stay reachable even before any profile exists.
+// The account menu for the whole hub: switch who you are, plus the app-wide
+// bits — light/dark, the edit-mode toggle (passwordless since Phase D; claimed
+// profiles are protected by their claim), and the account pages (Manage group,
+// Passkeys, Sign out). All people/login management lives on /group.
 export default function ProfileMenu({
   active,
   profiles,
   canEdit,
-  activeHasPassword,
 }: {
   active: ProfilePick | null;
   profiles: ProfilePick[];
   canEdit: boolean;
-  activeHasPassword: boolean;
 }) {
   const [anchor, setAnchor] = React.useState<null | HTMLElement>(null);
-  const [addOpen, setAddOpen] = React.useState(false);
-  const [unlockOpen, setUnlockOpen] = React.useState(false);
-  const [color, setColor] = React.useState(PROFILE_SWATCHES[0]);
   const [, startTransition] = React.useTransition();
 
   // Color mode. useColorScheme() is undefined until mounted, so guard the toggle.
@@ -100,27 +88,11 @@ export default function ProfileMenu({
     if (id !== active?.id) startTransition(() => switchProfile(id));
   }
 
-  function openAdd() {
+  // One-click edit-mode toggle — no password, no dialog (see lib/auth).
+  function toggleEditMode() {
     closeMenu();
-    setColor(PROFILE_SWATCHES[0]);
-    setAddOpen(true);
+    startTransition(() => (canEdit ? exitEditModeAction() : enterEditModeAction()));
   }
-
-  // Only password-protected profiles have a lock to open — passwordless ones are
-  // always editable, so there's no toggle for them.
-  function openUnlock() {
-    closeMenu();
-    setUnlockOpen(true);
-  }
-
-  function lock() {
-    closeMenu();
-    startTransition(() => lockAction());
-  }
-
-  // Whether the "who you are" section renders anything above the settings —
-  // used so we don't emit a leading divider when that section is empty.
-  const hasProfileSection = profiles.length > 0 || canEdit;
 
   return (
     <>
@@ -171,26 +143,10 @@ export default function ProfileMenu({
             ) : null}
           </MenuItem>
         ))}
-        {canEdit ? (
-          <MenuItem onClick={openAdd}>
-            <ListItemIcon>
-              <PersonAddAlt1Icon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Add person…</ListItemText>
-          </MenuItem>
-        ) : null}
-        {canEdit ? (
-          <MenuItem component={Link} href="/people" onClick={closeMenu}>
-            <ListItemIcon>
-              <ManageAccountsIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText>Manage people…</ListItemText>
-          </MenuItem>
-        ) : null}
 
-        {hasProfileSection ? <Divider /> : null}
+        {profiles.length > 0 ? <Divider /> : null}
 
-        {/* App-wide settings: appearance + the editing lock. */}
+        {/* App-wide settings: appearance + the edit-mode toggle. */}
         <MenuItem
           onClick={() => setMode(isDark ? "light" : "dark")}
           disabled={!mounted}
@@ -205,144 +161,44 @@ export default function ProfileMenu({
           <ListItemText>{isDark ? "Light mode" : "Dark mode"}</ListItemText>
         </MenuItem>
 
-        {active && activeHasPassword ? (
-          canEdit ? (
-            <MenuItem onClick={lock}>
-              <ListItemIcon>
-                <LockOpenOutlinedIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Lock editing</ListItemText>
-            </MenuItem>
-          ) : (
-            <MenuItem onClick={openUnlock}>
-              <ListItemIcon>
-                <LockOutlinedIcon fontSize="small" />
-              </ListItemIcon>
-              <ListItemText>Unlock editing…</ListItemText>
-            </MenuItem>
-          )
-        ) : null}
+        <MenuItem onClick={toggleEditMode}>
+          <ListItemIcon>
+            {canEdit ? (
+              <LockOutlinedIcon fontSize="small" />
+            ) : (
+              <LockOpenOutlinedIcon fontSize="small" />
+            )}
+          </ListItemIcon>
+          <ListItemText>{canEdit ? "Done editing" : "Enter edit mode"}</ListItemText>
+        </MenuItem>
+
+        <Divider />
+
+        {/* The global login (whole household) — group, device passkeys, out. */}
+        <MenuItem component={Link} href="/group" onClick={closeMenu}>
+          <ListItemIcon>
+            <GroupsIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Manage group…</ListItemText>
+        </MenuItem>
+        <MenuItem component={Link} href="/passkeys" onClick={closeMenu}>
+          <ListItemIcon>
+            <FingerprintIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Passkeys…</ListItemText>
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeMenu();
+            startTransition(() => logoutAction());
+          }}
+        >
+          <ListItemIcon>
+            <LogoutIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>Sign out</ListItemText>
+        </MenuItem>
       </Menu>
-
-      <AddPersonDialog
-        open={addOpen}
-        color={color}
-        setColor={setColor}
-        onClose={() => setAddOpen(false)}
-      />
-
-      {/* Mounted only while open so useActionState resets fresh each time. */}
-      {unlockOpen ? (
-        <UnlockDialog
-          profileName={active?.name ?? "this profile"}
-          onClose={() => setUnlockOpen(false)}
-        />
-      ) : null}
     </>
-  );
-}
-
-function UnlockDialog({
-  profileName,
-  onClose,
-}: {
-  profileName: string;
-  onClose: () => void;
-}) {
-  const [state, formAction] = React.useActionState(unlockInlineAction, null);
-
-  // On success the cookie's set and the page revalidated — just close.
-  React.useEffect(() => {
-    if (state?.ok) onClose();
-  }, [state, onClose]);
-
-  return (
-    <Dialog open onClose={onClose} fullWidth maxWidth="xs">
-      <form action={formAction}>
-        <DialogTitle>Unlock {profileName}&apos;s editing</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2} sx={{ mt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              Enter {profileName}&apos;s edit password to change their stuff.
-              Viewing &amp; running stay open to everyone.
-            </Typography>
-            {state && !state.ok ? (
-              <Alert severity="error">{state.error}</Alert>
-            ) : null}
-            <TextField
-              name="password"
-              type="password"
-              label="Password"
-              autoFocus
-              required
-              fullWidth
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} color="inherit">
-            Cancel
-          </Button>
-          <SubmitButton variant="contained" pendingLabel="Unlocking…">
-            Unlock
-          </SubmitButton>
-        </DialogActions>
-      </form>
-    </Dialog>
-  );
-}
-
-function AddPersonDialog({
-  open,
-  color,
-  setColor,
-  onClose,
-}: {
-  open: boolean;
-  color: string;
-  setColor: (c: string) => void;
-  onClose: () => void;
-}) {
-  return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
-      <form
-        action={async (fd) => {
-          await addPerson(fd);
-          onClose();
-        }}
-      >
-        <DialogTitle>Add a person</DialogTitle>
-        <DialogContent>
-          <Stack spacing={2.5} sx={{ mt: 0.5 }}>
-            <TextField
-              name="name"
-              label="Name"
-              required
-              fullWidth
-              autoFocus
-              placeholder="e.g. Bryce"
-            />
-            <input type="hidden" name="color" value={color} />
-            <ColorSwatches value={color} onChange={setColor} />
-            <TextField
-              name="password"
-              type="password"
-              label="Edit password (optional)"
-              fullWidth
-              autoComplete="new-password"
-              helperText="Leave blank for no lock — anyone can edit. Set one and only someone who knows it can edit this person's stuff. Viewing is always open."
-            />
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={onClose} color="inherit">
-            Cancel
-          </Button>
-          <SubmitButton variant="contained" pendingLabel="Adding…">
-            Add person
-          </SubmitButton>
-        </DialogActions>
-      </form>
-    </Dialog>
   );
 }

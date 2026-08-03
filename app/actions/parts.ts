@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { parts } from "@/lib/db/schema";
 import { requireVehicleEditor } from "@/lib/authz";
@@ -53,7 +53,7 @@ export async function updatePart(
   await db
     .update(parts)
     .set({ ...data, name: data.name })
-    .where(eq(parts.id, id));
+    .where(and(eq(parts.id, id), eq(parts.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -65,7 +65,7 @@ export async function deletePart(
   _formData: FormData,
 ): Promise<void> {
   await requireVehicleEditor(vehicleId);
-  await db.delete(parts).where(eq(parts.id, id));
+  await db.delete(parts).where(and(eq(parts.id, id), eq(parts.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));

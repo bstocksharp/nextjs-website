@@ -9,17 +9,26 @@ import {
   workouts,
   workoutAssignments,
 } from "@/lib/db/schema";
-import { requireEditor, requireEditorFor, hashPassword, lockAll } from "@/lib/auth";
+import { requireEditor, requireEditorFor } from "@/lib/auth";
 import { getActiveProfile, setActiveProfileCookie } from "@/lib/profile";
+import { requireGroupId } from "@/lib/session";
+import { getProfile } from "@/lib/queries/profiles";
 import { APPS } from "@/lib/apps";
 import { cleanEquipment } from "@/lib/workout";
 
-/** First active profile other than `exceptId`, or null. */
+/** First active profile in OUR group other than `exceptId`, or null. */
 async function otherActiveProfile(exceptId: number) {
+  const groupId = await requireGroupId();
   const rows = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(and(isNull(profiles.archivedAt), ne(profiles.id, exceptId)))
+    .where(
+      and(
+        eq(profiles.groupId, groupId),
+        isNull(profiles.archivedAt),
+        ne(profiles.id, exceptId),
+      ),
+    )
     .orderBy(profiles.sortOrder, profiles.id)
     .limit(1);
   return rows[0] ?? null;
@@ -35,65 +44,58 @@ async function otherActiveProfile(exceptId: number) {
  * stay open.
  */
 export async function switchProfile(id: number): Promise<void> {
-  await lockAll();
+  // Only switch to one of OUR (active) profiles — a foreign or archived id is a
+  // no-op. getActiveProfile would neutralize a bad cookie anyway; this keeps it
+  // from ever being written. (Switching is freely open: viewing another person
+  // was never gated, and their CLAIMED stuff stays hands-off regardless.)
+  const target = await getProfile(id); // group-scoped
+  if (!target || target.archivedAt) return;
   await setActiveProfileCookie(id);
   revalidatePath("/", "layout");
 }
 
-/** Create a new person (optionally password-locked) and switch to them. */
+/** Create a new person and switch to them. (Unclaimed → open to the group; an
+ *  account can claim them at /group to make their stuff hands-off.) */
 export async function addPerson(formData: FormData): Promise<void> {
   await requireEditor();
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
   const color = String(formData.get("color") ?? "").trim() || null;
-  const password = String(formData.get("password") ?? "").trim();
 
   const [created] = await db
     .insert(profiles)
-    .values({
-      name,
-      color,
-      editPasswordHash: password ? hashPassword(password) : null,
-    })
+    .values({ groupId: await requireGroupId(), name, color })
     .returning();
 
-  // New person starts in view mode (not added to the unlocked set); switch to them.
   if (created) await setActiveProfileCookie(created.id);
   revalidatePath("/", "layout");
 }
 
-/** Update a person's display name, color, hidden-apps, owned-equipment + password. */
+/** Update a person's display name, color, hidden-apps + owned-equipment. */
 export async function updateProfile(
   id: number,
   formData: FormData,
 ): Promise<void> {
-  await requireEditorFor(id); // you can only edit a profile you've unlocked
+  await requireEditorFor(id); // unclaimed or claimed-by-you (see lib/auth)
 
   const name = String(formData.get("name") ?? "").trim();
   if (!name) throw new Error("Name is required.");
   const color = String(formData.get("color") ?? "").trim() || null;
   const hiddenApps = parseHiddenApps(formData.get("hiddenApps"));
-  const equipment = parseEquipment(formData.get("equipment"));
 
-  // Password: only touch it deliberately. "removePassword" clears it; otherwise a
-  // non-empty "password" sets a new one; a blank field leaves it unchanged (so a
-  // normal save never wipes it).
-  const set: {
-    name: string;
-    color: string | null;
-    hiddenApps: string[];
-    equipment: string[];
-    editPasswordHash?: string | null;
-  } = { name, color, hiddenApps, equipment };
-  if (formData.get("removePassword") != null) {
-    set.editPasswordHash = null;
-  } else {
-    const password = String(formData.get("password") ?? "").trim();
-    if (password) set.editPasswordHash = hashPassword(password);
-  }
+  // Only touch equipment when the form actually carried the field. The /people
+  // dialog doesn't (gear is edited in the workout app via setProfileEquipment),
+  // and an absent field used to parse as [] — silently wiping someone's gear
+  // every time their name or color was saved.
+  const rawEquipment = formData.get("equipment");
+  const equipment =
+    rawEquipment != null ? { equipment: parseEquipment(rawEquipment) } : {};
 
-  await db.update(profiles).set(set).where(eq(profiles.id, id));
+  await db
+    .update(profiles)
+    .set({ name, color, hiddenApps, ...equipment })
+    .where(eq(profiles.id, id));
   revalidatePath("/", "layout");
 }
 
@@ -152,7 +154,10 @@ function parseHiddenApps(raw: FormDataEntryValue | null): string[] {
 export async function deactivateProfile(id: number): Promise<void> {
   await requireEditorFor(id); // deactivate a person you've unlocked
 
-  const activeCount = await db.$count(profiles, isNull(profiles.archivedAt));
+  const activeCount = await db.$count(
+    profiles,
+    and(eq(profiles.groupId, await requireGroupId()), isNull(profiles.archivedAt)),
+  );
   if (activeCount <= 1) {
     throw new Error("Can't deactivate the only active profile.");
   }
@@ -194,10 +199,18 @@ export async function deleteProfileForever(
   await requireEditorFor(id); // delete a person you've unlocked
 
   if (heirId === id) throw new Error("Pick a different profile to inherit.");
+  // Heir must be one of OUR active profiles — shared cars/workouts must never
+  // transfer across the group boundary.
   const [heir] = await db
     .select({ id: profiles.id })
     .from(profiles)
-    .where(and(eq(profiles.id, heirId), isNull(profiles.archivedAt)))
+    .where(
+      and(
+        eq(profiles.id, heirId),
+        eq(profiles.groupId, await requireGroupId()),
+        isNull(profiles.archivedAt),
+      ),
+    )
     .limit(1);
   if (!heir) throw new Error("Heir profile not found.");
 

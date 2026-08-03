@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { buildTasks } from "@/lib/db/schema";
 import { requireVehicleEditor } from "@/lib/authz";
@@ -64,7 +64,7 @@ export async function updateBuildTask(
   await db
     .update(buildTasks)
     .set({ ...data, title: data.title })
-    .where(eq(buildTasks.id, id));
+    .where(and(eq(buildTasks.id, id), eq(buildTasks.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -76,7 +76,7 @@ export async function deleteBuildTask(
   _formData: FormData,
 ): Promise<void> {
   await requireVehicleEditor(vehicleId);
-  await db.delete(buildTasks).where(eq(buildTasks.id, id));
+  await db.delete(buildTasks).where(and(eq(buildTasks.id, id), eq(buildTasks.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
   redirect(back(vehicleId));
@@ -98,7 +98,7 @@ export async function toggleBuildTask(
       status: done ? "done" : "planned",
       completedDate: done ? todayISO() : null,
     })
-    .where(eq(buildTasks.id, id));
+    .where(and(eq(buildTasks.id, id), eq(buildTasks.vehicleId, vehicleId)));
 
   revalidatePath(`/garage/${vehicleId}`);
 }
