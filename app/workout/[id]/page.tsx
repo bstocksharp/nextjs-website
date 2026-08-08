@@ -93,26 +93,18 @@ export default async function WorkoutDetailPage({
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
       {saved ? <SavedToast message="Workout saved" /> : null}
-      <Button
-        component={Link}
-        href="/workout"
-        startIcon={<ArrowBackIcon />}
-        sx={{ mb: 2 }}
-      >
-        All workouts
-      </Button>
-
-      {/* Title + Edit on one line */}
+      {/* Back on the left, actions on the right — the title below gets the full
+          width to wrap, so a long name can't force horizontal scroll on mobile. */}
       <Stack
         direction="row"
         justifyContent="space-between"
         alignItems="center"
-        spacing={2}
-        sx={{ mb: 1 }}
+        spacing={1}
+        sx={{ mb: 2 }}
       >
-        <Typography variant="h3" component="h1">
-          {workout.name}
-        </Typography>
+        <Button component={Link} href="/workout" startIcon={<ArrowBackIcon />}>
+          All workouts
+        </Button>
         <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
           {canEdit ? (
             <Button
@@ -138,6 +130,10 @@ export default async function WorkoutDetailPage({
           ) : null}
         </Stack>
       </Stack>
+
+      <Typography variant="h3" component="h1" sx={{ mb: 1 }}>
+        {workout.name}
+      </Typography>
 
       {/* Count + "saved by" on one line */}
       <Stack
