@@ -1,15 +1,17 @@
 import { redirect } from "next/navigation";
 import Container from "@mui/material/Container";
 import Typography from "@mui/material/Typography";
-import Paper from "@mui/material/Paper";
 import { isEditor } from "@/lib/auth";
 import { listProfiles } from "@/lib/queries/profiles";
+import { listExercises } from "@/lib/queries/workout";
 import { getActiveProfile } from "@/lib/profile";
-import { addWorkout } from "@/app/actions/workout";
-import WorkoutMetaForm from "@/components/workout/WorkoutMetaForm";
+import { createWorkoutWithItems } from "@/app/actions/workout";
+import WorkoutDraftBuilder from "@/components/workout/WorkoutDraftBuilder";
 
 export const metadata = { title: "New workout — Workout" };
 
+// One-page create: the whole workout is drafted in client state and saved with
+// a single action — nothing hits the database until "Create workout".
 export default async function NewWorkoutPage({
   searchParams,
 }: {
@@ -18,8 +20,9 @@ export default async function NewWorkoutPage({
   if (!(await isEditor())) redirect("/unlock");
 
   const { profile, weekday } = await searchParams;
-  const [profiles, active] = await Promise.all([
+  const [profiles, catalog, active] = await Promise.all([
     listProfiles(),
+    listExercises(),
     getActiveProfile(profile),
   ]);
   const defaultProfileId = active?.id ?? profiles[0]?.id;
@@ -32,18 +35,17 @@ export default async function NewWorkoutPage({
         New workout
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Name it and set the rounds — you&apos;ll add exercises next.
+        Name it, stack the exercises, tweak the numbers — it all saves in one go
+        when you hit Create.
       </Typography>
-      <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 4 } }}>
-        <WorkoutMetaForm
-          action={addWorkout}
-          profiles={profiles}
-          defaultProfileId={defaultProfileId}
-          assignWeekday={assignWeekday}
-          submitLabel="Create & add exercises"
-          cancelHref="/workout"
-        />
-      </Paper>
+      <WorkoutDraftBuilder
+        action={createWorkoutWithItems}
+        profiles={profiles}
+        defaultProfileId={defaultProfileId}
+        assignWeekday={assignWeekday}
+        exercises={catalog}
+        ownedEquipment={active?.equipment ?? []}
+      />
     </Container>
   );
 }

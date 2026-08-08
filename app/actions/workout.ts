@@ -18,7 +18,7 @@ import { requireGroupId } from "@/lib/session";
 import { getProfile } from "@/lib/queries/profiles";
 import { countExerciseUsage, getExercise, getWorkout } from "@/lib/queries/workout";
 import { RUN_TIMING } from "@/lib/workout-config";
-import { cleanEquipment } from "@/lib/workout";
+import { cleanEquipment, SECTIONS } from "@/lib/workout";
 
 const CATALOG = "/workout/catalog";
 
@@ -130,7 +130,70 @@ function parseWorkout(formData: FormData) {
   };
 }
 
-export async function addWorkout(formData: FormData): Promise<void> {
+// ── One-page create (components/workout/WorkoutDraftBuilder) ──────────────────
+// The draft builder holds the whole workout in client state and posts it here
+// once: meta fields + an `items` hidden field (JSON array of draft items in
+// display order). Item values are the EFFECTIVE values shown in the draft, so
+// each is diffed against its catalog default and only genuine overrides persist
+// (same rule as updateWorkoutItem).
+
+type DraftItem = {
+  exerciseId: number;
+  section: string;
+  reps: string | null;
+  duration: number | null;
+  weight: string | null;
+  holdLast: boolean;
+  note: string | null;
+};
+
+function parseDraftItems(formData: FormData): DraftItem[] {
+  const raw = formData.get("items");
+  if (typeof raw !== "string" || !raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+
+  const knownSections = new Set<string>(SECTIONS.map((s) => s.value));
+  const asStr = (v: unknown): string | null => {
+    if (typeof v !== "string") return null;
+    const t = v.trim();
+    return t === "" ? null : t;
+  };
+
+  return parsed.slice(0, 100).flatMap((entry): DraftItem[] => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const o = entry as Record<string, unknown>;
+    const exerciseId = Number(o.exerciseId);
+    if (!Number.isInteger(exerciseId)) return [];
+    // NB: Number(null) is 0 — bail to null before coercing so "no duration"
+    // never turns into a 0-second timer.
+    const duration = o.duration == null ? null : Number(o.duration);
+    return [
+      {
+        exerciseId,
+        section:
+          typeof o.section === "string" && knownSections.has(o.section)
+            ? o.section
+            : "main",
+        reps: asStr(o.reps),
+        duration:
+          duration != null && Number.isInteger(duration) && duration >= 0
+            ? duration
+            : null,
+        weight: asStr(o.weight),
+        holdLast: o.holdLast === true,
+        note: asStr(o.note),
+      },
+    ];
+  });
+}
+
+export async function createWorkoutWithItems(formData: FormData): Promise<void> {
   const { name, rounds, restBetweenRounds, createdByProfileId } =
     parseWorkout(formData);
   if (!name) throw new Error("Workout name is required.");
@@ -138,10 +201,43 @@ export async function addWorkout(formData: FormData): Promise<void> {
   // The person it's saved-by owns it, so they must be unlocked to create it.
   await requireEditorFor(createdByProfileId);
 
+  // Only OUR catalog's exercises can be referenced — foreign ids are dropped.
+  const groupId = await requireGroupId();
+  const catalog = await db
+    .select()
+    .from(exercises)
+    .where(eq(exercises.groupId, groupId));
+  const byId = new Map(catalog.map((e) => [e.id, e]));
+  const draft = parseDraftItems(formData).filter((it) => byId.has(it.exerciseId));
+
+  // Persist in section-canonical order (warmup → main → cooldown), matching how
+  // the draft renders. Stable sort keeps the user's order within each section.
+  const rank = new Map<string, number>(SECTIONS.map((s, i) => [s.value, i]));
+  draft.sort((a, b) => (rank.get(a.section) ?? 9) - (rank.get(b.section) ?? 9));
+
   const [row] = await db
     .insert(workouts)
     .values({ name, rounds, restBetweenRounds, createdByProfileId })
     .returning({ id: workouts.id });
+
+  if (draft.length) {
+    await db.insert(workoutItems).values(
+      draft.map((it, i) => {
+        const ex = byId.get(it.exerciseId)!;
+        return {
+          workoutId: row.id,
+          exerciseId: it.exerciseId,
+          section: it.section,
+          reps: overrideStr(it.reps, ex.defaultReps),
+          duration: overrideNum(it.duration, ex.defaultDuration),
+          weight: overrideStr(it.weight, ex.defaultWeight),
+          holdLast: overrideBool(it.holdLast, ex.holdLast),
+          note: it.note,
+          sortOrder: i,
+        };
+      }),
+    );
+  }
 
   // "Build a workout for this day" flow: auto-assign it to that weekday.
   const assignWeekday = int(formData, "assignWeekday");
@@ -156,7 +252,7 @@ export async function addWorkout(formData: FormData): Promise<void> {
   }
 
   revalidatePath("/workout");
-  redirect(builderPath(row.id)); // straight into the builder to add exercises
+  redirect(`/workout/${row.id}`); // straight to the finished workout
 }
 
 export async function updateWorkout(
