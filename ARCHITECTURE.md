@@ -99,11 +99,27 @@ routes a PWA install needs). Sessions are 90-day **rolling** signed cookies
 so the same code runs in the proxy and actions; server helpers in
 [`lib/session.ts`](lib/session.ts)). Any visit past the half-life re-issues the
 cookie, so devices in regular use never log out. Accounts (`accounts` table) are
-login identities, distinct from profiles; there is **no signup UI** — create one
-with `node scripts/create-account.mjs <username>` (`--reset` to change a
-password). The proxy fails **closed** (no `COOKIE_SECRET` → nobody in), and the
-write guards call `requireSession()` too, so a proxy bypass still can't mutate
-anything.
+login identities, distinct from profiles; the way in is an **invite link**
+(Phase E): the group **owner** (`groups.ownerAccountId`) mints signed-random
+`/join/<token>` URLs at `/group` — single-use, 7-day expiry unless made
+reusable, revocable, destination either "join this household" or "their own
+fresh hub". `/join/*` is the one public page besides `/login`; the unguessable
+token is the credential, and redemption (`app/actions/join.ts`) re-validates
+liveness on every submit. `node scripts/create-account.mjs <username>` remains
+the break-glass path (`--reset` to change a password). The proxy fails
+**closed** (no `COOKIE_SECRET` → nobody in), and the write guards call
+`requireSession()` too, so a proxy bypass still can't mutate anything.
+`requireSession()` also double-checks the account still **exists** (one cached
+SELECT per request) — removing a member at `/group` kills their otherwise-valid
+90-day cookie at the next request, via `/signout` (the public cookie-clearing
+route). Removal deletes only the login and its passkeys; the person's profile
+and data stay, and any claim is released. The full lifecycle lives in `/group`'s
+danger zone: non-owners can **leave** (self-removal, same semantics), the owner
+can **transfer ownership**, and the owner can **delete the hub forever**
+(type-the-name confirm, re-checked server-side). Hub deletion runs in dependency
+order — attachment rows (polymorphic, no FK), then workouts (`ON DELETE
+RESTRICT` behind profiles would abort the cascade), then the group row, which
+cascades everything else.
 
 **Passkeys (WebAuthn / Face ID)** ride on top of the login: manage at
 `/passkeys` (add this device, remove lost ones), sign in usernameless from
@@ -171,13 +187,11 @@ deactivate the last active profile or delete without an heir, and
 shared routines out from under someone.
 
 **Future direction (auth roadmap):** Phases A (login), B (passkeys), C (groups +
-demo tenant) and D (claims) are done. **Phase E** is product-mode: a group
-**owner** (`groups.ownerAccountId`) who can invite and remove members, signed
-expiring **invite links** (`/join?token=…` — the only self-serve account
-creation; today it's `scripts/create-account.mjs`), and seats/billing hanging off
-the group. `/group` is the page that grows those. `visibility` can also grow a
-`custom` value backed by a `vehicle_shares` join table (vehicleId, profileId,
-canEdit) — no rework of the owner/visibility columns.
+demo tenant), D (claims) and E (owner + invite links + member removal, all at
+`/group`) are done. What's left of product-mode is seats/billing hanging off the
+group. `visibility` can also grow a `custom` value backed by a `vehicle_shares`
+join table (vehicleId, profileId, canEdit) — no rework of the owner/visibility
+columns.
 
 ## Data layer
 

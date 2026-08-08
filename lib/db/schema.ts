@@ -20,6 +20,7 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 const createdAt = () =>
@@ -255,6 +256,39 @@ export const groups = pgTable("groups", {
   // Demo groups are wiped + reseeded on every demo login (lib/demo.ts) so each
   // visitor gets a pristine tour no matter what the last one deleted.
   isDemo: boolean("is_demo").notNull().default(false),
+  // THE OWNER (Phase E): the one account that manages membership — mints/revokes
+  // invite links and removes logins (/group). Deliberately thin: owning grants
+  // nothing else (data writes still go through edit mode + claims). Circular FK
+  // with accounts.group_id, hence the lazy reference; SET NULL so deleting the
+  // owner account orphans the role rather than the group (recoverable by hand).
+  // Null = no owner (the demo group; legacy groups until backfilled).
+  ownerAccountId: integer("owner_account_id").references(
+    (): AnyPgColumn => accounts.id,
+    { onDelete: "set null" },
+  ),
+  createdAt: createdAt(),
+});
+
+// ── Invites (Phase E) — how new logins join without the terminal script ───────
+// An invite is a capability URL: /join/<token>. Whoever opens a live one may
+// create ONE login (more if maxUses allows). `groupId` is the destination —
+// a household to join (Lauren-style) or NULL for "their own new empty hub"
+// (Val-style, mirroring create-account.mjs without --join). Minted and revoked
+// by the group OWNER at /group; single-use + 7-day expiry by default, so a
+// leaked old link is worthless. Rows are kept after use/revoke/expiry (they're
+// the audit trail of who was let in); "pending" is computed, never stored.
+export const invites = pgTable("invites", {
+  id: serial("id").primaryKey(),
+  token: varchar("token", { length: 64 }).notNull().unique(), // base64url(randomBytes)
+  groupId: integer("group_id").references(() => groups.id, { onDelete: "cascade" }),
+  createdByAccountId: integer("created_by_account_id")
+    .notNull()
+    .references(() => accounts.id, { onDelete: "cascade" }),
+  note: varchar("note", { length: 120 }), // "for Val" — shown in the pending list
+  maxUses: integer("max_uses").default(1), // null = reusable until expiry/revoke
+  usedCount: integer("used_count").notNull().default(0),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
   createdAt: createdAt(),
 });
 
@@ -525,6 +559,8 @@ export const weightPlans = pgTable(
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;
+export type Invite = typeof invites.$inferSelect;
+export type NewInvite = typeof invites.$inferInsert;
 export type Account = typeof accounts.$inferSelect;
 export type NewAccount = typeof accounts.$inferInsert;
 export type Passkey = typeof passkeys.$inferSelect;

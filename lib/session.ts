@@ -15,7 +15,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import "server-only";
+import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { accounts } from "@/lib/db/schema";
 import {
   SESSION_COOKIE,
   SESSION_TTL_SECONDS,
@@ -61,10 +66,33 @@ export async function getSession(): Promise<Session | null> {
   return payload ? { accountId: payload.accountId, groupId: payload.groupId } : null;
 }
 
+// LIVENESS (Phase E): the cookie alone can outlive the account — member removal
+// deletes the row, but the removed device still holds a valid-signed token for
+// up to 90 days. So the data layer double-checks the account still exists (and
+// still belongs to the token's group). cache() memoizes per request: one tiny
+// SELECT no matter how many queries a page runs. The proxy stays cookie-only on
+// purpose — it's the convenience redirect, not the boundary.
+const accountAlive = cache(
+  async (accountId: number, groupId: number): Promise<boolean> => {
+    const [row] = await db
+      .select({ groupId: accounts.groupId })
+      .from(accounts)
+      .where(eq(accounts.id, accountId))
+      .limit(1);
+    return row != null && row.groupId === groupId;
+  },
+);
+
 /** Data-layer guard: throw unless signed in. Belt to the proxy's suspenders. */
 export async function requireSession(): Promise<Session> {
   const session = await getSession();
   if (!session) throw new Error("Not signed in.");
+  if (!(await accountAlive(session.accountId, session.groupId))) {
+    // Removed member (or a group move): the token is dead. Send them through
+    // /signout, which clears the cookie and lands on /login — redirecting to
+    // /login directly would loop (the proxy bounces signed-cookie holders off it).
+    redirect("/signout");
+  }
   return session;
 }
 

@@ -26,8 +26,8 @@ import { cookies } from "next/headers";
 import { eq } from "drizzle-orm";
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { db } from "@/lib/db";
-import { accounts } from "@/lib/db/schema";
-import { getSession, requireSession } from "@/lib/session";
+import { accounts, groups } from "@/lib/db/schema";
+import { getSession, requireSession, type Session } from "@/lib/session";
 import { getProfile } from "@/lib/queries/profiles";
 
 // ── Password hashing (scrypt via node:crypto — no deps). ACCOUNT passwords. ───
@@ -105,6 +105,35 @@ export async function canEditProfile(
   if (!(await getProfile(id))) return false; // not ours → not editable
   const owner = await claimedBy(id);
   return owner === null || owner === session.accountId;
+}
+
+// ── Owner (Phase E) ───────────────────────────────────────────────────────────
+// The group's owner is the ONE account that manages membership: invite links
+// and removing logins (/group). Deliberately thin — owning grants no extra data
+// rights (writes still go through edit mode + claims above).
+
+/** Is the signed-in account this group's owner? (Signed out → no.) */
+export async function isOwner(): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  const [row] = await db
+    .select({ ownerAccountId: groups.ownerAccountId })
+    .from(groups)
+    .where(eq(groups.id, session.groupId))
+    .limit(1);
+  return row?.ownerAccountId === session.accountId;
+}
+
+/**
+ * Guard for MEMBERSHIP writes (mint/revoke invites, remove logins): owner, in
+ * edit mode. Returns the session so callers don't re-fetch it.
+ */
+export async function requireOwner(): Promise<Session> {
+  await requireEditor(); // signed in + edit mode (admin actions are still writes)
+  if (!(await isOwner())) {
+    throw new Error("Only the group owner can manage members and invites.");
+  }
+  return requireSession();
 }
 
 // ── Guards (call from Server Actions) ─────────────────────────────────────────
