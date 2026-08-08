@@ -1,6 +1,8 @@
-// Create (or password-reset) a GLOBAL LOGIN account — the only way accounts are
-// made until Phase E's invite links; there's deliberately no signup UI. Plain JS
-// + raw SQL on the Neon HTTP client, same zero-build-step pattern as the seeds.
+// Create (or password-reset) a GLOBAL LOGIN account — the break-glass path.
+// Since Phase E the normal way in is an INVITE LINK minted at /group (the
+// owner's Invites panel → /join/<token>); this script remains for bootstrap,
+// password resets, and emergencies. Plain JS + raw SQL on the Neon HTTP
+// client, same zero-build-step pattern as the seeds.
 //
 //   node scripts/create-account.mjs <username>              new login + ITS OWN new group
 //   node scripts/create-account.mjs <username> --join <id>  new login INTO an existing group
@@ -165,12 +167,18 @@ async function main() {
     return;
   }
 
+  const madeNewGroup = !group;
   if (!group) {
     [group] = await sql`INSERT INTO groups (name) VALUES (${`${username}'s hub`}) RETURNING id, name`;
   }
 
-  await sql`INSERT INTO accounts (username, password_hash, group_id)
-            VALUES (${username}, ${passwordHash}, ${group.id})`;
+  const [account] = await sql`INSERT INTO accounts (username, password_hash, group_id)
+            VALUES (${username}, ${passwordHash}, ${group.id}) RETURNING id`;
+  // A brand-new hub belongs to its first (only) login — Phase E's owner role
+  // gates invites + member removal at /group.
+  if (madeNewGroup) {
+    await sql`UPDATE groups SET owner_account_id = ${account.id} WHERE id = ${group.id}`;
+  }
   console.log(
     `Account "${username}" created in group #${group.id} "${group.name}"${joinGroupId === null ? " (new)" : ""}. Sign in at /login.`,
   );

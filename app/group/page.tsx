@@ -1,4 +1,5 @@
 import Link from "@/components/shared/AppLink";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
@@ -17,13 +18,21 @@ import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import SubmitButton from "@/components/shared/SubmitButton";
 import AddPersonButton from "@/components/shared/AddPersonButton";
 import EditProfileButton from "@/components/shared/EditProfileButton";
+import DeleteIconButton from "@/components/shared/DeleteIconButton";
 import GroupNameEditor from "./GroupNameEditor";
+import InvitesPanel, { type InviteRow } from "./InvitesPanel";
+import DangerZone from "./DangerZone";
 import { getSession } from "@/lib/session";
 import { isEditor, canEditProfile } from "@/lib/auth";
 import { getMyGroup, listGroupMembers } from "@/lib/queries/groups";
+import { listPendingInvites } from "@/lib/queries/invites";
 import { listAllProfiles } from "@/lib/queries/profiles";
 import { getActiveProfile } from "@/lib/profile";
-import { claimProfileAction, releaseClaimAction } from "@/app/actions/group";
+import {
+  claimProfileAction,
+  releaseClaimAction,
+  removeMemberAction,
+} from "@/app/actions/group";
 
 export const metadata = { title: "Group" };
 
@@ -50,6 +59,32 @@ export default async function GroupPage() {
     isEditor(),
   ]);
   const canManage = await Promise.all(all.map((p) => canEditProfile(p.id)));
+
+  // Membership controls (invites + removal) are the OWNER's, behind edit mode
+  // like every other write. Invite links need an absolute URL — derive the
+  // origin from Host headers (same idiom as lib/webauthn), never an env var.
+  const viewerIsOwner =
+    group?.ownerAccountId != null && group.ownerAccountId === session.accountId;
+  const h = await headers();
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
+  const proto =
+    h.get("x-forwarded-proto") ??
+    (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");
+  const origin = `${proto}://${host}`;
+  let inviteRows: InviteRow[] = [];
+  if (viewerIsOwner && canEdit) {
+    inviteRows = (await listPendingInvites()).map((inv) => ({
+      id: inv.id,
+      link: `${origin}/join/${inv.token}`,
+      note: inv.note,
+      household: inv.groupId !== null,
+      reusable: inv.maxUses === null,
+      expiresInDays: Math.max(
+        0,
+        Math.floor((inv.expiresAt.getTime() - Date.now()) / 86_400_000),
+      ),
+    }));
+  }
 
   const activeProfiles = all.filter((p) => !p.archivedAt);
   const canDeactivate = activeProfiles.length > 1;
@@ -204,12 +239,25 @@ export default async function GroupPage() {
             <Paper
               key={m.id}
               variant="outlined"
-              sx={{ p: 2, display: "flex", alignItems: "center", gap: 1.5 }}
+              sx={{
+                p: 2,
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                flexWrap: "wrap",
+              }}
             >
               <KeyIcon fontSize="small" color="disabled" />
-              <Typography fontWeight={600} sx={{ flexGrow: 1 }} noWrap>
+              <Typography
+                fontWeight={600}
+                sx={{ flexGrow: 1, minWidth: 0 }}
+                noWrap
+              >
                 {m.username}
               </Typography>
+              {m.id === group?.ownerAccountId ? (
+                <Chip size="small" label="owner" color="secondary" />
+              ) : null}
               {m.id === session.accountId ? (
                 <Chip size="small" label="you" color="primary" variant="outlined" />
               ) : null}
@@ -222,16 +270,51 @@ export default async function GroupPage() {
                 }
                 variant={m.profileId !== null ? "filled" : "outlined"}
               />
+              {viewerIsOwner && canEdit && m.id !== session.accountId ? (
+                <DeleteIconButton
+                  action={removeMemberAction.bind(null, m.id)}
+                  confirmMessage={`Remove the login "${m.username}"? Their person and data stay — only the login (and its passkeys) is deleted, and any claim is released.`}
+                  label={`Remove login ${m.username}`}
+                />
+              ) : null}
             </Paper>
           ))}
         </Stack>
 
+        {viewerIsOwner && canEdit ? (
+          <>
+            <Divider>
+              <Typography variant="overline" color="text.secondary">
+                Invites
+              </Typography>
+            </Divider>
+            <InvitesPanel
+              origin={origin}
+              groupName={group?.name ?? "this hub"}
+              invites={inviteRows}
+            />
+          </>
+        ) : null}
+
         <Typography variant="caption" color="text.secondary">
-          Logins are created by the household admin (a terminal script for now —
-          new logins get their own hub unless deliberately added here).
-          Invitations, removing members, and a group owner role are planned;
-          this page will grow them.
+          New logins join through <strong>invite links</strong>
+          {viewerIsOwner
+            ? " you mint above (single-use, 7-day expiry unless you say otherwise)"
+            : ", minted by the group owner"}
+          . A &ldquo;join&rdquo; invite makes them a member of this hub; an
+          &ldquo;own hub&rdquo; invite gives them a fresh private one. Removing
+          a login never touches the person or their data.
         </Typography>
+
+        {!group?.isDemo ? (
+          <DangerZone
+            isOwner={viewerIsOwner}
+            groupName={group?.name ?? "this hub"}
+            others={members
+              .filter((m) => m.id !== session.accountId)
+              .map((m) => ({ id: m.id, username: m.username }))}
+          />
+        ) : null}
       </Stack>
     </Container>
   );

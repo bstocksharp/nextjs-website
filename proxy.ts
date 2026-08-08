@@ -20,11 +20,14 @@ import {
 // cookies, and the proxy sees every request.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Reachable while signed out: the login page itself, and everything a PWA
-// install / browser tab needs before auth (manifest + icons — see the note in
-// app/manifest.ts). Everything else redirects.
+// Reachable while signed out: the login page itself, everything a PWA install /
+// browser tab needs before auth (manifest + icons — see the note in
+// app/manifest.ts), and the Phase E doors: /join/<token> (an invite IS the
+// credential — the visitor doesn't have a login yet) and /signout (where dead
+// sessions go to clear their cookie). Everything else redirects.
 const PUBLIC_PATHS = new Set([
   "/login",
+  "/signout",
   "/manifest.webmanifest",
   "/manifest-icon",
   "/apple-icon",
@@ -32,6 +35,10 @@ const PUBLIC_PATHS = new Set([
   "/icon.svg",
   "/favicon.ico",
 ]);
+
+function isPublic(pathname: string): boolean {
+  return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/join/");
+}
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -47,7 +54,7 @@ export async function proxy(req: NextRequest) {
     : null;
 
   if (!session) {
-    if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+    if (isPublic(pathname)) return NextResponse.next();
     const url = req.nextUrl.clone();
     url.pathname = "/login";
     url.search = "";
