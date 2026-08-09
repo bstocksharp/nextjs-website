@@ -7,21 +7,15 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
-import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import Typography from "@mui/material/Typography";
 import SubmitButton from "@/components/shared/SubmitButton";
 import NumberField from "@/components/shared/NumberField";
+import MonthYearField from "@/components/shared/MonthYearField";
 import { saveSnapshotsAction } from "@/app/actions/finance-networth";
 
 export type SnapshotAccount = { id: number; name: string };
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 // THE monthly ritual: one dialog, one $ field per account, one submit. The
 // month is picked with explicit dropdowns (no free-form text), and the $ fields
@@ -54,7 +48,6 @@ export default function SnapshotDialog({
   const [ym, setYm] = React.useState(month);
   const [error, setError] = React.useState<string | null>(null);
 
-  const [yearStr, monthStr] = ym.split("-");
   const balances = balancesByMonth[ym] ?? {};
   const alreadyLogged = ym in balancesByMonth;
 
@@ -72,36 +65,10 @@ export default function SnapshotDialog({
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
       <DialogTitle>{title}</DialogTitle>
       <form action={handle}>
-        <input type="hidden" name="month" value={ym} readOnly />
         <DialogContent sx={{ pt: 1 }}>
           <Stack spacing={2.5}>
             {error ? <Alert severity="error">{error}</Alert> : null}
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
-              <TextField
-                label="Month"
-                select
-                value={monthStr}
-                onChange={(e) => setYm(`${yearStr}-${e.target.value}`)}
-              >
-                {MONTHS.map((name, i) => (
-                  <MenuItem key={name} value={String(i + 1).padStart(2, "0")}>
-                    {name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label="Year"
-                select
-                value={yearStr}
-                onChange={(e) => setYm(`${e.target.value}-${monthStr}`)}
-              >
-                {yearOptions.map((y) => (
-                  <MenuItem key={y} value={String(y)}>
-                    {y}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Box>
+            <MonthYearField name="month" value={ym} onChange={setYm} years={yearOptions} />
             <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
               {alreadyLogged
                 ? "This month is already logged — saving overwrites it. Blank fields stay untouched."

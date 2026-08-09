@@ -84,6 +84,7 @@ export default function NetWorthActions({
           onClose={() => setGoalOpen(false)}
           activeGoal={activeGoal}
           defaultMonth={defaultMonth}
+          yearOptions={yearOptions}
         />
       ) : null}
     </>

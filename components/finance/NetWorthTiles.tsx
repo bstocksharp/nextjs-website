@@ -50,7 +50,16 @@ function Tile({
 const deltaColor = (n: number | null) =>
   n == null || n === 0 ? undefined : n > 0 ? "success.main" : "warning.main";
 
-export default function NetWorthTiles({ stats }: { stats: NetWorthStats }) {
+export default function NetWorthTiles({
+  stats,
+  activeGoal,
+  editor,
+}: {
+  stats: NetWorthStats;
+  /** The open-ended goal segment, if any — used to explain a missing goal line. */
+  activeGoal: { monthlyGoal: number; startMonth: string } | null;
+  editor: boolean;
+}) {
   const goalPct =
     stats.bankCumulative != null && stats.bankGoalToDate != null && stats.bankGoalToDate > 0
       ? (stats.bankCumulative / stats.bankGoalToDate) * 100
@@ -100,7 +109,14 @@ export default function NetWorthTiles({ stats }: { stats: NetWorthStats }) {
         sub={
           stats.bankGoalToDate != null && stats.bankVsGoal != null
             ? `goal ${formatMoney(stats.bankGoalToDate)} · ${formatMoneySigned(stats.bankVsGoal)} vs plan`
-            : "no savings goal yet"
+            : // A goal can exist and still have no line here: it starts after the
+              // last month logged (or after this whole year). Say which, so the
+              // tile never contradicts the "Saving goal $X/mo" in the header.
+              activeGoal
+              ? `${formatMoney(activeGoal.monthlyGoal)}/mo goal starts ${formatMonth(activeGoal.startMonth)}`
+              : editor
+                ? "no savings goal yet — set one under Goal"
+                : "no savings goal yet"
         }
       >
         {goalPct != null ? (

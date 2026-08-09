@@ -125,7 +125,7 @@ export default async function NetWorthPage({
         </Paper>
       ) : (
         <>
-          <NetWorthTiles stats={dash.stats} />
+          <NetWorthTiles stats={dash.stats} activeGoal={activeGoal} editor={editor} />
 
           <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 3 }}>
             <Typography variant="h6" sx={{ mb: 1.5, px: 1 }}>

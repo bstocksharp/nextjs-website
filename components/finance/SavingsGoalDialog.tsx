@@ -6,7 +6,6 @@ import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import Stack from "@mui/material/Stack";
-import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import Radio from "@mui/material/Radio";
@@ -15,6 +14,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Typography from "@mui/material/Typography";
 import SubmitButton from "@/components/shared/SubmitButton";
 import NumberField from "@/components/shared/NumberField";
+import MonthYearField from "@/components/shared/MonthYearField";
 import {
   saveSavingsGoalAction,
   startSavingsGoalAction,
@@ -30,17 +30,41 @@ export default function SavingsGoalDialog({
   onClose,
   activeGoal,
   defaultMonth,
+  yearOptions,
 }: {
   open: boolean;
   onClose: () => void;
   activeGoal: { monthlyGoal: number; startMonth: string } | null;
   /** "YYYY-MM" default for new segments. */
   defaultMonth: string;
+  /** Years for the month picker (current year back through the oldest data). */
+  yearOptions: number[];
 }) {
   const [flavor, setFlavor] = React.useState<"adjust" | "new">(
     activeGoal ? "adjust" : "new",
   );
+  // Adjust edits the existing segment's start; New picks where the next one
+  // begins — so switching flavors re-seeds the picker to the right default.
+  const [startMonth, setStartMonth] = React.useState(
+    activeGoal ? activeGoal.startMonth.slice(0, 7) : defaultMonth,
+  );
   const [error, setError] = React.useState<string | null>(null);
+
+  // A goal can legitimately start next year (a raise you already know about),
+  // which the snapshot years never need — you can't log a future balance.
+  const years = React.useMemo(
+    () => (yearOptions.length ? [yearOptions[0] + 1, ...yearOptions] : yearOptions),
+    [yearOptions],
+  );
+
+  function pickFlavor(next: "adjust" | "new") {
+    setFlavor(next);
+    setStartMonth(
+      next === "adjust" && activeGoal
+        ? activeGoal.startMonth.slice(0, 7)
+        : defaultMonth,
+    );
+  }
 
   async function handle(formData: FormData) {
     setError(null);
@@ -68,7 +92,7 @@ export default function SavingsGoalDialog({
                 </Typography>
                 <RadioGroup
                   value={flavor}
-                  onChange={(e) => setFlavor(e.target.value as "adjust" | "new")}
+                  onChange={(e) => pickFlavor(e.target.value as "adjust" | "new")}
                 >
                   <FormControlLabel
                     value="adjust"
@@ -95,17 +119,23 @@ export default function SavingsGoalDialog({
               decimalScale={2}
               defaultValue={activeGoal?.monthlyGoal ?? null}
             />
-            {!activeGoal || flavor === "new" ? (
-              <TextField
+            {/* Always editable: the start month decides when the goal line
+                begins accumulating, so a wrong one silently leaves the tile
+                with no goal at all. */}
+            <Stack spacing={0.75}>
+              <MonthYearField
                 name="startMonth"
-                label="Starting month"
-                type="month"
-                required
-                fullWidth
-                defaultValue={defaultMonth}
-                slotProps={{ inputLabel: { shrink: true } }}
+                value={startMonth}
+                onChange={setStartMonth}
+                years={years}
+                monthLabel="Starting month"
+                yearLabel="Starting year"
               />
-            ) : null}
+              <Typography variant="caption" color="text.secondary">
+                The first month this goal counts — set it to your earliest tracked
+                month to measure the whole year.
+              </Typography>
+            </Stack>
           </Stack>
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 2 }}>

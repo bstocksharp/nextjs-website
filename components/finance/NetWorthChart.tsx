@@ -29,6 +29,9 @@ const PALETTE = [
 
 export type NetWorthChartAccount = { id: number; name: string };
 
+/** "23%" / "0.4%" — one decimal under 10% so small accounts don't read as zero. */
+const share = (pct: number) => `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
+
 // The sheet's stacked-area chart: one band per account, the stack's top edge IS
 // the net-worth total. Missing balances render as 0 in the stack (an account
 // that didn't exist yet contributes nothing) — the history table still shows
@@ -49,6 +52,22 @@ export default function NetWorthChart({
     [months],
   );
 
+  // The stack total per month — same number as the band's top edge. The tooltip
+  // header shows it and every account row shows its share of it, which is the
+  // "what's actually carrying the growth" read the sheet never gave.
+  const totals = React.useMemo(
+    () =>
+      months.map((_, i) =>
+        accounts.reduce((sum, a) => sum + (balances[a.id]?.[i] ?? 0), 0),
+      ),
+    [months, accounts, balances],
+  );
+  // The axis formatter gets a Date, not an index — look the total back up by time.
+  const totalByTime = React.useMemo(
+    () => new Map(x.map((d, i) => [d.getTime(), totals[i]])),
+    [x, totals],
+  );
+
   const series = accounts.map((a, i) => ({
     id: `acct-${a.id}`,
     label: a.name,
@@ -58,7 +77,11 @@ export default function NetWorthChart({
     stack: "networth",
     showMark: false,
     curve: "monotoneX" as const,
-    valueFormatter: (v: number | null) => (v == null || v === 0 ? "—" : formatMoney(v)),
+    valueFormatter: (v: number | null, ctx: { dataIndex: number }) => {
+      if (v == null || v === 0) return "—";
+      const total = totals[ctx.dataIndex] ?? 0;
+      return total > 0 ? `${formatMoney(v)} · ${share((v / total) * 100)}` : formatMoney(v);
+    },
   }));
 
   return (
@@ -71,13 +94,17 @@ export default function NetWorthChart({
             {
               data: x,
               scaleType: "time",
-              valueFormatter: (value: Date, ctx: { location: string }) =>
-                ctx.location === "tick"
-                  ? value.toLocaleDateString("en-US", { month: "short" })
-                  : value.toLocaleDateString("en-US", {
-                      month: "long",
-                      year: "numeric",
-                    }),
+              valueFormatter: (value: Date, ctx: { location: string }) => {
+                if (ctx.location === "tick") {
+                  return value.toLocaleDateString("en-US", { month: "short" });
+                }
+                const label = value.toLocaleDateString("en-US", {
+                  month: "long",
+                  year: "numeric",
+                });
+                const total = totalByTime.get(value.getTime());
+                return total ? `${label} · ${formatMoney(total)}` : label;
+              },
             },
           ]}
           yAxis={[

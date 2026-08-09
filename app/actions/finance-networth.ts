@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { financialAccounts, accountSnapshots, savingsGoals } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
@@ -218,7 +218,12 @@ export async function deleteAccountAction(
 }
 
 // ── Savings goal (effective-dated segments, weightPlans-style) ────────────────
-/** Edit the ACTIVE goal in place (typo fix / same-timeframe adjustment). */
+/**
+ * Edit the ACTIVE goal in place (typo fix / same-timeframe adjustment). The
+ * start month is editable too: it decides when the goal line starts
+ * accumulating, so getting it wrong is the one mistake that makes the goal
+ * look like it doesn't exist.
+ */
 export async function saveSavingsGoalAction(formData: FormData): Promise<void> {
   await requireEditor();
   const groupId = await requireGroupId();
@@ -226,22 +231,26 @@ export async function saveSavingsGoalAction(formData: FormData): Promise<void> {
   const monthlyGoal = money(formData.get("monthlyGoal"));
   if (monthlyGoal === null) throw new Error("Monthly goal is required.");
 
+  // Latest-starting open segment — the same row the dashboard calls "active",
+  // so Adjust always edits the goal the dialog just showed.
   const [active] = await db
     .select()
     .from(savingsGoals)
     .where(and(eq(savingsGoals.groupId, groupId), isNull(savingsGoals.endMonth)))
-    .orderBy(savingsGoals.startMonth)
+    .orderBy(desc(savingsGoals.startMonth), desc(savingsGoals.id))
     .limit(1);
+
+  const startMonth =
+    normalizeMonth(formData.get("startMonth")) ??
+    active?.startMonth ??
+    normalizeMonth(new Date().toISOString())!;
 
   if (active) {
     await db
       .update(savingsGoals)
-      .set({ monthlyGoal })
+      .set({ monthlyGoal, startMonth })
       .where(eq(savingsGoals.id, active.id));
   } else {
-    const startMonth =
-      normalizeMonth(formData.get("startMonth")) ??
-      normalizeMonth(new Date().toISOString())!;
     await db.insert(savingsGoals).values({ groupId, monthlyGoal, startMonth });
   }
   revalidatePath(FINANCE);
