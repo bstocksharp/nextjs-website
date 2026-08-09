@@ -556,6 +556,78 @@ export const weightPlans = pgTable(
   (t) => [index("idx_weight_plans_profile").on(t.profileId, t.startDate)],
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — Net worth (F1 of the finance roadmap; ATLAS + budget follow).
+// Accounts are the group's money places; snapshots are the first-of-the-month
+// ritual (log every balance once a month). Everything derived — totals, MoM,
+// cumulative growth, the bank-saved-vs-goal lines — is COMPUTED in
+// lib/queries/finance-networth.ts, never stored (same spirit as MPG/weight).
+// ─────────────────────────────────────────────────────────────────────────────
+export const financialAccounts = pgTable(
+  "financial_accounts",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // Display grouping + chart stacking:
+    // checking | savings | brokerage | retirement | crypto | hsa | credit_card | other
+    kind: varchar("kind", { length: 20 }).notNull().default("other"),
+    // The "Bank saved" metric subset (e.g. the two Ally accounts) — an explicit
+    // flag, not inferred from kind (Venmo+ is checking-like but excluded).
+    includeInBankSaved: boolean("include_in_bank_saved").notNull().default(false),
+    // false = not part of the monthly balance ritual (e.g. a credit card row
+    // that exists only as a payment source for recurring expenses, F2+).
+    trackBalance: boolean("track_balance").notNull().default(true),
+    sortOrder: integer("sort_order").default(0),
+    // Soft close — accounts come and go (an HSA opens mid-year, Venmo+ dies).
+    // Hidden from new snapshots, history intact. Mirrors profiles.archivedAt.
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_fin_accounts_group").on(t.groupId)],
+);
+
+// One row per account per month; re-logging a month UPDATES it (same unique-
+// index idempotency as weigh_ins). month is always normalized to YYYY-MM-01.
+export const accountSnapshots = pgTable(
+  "account_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => financialAccounts.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    balance: numeric("balance", { precision: 12, scale: 2 }).notNull(),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("uniq_snapshot_account_month").on(t.accountId, t.month)],
+);
+
+// Effective-dated "bank saved" goal segments (weight_plans pattern): the goal
+// line accumulates monthlyGoal per month from startMonth; endMonth null = the
+// active segment, so changing the goal never rewrites the old goal line.
+export const savingsGoals = pgTable("savings_goals", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  monthlyGoal: numeric("monthly_goal", { precision: 10, scale: 2 }).notNull(),
+  startMonth: date("start_month").notNull(),
+  endMonth: date("end_month"),
+  createdAt: createdAt(),
+});
+
+export type FinancialAccount = typeof financialAccounts.$inferSelect;
+export type NewFinancialAccount = typeof financialAccounts.$inferInsert;
+export type AccountSnapshot = typeof accountSnapshots.$inferSelect;
+export type NewAccountSnapshot = typeof accountSnapshots.$inferInsert;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;

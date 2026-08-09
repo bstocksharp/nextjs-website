@@ -2,7 +2,7 @@ import "server-only";
 import { and, eq, exists } from "drizzle-orm";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
 import { db } from "@/lib/db";
-import { vehicles, profiles } from "@/lib/db/schema";
+import { vehicles, profiles, financialAccounts } from "@/lib/db/schema";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TENANCY FRAGMENTS — reusable WHERE conditions that tie a child row to the
@@ -29,5 +29,20 @@ export function profileInGroup(profileIdCol: AnyPgColumn, groupId: number) {
       .select({ one: profiles.id })
       .from(profiles)
       .where(and(eq(profiles.id, profileIdCol), eq(profiles.groupId, groupId))),
+  );
+}
+
+/** WHERE-fragment: the row's financial account belongs to this group. */
+export function financialAccountInGroup(accountIdCol: AnyPgColumn, groupId: number) {
+  return exists(
+    db
+      .select({ one: financialAccounts.id })
+      .from(financialAccounts)
+      .where(
+        and(
+          eq(financialAccounts.id, accountIdCol),
+          eq(financialAccounts.groupId, groupId),
+        ),
+      ),
   );
 }

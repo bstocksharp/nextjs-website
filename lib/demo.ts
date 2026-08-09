@@ -31,6 +31,9 @@ import {
   weightPlans,
   resources,
   checklists,
+  financialAccounts,
+  accountSnapshots,
+  savingsGoals,
 } from "@/lib/db/schema";
 
 // ── Date helpers (all ISO YYYY-MM-DD, anchored at noon UTC) ───────────────────
@@ -44,6 +47,13 @@ function mondaysAgo(weeksBack: number): string {
   const d = new Date();
   const day = d.getUTCDay(); // 0 Sun .. 6 Sat
   d.setUTCDate(d.getUTCDate() - ((day + 6) % 7) - weeksBack * 7);
+  return d.toISOString().slice(0, 10);
+}
+/** First-of-month ISO for the month `monthsBack` months ago (0 = this month). */
+function monthsAgo(monthsBack: number): string {
+  const d = new Date();
+  d.setUTCDate(1);
+  d.setUTCMonth(d.getUTCMonth() - monthsBack);
   return d.toISOString().slice(0, 10);
 }
 
@@ -64,6 +74,8 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
   await db.delete(exercises).where(eq(exercises.groupId, groupId));
   await db.delete(resources).where(eq(resources.groupId, groupId));
   await db.delete(checklists).where(eq(checklists.groupId, groupId));
+  await db.delete(financialAccounts).where(eq(financialAccounts.groupId, groupId)); // cascades snapshots
+  await db.delete(savingsGoals).where(eq(savingsGoals.groupId, groupId));
 
   // ── People ───────────────────────────────────────────────────────────────────
   const [alex, sam] = await db
@@ -381,4 +393,56 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
       rangeLb: "3.0",
     },
   ]);
+
+  // ── Finance: net worth — 8 months of balances across 6 tracked accounts ─────
+  // The Rewards Card is a credit card (trackBalance false) so it exists for the
+  // future budget/ATLAS tabs without cluttering the monthly net-worth ritual.
+  // The two savings accounts are flagged includeInBankSaved, so "bank saved" is
+  // a real subset tracked against the $1,000/mo goal.
+  const accountDefs = [
+    { name: "Everyday Checking", kind: "checking", start: 3800, step: 120, wob: 260 },
+    { name: "High-Yield Savings", kind: "savings", bank: true, start: 21000, step: 900, wob: 400 },
+    { name: "Brokerage", kind: "brokerage", start: 34500, step: 650, wob: 700 },
+    { name: "401(k)", kind: "retirement", start: 41000, step: 1100, wob: 300 },
+    { name: "Crypto", kind: "crypto", start: 900, step: 140, wob: 180 },
+    { name: "Emergency Fund", kind: "savings", bank: true, start: 6000, step: 250, wob: 120 },
+  ];
+  const finAccounts = await db
+    .insert(financialAccounts)
+    .values([
+      ...accountDefs.map((a, i) => ({
+        groupId,
+        name: a.name,
+        kind: a.kind,
+        includeInBankSaved: a.bank ?? false,
+        sortOrder: i,
+      })),
+      { groupId, name: "Rewards Card", kind: "credit_card", trackBalance: false, sortOrder: 6 },
+    ])
+    .returning({ id: financialAccounts.id, name: financialAccounts.name });
+  const idByName = Object.fromEntries(finAccounts.map((a) => [a.name, a.id]));
+
+  // Monthly series oldest→newest (8 months incl. the baseline). A fixed wobble
+  // keeps the charts human-looking without being random on every reseed.
+  const NW_MONTHS = 8;
+  const nwWobble = [0.4, -0.6, 0.3, 0.8, -0.2, 0.5, -0.4, 0.1];
+  const snapshotRows: (typeof accountSnapshots.$inferInsert)[] = [];
+  for (let i = 0; i < NW_MONTHS; i++) {
+    const month = monthsAgo(NW_MONTHS - 1 - i);
+    for (const a of accountDefs) {
+      const val = a.start + a.step * i + nwWobble[i] * a.wob;
+      snapshotRows.push({
+        accountId: idByName[a.name],
+        month,
+        balance: Math.max(0, Math.round(val * 100) / 100).toFixed(2),
+      });
+    }
+  }
+  await db.insert(accountSnapshots).values(snapshotRows);
+
+  await db.insert(savingsGoals).values({
+    groupId,
+    monthlyGoal: "1000.00",
+    startMonth: monthsAgo(NW_MONTHS - 1),
+  });
 }
