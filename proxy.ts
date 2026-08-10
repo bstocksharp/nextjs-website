@@ -37,7 +37,14 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 function isPublic(pathname: string): boolean {
-  return PUBLIC_PATHS.has(pathname) || pathname.startsWith("/join/");
+  return (
+    PUBLIC_PATHS.has(pathname) ||
+    pathname.startsWith("/join/") ||
+    // Finance machine endpoints — token-authed themselves (Bearer fin_…), so
+    // the session gate must let them through. Without this the Shortcut's POST
+    // 307s to /login and the alert is silently lost.
+    pathname.startsWith("/api/finance/")
+  );
 }
 
 export async function proxy(req: NextRequest) {

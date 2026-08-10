@@ -556,6 +556,309 @@ export const weightPlans = pgTable(
   (t) => [index("idx_weight_plans_profile").on(t.profileId, t.startDate)],
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — Net worth (F1 of the finance roadmap; ATLAS + budget follow).
+// Accounts are the group's money places; snapshots are the first-of-the-month
+// ritual (log every balance once a month). Everything derived — totals, MoM,
+// cumulative growth, the bank-saved-vs-goal lines — is COMPUTED in
+// lib/queries/finance-networth.ts, never stored (same spirit as MPG/weight).
+// ─────────────────────────────────────────────────────────────────────────────
+export const financialAccounts = pgTable(
+  "financial_accounts",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // Display grouping + chart stacking:
+    // checking | savings | brokerage | retirement | crypto | hsa | credit_card | other
+    kind: varchar("kind", { length: 20 }).notNull().default("other"),
+    // The "Bank saved" metric subset (e.g. the two Ally accounts) — an explicit
+    // flag, not inferred from kind (Venmo+ is checking-like but excluded).
+    includeInBankSaved: boolean("include_in_bank_saved").notNull().default(false),
+    // false = not part of the monthly balance ritual (e.g. a credit card row
+    // that exists only as a payment source for recurring expenses, F2+).
+    trackBalance: boolean("track_balance").notNull().default(true),
+    // The account day-to-day discretionary spending runs through (the budget
+    // envelope = discretion + this account's fixed bills). An EXPLICIT flag —
+    // never inferred from kind — because multi-card households are normal and
+    // a debit family's "spending card" is their checking account.
+    carriesDiscretion: boolean("carries_discretion").notNull().default(false),
+    sortOrder: integer("sort_order").default(0),
+    // Soft close — accounts come and go (an HSA opens mid-year, Venmo+ dies).
+    // Hidden from new snapshots, history intact. Mirrors profiles.archivedAt.
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    notes: text("notes"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_fin_accounts_group").on(t.groupId)],
+);
+
+// One row per account per month; re-logging a month UPDATES it (same unique-
+// index idempotency as weigh_ins). month is always normalized to YYYY-MM-01.
+export const accountSnapshots = pgTable(
+  "account_snapshots",
+  {
+    id: serial("id").primaryKey(),
+    accountId: integer("account_id")
+      .notNull()
+      .references(() => financialAccounts.id, { onDelete: "cascade" }),
+    month: date("month").notNull(),
+    balance: numeric("balance", { precision: 12, scale: 2 }).notNull(),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [uniqueIndex("uniq_snapshot_account_month").on(t.accountId, t.month)],
+);
+
+// Effective-dated "bank saved" goal segments (weight_plans pattern): the goal
+// line accumulates monthlyGoal per month from startMonth; endMonth null = the
+// active segment, so changing the goal never rewrites the old goal line.
+export const savingsGoals = pgTable("savings_goals", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  monthlyGoal: numeric("monthly_goal", { precision: 10, scale: 2 }).notNull(),
+  startMonth: date("start_month").notNull(),
+  endMonth: date("end_month"),
+  createdAt: createdAt(),
+});
+
+export type FinancialAccount = typeof financialAccounts.$inferSelect;
+export type NewFinancialAccount = typeof financialAccounts.$inferInsert;
+export type AccountSnapshot = typeof accountSnapshots.$inferSelect;
+export type NewAccountSnapshot = typeof accountSnapshots.$inferInsert;
+export type SavingsGoal = typeof savingsGoals.$inferSelect;
+export type NewSavingsGoal = typeof savingsGoals.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — ATLAS (F2): income + the recurring-spend registry. ALL THREE tables
+// are EFFECTIVE-DATED (startDate + endDate null = active, the weight_plans
+// pattern): a raise or a bill change starts a NEW segment instead of editing
+// history, so any past month can be viewed with the config that was true THEN
+// (and the future budget tab's closed months stay honest). Nothing derived is
+// stored — net pay, monthly totals, the discretionary envelope, category
+// subtotals and %-of-paycheck analytics are all computed in
+// lib/queries/finance-atlas.ts from the rows effective at the viewed month.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Compensation — PROFILE-owned (income is a person's; Lauren's can be added
+// later; writes go through requireEditorFor). Net/hourly/TCV always derived.
+export const compensationPlans = pgTable(
+  "compensation_plans",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    // semimonthly (24/yr) | biweekly (26/yr) | monthly (12/yr) — paychecks/year derived.
+    payFrequency: varchar("pay_frequency", { length: 20 })
+      .notNull()
+      .default("semimonthly"),
+    grossPerPaycheck: numeric("gross_per_paycheck", { precision: 10, scale: 2 }).notNull(),
+    baseSalary: numeric("base_salary", { precision: 12, scale: 2 }), // display; hourly = base/2080
+    shares: integer("shares"),
+    sharePrice: numeric("share_price", { precision: 10, scale: 4 }), // TCV = base + shares×price
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"), // null = active segment
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_comp_plans_profile").on(t.profileId, t.startDate)],
+);
+
+// Per-paycheck deductions — PROFILE-owned, effective-dated independently of the
+// comp plan (insurance renews on its own clock). source decides the math:
+// 'payroll' is subtracted from gross to get net; 'employer' is an employer-paid
+// benefit (tracked for the investing analytics, NOT subtracted).
+export const incomeDeductions = pgTable(
+  "income_deductions",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // insurance | retirement | health | tax | employer_benefit — display grouping.
+    type: varchar("type", { length: 30 }),
+    source: varchar("source", { length: 20 }).notNull().default("payroll"), // payroll | employer
+    // EXACTLY ONE of these is set (app-enforced): a flat $ per paycheck, OR a
+    // % of gross (a 6% 401k) — percent rows track raises automatically, since
+    // the dollar amount is derived from whichever comp plan is effective.
+    amountPerPaycheck: numeric("amount_per_paycheck", { precision: 10, scale: 2 }),
+    percentOfGross: numeric("percent_of_gross", { precision: 5, scale: 2 }),
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_deductions_profile").on(t.profileId, t.startDate)],
+);
+
+// The household's recurring bills — GROUP-owned; ALSO the future budget
+// engine's fixed/amortized config (merchantPatterns + isEstimate are its
+// hooks). `amount` is per-occurrence at the bill's real cadence; the monthly
+// figure is derived as amount × paymentsPerYear / 12 (the gist's math), so a
+// $993 six-month insurance bill reads as $165.50/mo.
+export const recurringExpenses = pgTable(
+  "recurring_expenses",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // Freeform label (Subscriptions, Utilities, Housing…) — suggested via
+    // autocomplete, never a locked enum, so each household grows its own set.
+    category: varchar("category", { length: 60 }),
+    // essential (rent, utilities) | lifestyle (subscriptions you could drop) |
+    // commitment (savings, tithing — intentional transfers, not consumption).
+    necessity: varchar("necessity", { length: 20 }).notNull().default("essential"),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    paymentsPerYear: integer("payments_per_year").notNull().default(12),
+    // Named due months for uneven cadences ("Jan / April" = [1,4]); null = evenly spaced.
+    dueMonths: jsonb("due_months").$type<number[]>(),
+    dueDay: varchar("due_day", { length: 20 }), // free text on purpose: "5th", "EOM", "???"
+    // Which account pays it (the Chase-vs-Ally split; drives the budget envelope).
+    paidFromAccountId: integer("paid_from_account_id").references(
+      () => financialAccounts.id,
+      { onDelete: "set null" },
+    ),
+    // Variable bills (electric): amount is an estimate; the budget tab adjusts
+    // when the actual posts.
+    isEstimate: boolean("is_estimate").notNull().default(false),
+    // SMS merchant substrings for the budget tab's auto-categorization
+    // (matched longest-first, e.g. ["SPECTRUM MOBILE", "SPECTRUM"]).
+    merchantPatterns: jsonb("merchant_patterns").$type<string[]>().notNull().default([]),
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_recurring_group").on(t.groupId, t.startDate)],
+);
+
+export type CompensationPlan = typeof compensationPlans.$inferSelect;
+export type NewCompensationPlan = typeof compensationPlans.$inferInsert;
+export type IncomeDeduction = typeof incomeDeductions.$inferSelect;
+export type NewIncomeDeduction = typeof incomeDeductions.$inferInsert;
+export type RecurringExpense = typeof recurringExpenses.$inferSelect;
+export type NewRecurringExpense = typeof recurringExpenses.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — Budget (F3): the transaction ledger + its machinery. Open months
+// are computed LIVE by lib/finance/budget-engine from transactions + the
+// effective ATLAS config; CLOSED months render from their stored snapshot (the
+// one sanctioned derived-storage bend — txn categories stay editable forever,
+// and immutability of the past is the requirement). The engine's lanes:
+// discretionary spent-vs-budget is the headline; fixed = billed-vs-expected;
+// amortized = sinking-fund reserve accrue/consume. NEVER raw outflow vs
+// envelope (matching the envelope in a no-bills month means the reserves got
+// spent).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Every card alert / manual entry. Direct groupId (the ingest route has no
+// session — a token resolves the tenant). `amount` is the EFFECTIVE, editable
+// value (signed; negative = credit / fund top-up); originalAmount preserves
+// what actually posted so adjustments are visible ("adjusted from $X").
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    // Which account the charge hit (per-card analytics; per-bank feeds).
+    accountId: integer("account_id").references(() => financialAccounts.id, {
+      onDelete: "set null",
+    }),
+    postedOn: date("posted_on").notNull(),
+    merchant: varchar("merchant", { length: 200 }),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    originalAmount: numeric("original_amount", { precision: 10, scale: 2 }).notNull(),
+    // Engine semantics (fixed enum — labels live on ATLAS categories instead):
+    // discretionary | fixed | amortized | savings | reimbursement | fund |
+    // income | ignored. income never touches spend math; ignored is the trash
+    // that still keeps its audit trail.
+    category: varchar("category", { length: 20 }).notNull().default("discretionary"),
+    // fixed/amortized txns match a recurring bill → estimate-vs-actual deltas
+    // and sinking-fund consumption.
+    recurringExpenseId: integer("recurring_expense_id").references(
+      () => recurringExpenses.id,
+      { onDelete: "set null" },
+    ),
+    fundId: integer("fund_id").references(() => funds.id, { onDelete: "set null" }),
+    source: varchar("source", { length: 20 }).notNull(), // sms | manual
+    rawText: text("raw_text"), // full SMS body kept for audit + re-parse
+    rawHash: varchar("raw_hash", { length: 64 }), // sha256; short-window dedupe, NOT unique
+    // Unparseable SMS lands as amount 0 + needsReview — surfaced, never dropped.
+    needsReview: boolean("needs_review").notNull().default(false),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("idx_txn_group_posted").on(t.groupId, t.postedOn),
+    index("idx_txn_recurring").on(t.recurringExpenseId),
+  ],
+);
+
+// One-time pools (Lauren's fund, Bryce's fund, a shared vacation pot…) — a txn
+// assigned to a fund draws it down instead of the month's budget. Balance is
+// ALWAYS derived: startingBalance − Σ(fund txns); top-ups are negative txns.
+// ownerProfileId is display/ownership (and the future teen-budget seam).
+export const funds = pgTable("funds", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  ownerProfileId: integer("owner_profile_id").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  startingBalance: numeric("starting_balance", { precision: 10, scale: 2 }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: createdAt(),
+});
+
+// NOTE: there is deliberately NO budget_months / snapshot table. Months are
+// never "frozen" — config is effective-dated (a past month always reads the pay
+// & bills that were true then), so history can't be rewritten by a later change
+// and every month stays freely editable. The whole budget computes live.
+
+// Machine auth for the ingest + widget endpoints (the hub's first). Per-device
+// tokens ("Bryce shortcut", "Lauren widget") so revoking a lost phone breaks
+// nothing else. Only the sha256 lands in the DB — the secret is shown ONCE at
+// mint (a leak of this table leaks nothing usable). Liveness = revokedAt null,
+// invites-style.
+export const apiTokens = pgTable("api_tokens", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  label: varchar("label", { length: 120 }).notNull(),
+  scope: varchar("scope", { length: 20 }).notNull(), // ingest | widget
+  // Ingest tokens are per-FEED (the Chase SMS shortcut, a future Ally feed) —
+  // binding one to an account stamps every transaction it ingests with where
+  // the money moved. Null = unattributed.
+  accountId: integer("account_id").references(() => financialAccounts.id, {
+    onDelete: "set null",
+  }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;
+export type Fund = typeof funds.$inferSelect;
+export type NewFund = typeof funds.$inferInsert;
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type NewApiToken = typeof apiTokens.$inferInsert;
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;

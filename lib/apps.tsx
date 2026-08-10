@@ -3,6 +3,7 @@ import type { SvgIconProps } from "@mui/material/SvgIcon";
 import GarageIcon from "@mui/icons-material/Garage";
 import FitnessCenterIcon from "@mui/icons-material/FitnessCenter";
 import MonitorWeightIcon from "@mui/icons-material/MonitorWeight";
+import SavingsIcon from "@mui/icons-material/Savings";
 
 // The registry of sub-apps in the hub. Add an app here (plus its route folder)
 // and it shows up in the Hub launcher and the header app-switcher automatically.
@@ -53,6 +54,19 @@ export const APPS: AppDef[] = [
     nav: [
       { label: "Dashboard", href: "/weight" },
       { label: "History", href: "/weight/history" },
+    ],
+  },
+  {
+    slug: "finance",
+    name: "Finance",
+    tagline: "Net worth, income & the budget",
+    href: "/finance",
+    Icon: SavingsIcon,
+    accent: "#3fa796",
+    nav: [
+      { label: "Budget", href: "/finance" },
+      { label: "ATLAS", href: "/finance/atlas" },
+      { label: "Net Worth", href: "/finance/net-worth" },
     ],
   },
 ];

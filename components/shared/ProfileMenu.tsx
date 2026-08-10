@@ -11,6 +11,7 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Divider from "@mui/material/Divider";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
@@ -26,7 +27,14 @@ import { switchProfile } from "@/app/actions/profile";
 import { enterEditModeAction, exitEditModeAction } from "@/app/actions/auth";
 import { logoutAction } from "@/app/actions/session";
 
-export type ProfilePick = { id: number; name: string; color: string | null };
+export type ProfilePick = {
+  id: number;
+  name: string;
+  color: string | null;
+  /** Username of the OTHER account claiming this profile, or null if it's
+   *  unclaimed or claimed by you — i.e. whose data you can't edit. */
+  lockedBy: string | null;
+};
 
 /** "Bryce" → "B", "Bryce Stock" → "BS". */
 function initials(name: string): string {
@@ -138,6 +146,30 @@ export default function ProfileMenu({
               <ProfileAvatar profile={p} size={24} />
             </ListItemIcon>
             <ListItemText>{p.name}</ListItemText>
+            {/* Edit mode is per-DEVICE, not per-profile: it still opens communal
+                things (net worth, catalog, shared cars) while you're viewing
+                someone else — only a claimed profile's OWN data is out of reach.
+                The lock explains that on hover, and swallows its own click so
+                tapping it on a phone reads the note instead of switching. */}
+            {p.lockedBy ? (
+              <Tooltip
+                title={`${p.name}'s own data is locked — only ${p.lockedBy} can edit it. Household data still opens with edit mode.`}
+                enterTouchDelay={0}
+                leaveTouchDelay={4000}
+              >
+                <Box
+                  component="span"
+                  onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                  sx={{ display: "inline-flex", ml: 1 }}
+                >
+                  <LockOutlinedIcon
+                    fontSize="small"
+                    titleAccess={`${p.name} has their own login (${p.lockedBy})`}
+                    sx={{ color: "text.disabled" }}
+                  />
+                </Box>
+              </Tooltip>
+            ) : null}
             {p.id === active?.id ? (
               <CheckIcon fontSize="small" color="primary" sx={{ ml: 1 }} />
             ) : null}

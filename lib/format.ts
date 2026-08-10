@@ -34,3 +34,23 @@ export function formatMiles(value: number | null | undefined): string {
   if (value === null || value === undefined) return "—";
   return `${numFmt.format(value)} mi`;
 }
+
+/** "+$4,071.95" / "−$388.75" — money deltas that wear their sign. */
+export function formatMoneySigned(value: number | null | undefined): string {
+  if (value === null || value === undefined || Number.isNaN(value)) return "—";
+  return `${value >= 0 ? "+" : "−"}${money.format(Math.abs(value))}`;
+}
+
+/** "$135k" axis labels; falls back to plain currency under $10k. */
+export function formatMoneyCompact(value: number): string {
+  if (Math.abs(value) >= 10_000) return `$${Math.round(value / 1000)}k`;
+  return money.format(value).replace(/\.\d+$/, "");
+}
+
+/** "Aug 2026" from a YYYY-MM-01 month string. */
+export function formatMonth(month: string): string {
+  const d = new Date(`${month.slice(0, 7)}-01T12:00:00`);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+}

@@ -12,12 +12,14 @@ export default function NumberField({
   defaultValue,
   prefix,
   decimalScale = 0,
+  allowNegative = false,
 }: {
   name: string;
   label: string;
   defaultValue?: string | number | null;
   prefix?: string;
   decimalScale?: number;
+  allowNegative?: boolean;
 }) {
   const [raw, setRaw] = React.useState<string>(
     defaultValue != null && defaultValue !== "" ? String(defaultValue) : "",
@@ -32,7 +34,7 @@ export default function NumberField({
         thousandSeparator=","
         prefix={prefix}
         decimalScale={decimalScale}
-        allowNegative={false}
+        allowNegative={allowNegative}
         fullWidth
         onValueChange={(values) => setRaw(values.value)}
       />
