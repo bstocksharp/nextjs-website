@@ -628,6 +628,120 @@ export type NewAccountSnapshot = typeof accountSnapshots.$inferInsert;
 export type SavingsGoal = typeof savingsGoals.$inferSelect;
 export type NewSavingsGoal = typeof savingsGoals.$inferInsert;
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — ATLAS (F2): income + the recurring-spend registry. ALL THREE tables
+// are EFFECTIVE-DATED (startDate + endDate null = active, the weight_plans
+// pattern): a raise or a bill change starts a NEW segment instead of editing
+// history, so any past month can be viewed with the config that was true THEN
+// (and the future budget tab's closed months stay honest). Nothing derived is
+// stored — net pay, monthly totals, the discretionary envelope, category
+// subtotals and %-of-paycheck analytics are all computed in
+// lib/queries/finance-atlas.ts from the rows effective at the viewed month.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Compensation — PROFILE-owned (income is a person's; Lauren's can be added
+// later; writes go through requireEditorFor). Net/hourly/TCV always derived.
+export const compensationPlans = pgTable(
+  "compensation_plans",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    // semimonthly (24/yr) | biweekly (26/yr) | monthly (12/yr) — paychecks/year derived.
+    payFrequency: varchar("pay_frequency", { length: 20 })
+      .notNull()
+      .default("semimonthly"),
+    grossPerPaycheck: numeric("gross_per_paycheck", { precision: 10, scale: 2 }).notNull(),
+    baseSalary: numeric("base_salary", { precision: 12, scale: 2 }), // display; hourly = base/2080
+    shares: integer("shares"),
+    sharePrice: numeric("share_price", { precision: 10, scale: 4 }), // TCV = base + shares×price
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"), // null = active segment
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_comp_plans_profile").on(t.profileId, t.startDate)],
+);
+
+// Per-paycheck deductions — PROFILE-owned, effective-dated independently of the
+// comp plan (insurance renews on its own clock). source decides the math:
+// 'payroll' is subtracted from gross to get net; 'employer' is an employer-paid
+// benefit (tracked for the investing analytics, NOT subtracted).
+export const incomeDeductions = pgTable(
+  "income_deductions",
+  {
+    id: serial("id").primaryKey(),
+    profileId: integer("profile_id")
+      .notNull()
+      .references(() => profiles.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // insurance | retirement | health | tax | employer_benefit — display grouping.
+    type: varchar("type", { length: 30 }),
+    source: varchar("source", { length: 20 }).notNull().default("payroll"), // payroll | employer
+    // EXACTLY ONE of these is set (app-enforced): a flat $ per paycheck, OR a
+    // % of gross (a 6% 401k) — percent rows track raises automatically, since
+    // the dollar amount is derived from whichever comp plan is effective.
+    amountPerPaycheck: numeric("amount_per_paycheck", { precision: 10, scale: 2 }),
+    percentOfGross: numeric("percent_of_gross", { precision: 5, scale: 2 }),
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_deductions_profile").on(t.profileId, t.startDate)],
+);
+
+// The household's recurring bills — GROUP-owned; ALSO the future budget
+// engine's fixed/amortized config (merchantPatterns + isEstimate are its
+// hooks). `amount` is per-occurrence at the bill's real cadence; the monthly
+// figure is derived as amount × paymentsPerYear / 12 (the gist's math), so a
+// $993 six-month insurance bill reads as $165.50/mo.
+export const recurringExpenses = pgTable(
+  "recurring_expenses",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    name: varchar("name", { length: 120 }).notNull(),
+    // Freeform label (Subscriptions, Utilities, Housing…) — suggested via
+    // autocomplete, never a locked enum, so each household grows its own set.
+    category: varchar("category", { length: 60 }),
+    // essential (rent, utilities) | lifestyle (subscriptions you could drop) |
+    // commitment (savings, tithing — intentional transfers, not consumption).
+    necessity: varchar("necessity", { length: 20 }).notNull().default("essential"),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    paymentsPerYear: integer("payments_per_year").notNull().default(12),
+    // Named due months for uneven cadences ("Jan / April" = [1,4]); null = evenly spaced.
+    dueMonths: jsonb("due_months").$type<number[]>(),
+    dueDay: varchar("due_day", { length: 20 }), // free text on purpose: "5th", "EOM", "???"
+    // Which account pays it (the Chase-vs-Ally split; drives the budget envelope).
+    paidFromAccountId: integer("paid_from_account_id").references(
+      () => financialAccounts.id,
+      { onDelete: "set null" },
+    ),
+    // Variable bills (electric): amount is an estimate; the budget tab adjusts
+    // when the actual posts.
+    isEstimate: boolean("is_estimate").notNull().default(false),
+    // SMS merchant substrings for the budget tab's auto-categorization
+    // (matched longest-first, e.g. ["SPECTRUM MOBILE", "SPECTRUM"]).
+    merchantPatterns: jsonb("merchant_patterns").$type<string[]>().notNull().default([]),
+    notes: text("notes"),
+    startDate: date("start_date").notNull(),
+    endDate: date("end_date"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_recurring_group").on(t.groupId, t.startDate)],
+);
+
+export type CompensationPlan = typeof compensationPlans.$inferSelect;
+export type NewCompensationPlan = typeof compensationPlans.$inferInsert;
+export type IncomeDeduction = typeof incomeDeductions.$inferSelect;
+export type NewIncomeDeduction = typeof incomeDeductions.$inferInsert;
+export type RecurringExpense = typeof recurringExpenses.$inferSelect;
+export type NewRecurringExpense = typeof recurringExpenses.$inferInsert;
+
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;
 export type NewGroup = typeof groups.$inferInsert;

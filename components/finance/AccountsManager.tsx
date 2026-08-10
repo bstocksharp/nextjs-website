@@ -21,6 +21,8 @@ import Alert from "@mui/material/Alert";
 import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import ArchiveOutlinedIcon from "@mui/icons-material/ArchiveOutlined";
 import UnarchiveOutlinedIcon from "@mui/icons-material/UnarchiveOutlined";
+import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
+import ArrowDownwardIcon from "@mui/icons-material/ArrowDownward";
 import AddIcon from "@mui/icons-material/Add";
 import SubmitButton from "@/components/shared/SubmitButton";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
@@ -29,6 +31,7 @@ import {
   updateAccountAction,
   setAccountArchivedAction,
   deleteAccountAction,
+  moveAccountAction,
 } from "@/app/actions/finance-networth";
 
 export type ManagedAccount = {
@@ -92,7 +95,20 @@ export default function AccountsManager({
     );
   }
 
+  function move(a: ManagedAccount, dir: "up" | "down") {
+    startTransition(() => moveAccountAction(a.id, dir, new FormData()));
+  }
+
   const editing = mode !== null && mode !== "new" ? mode : null;
+
+  // Arrows are bounded by the account's own block — active and archived are
+  // rendered (and reordered) as separate runs, matching the server action.
+  const active = accounts.filter((a) => !a.archived);
+  const archived = accounts.filter((a) => a.archived);
+  const posOf = (a: ManagedAccount) => {
+    const block = a.archived ? archived : active;
+    return { index: block.indexOf(a), last: block.length - 1 };
+  };
 
   return (
     <Dialog open={open} onClose={close} fullWidth maxWidth="sm">
@@ -107,7 +123,9 @@ export default function AccountsManager({
                   savings, brokerage, 401K…).
                 </Typography>
               ) : (
-                accounts.map((a) => (
+                accounts.map((a) => {
+                  const { index, last } = posOf(a);
+                  return (
                   <Stack
                     key={a.id}
                     direction="row"
@@ -115,6 +133,24 @@ export default function AccountsManager({
                     spacing={1}
                     sx={{ opacity: a.archived ? 0.6 : 1, flexWrap: "wrap" }}
                   >
+                    <Stack direction="row" sx={{ flexShrink: 0 }}>
+                      <IconButton
+                        size="small"
+                        disabled={index <= 0}
+                        onClick={() => move(a, "up")}
+                        aria-label={`Move ${a.name} up`}
+                      >
+                        <ArrowUpwardIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        disabled={index === last}
+                        onClick={() => move(a, "down")}
+                        aria-label={`Move ${a.name} down`}
+                      >
+                        <ArrowDownwardIcon fontSize="small" />
+                      </IconButton>
+                    </Stack>
                     <Typography fontWeight={600} sx={{ flexGrow: 1, minWidth: 120 }}>
                       {a.name}
                     </Typography>
@@ -155,9 +191,20 @@ export default function AccountsManager({
                       />
                     ) : null}
                   </Stack>
-                ))
+                  );
+                })
               )}
             </Stack>
+            {accounts.length > 1 ? (
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                sx={{ display: "block", mt: 2 }}
+              >
+                This order drives the history table&apos;s columns and the chart&apos;s
+                stacking — arrange them however you read them.
+              </Typography>
+            ) : null}
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2 }}>
             <Button onClick={close} color="inherit">

@@ -34,6 +34,9 @@ import {
   financialAccounts,
   accountSnapshots,
   savingsGoals,
+  recurringExpenses,
+  compensationPlans,
+  incomeDeductions,
 } from "@/lib/db/schema";
 
 // ── Date helpers (all ISO YYYY-MM-DD, anchored at noon UTC) ───────────────────
@@ -76,6 +79,9 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
   await db.delete(checklists).where(eq(checklists.groupId, groupId));
   await db.delete(financialAccounts).where(eq(financialAccounts.groupId, groupId)); // cascades snapshots
   await db.delete(savingsGoals).where(eq(savingsGoals.groupId, groupId));
+  // ATLAS: comp plans + deductions cascade with profiles above; the household
+  // expense registry carries groupId directly, so wipe it explicitly.
+  await db.delete(recurringExpenses).where(eq(recurringExpenses.groupId, groupId));
 
   // ── People ───────────────────────────────────────────────────────────────────
   const [alex, sam] = await db
@@ -445,4 +451,46 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
     monthlyGoal: "1000.00",
     startMonth: monthsAgo(NW_MONTHS - 1),
   });
+
+  // ── Finance: ATLAS — Alex's paycheck + the household's recurring bills ──────
+  // Effective-dated from the first tracked month so every view "as of now" sees
+  // them. Shows off: a %-of-gross 401k (follows raises), employer benefits (not
+  // subtracted from net), a semiannual bill (amortized), and a Chase-vs-bank
+  // split so the spending envelope has something to compute.
+  const finStart = monthsAgo(NW_MONTHS - 1);
+
+  await db.insert(compensationPlans).values({
+    profileId: alex.id,
+    payFrequency: "semimonthly",
+    grossPerPaycheck: "4200.00",
+    baseSalary: "100800.00",
+    shares: 2000,
+    sharePrice: "3.5000",
+    startDate: finStart,
+  });
+
+  await db.insert(incomeDeductions).values([
+    { profileId: alex.id, name: "Federal Tax", type: "tax", source: "payroll", amountPerPaycheck: "520.00", startDate: finStart },
+    { profileId: alex.id, name: "Social Security", type: "tax", source: "payroll", percentOfGross: "6.20", startDate: finStart },
+    { profileId: alex.id, name: "Medicare", type: "tax", source: "payroll", percentOfGross: "1.45", startDate: finStart },
+    { profileId: alex.id, name: "Medical", type: "insurance", source: "payroll", amountPerPaycheck: "180.00", startDate: finStart },
+    { profileId: alex.id, name: "401(k)", type: "retirement", source: "payroll", percentOfGross: "8.00", startDate: finStart },
+    { profileId: alex.id, name: "HSA", type: "health", source: "payroll", amountPerPaycheck: "75.00", startDate: finStart },
+    { profileId: alex.id, name: "401(k) match", type: "retirement", source: "employer", percentOfGross: "4.00", startDate: finStart },
+    { profileId: alex.id, name: "HSA contribution", type: "health", source: "employer", amountPerPaycheck: "40.00", startDate: finStart },
+  ]);
+
+  const checkingId = idByName["Everyday Checking"];
+  const cardId = idByName["Rewards Card"];
+  await db.insert(recurringExpenses).values([
+    { groupId, name: "Rent", category: "Housing", necessity: "essential", amount: "1850.00", paymentsPerYear: 12, paidFromAccountId: checkingId, dueDay: "1st", startDate: finStart },
+    { groupId, name: "Electric", category: "Utilities", necessity: "essential", amount: "140.00", paymentsPerYear: 12, paidFromAccountId: cardId, dueDay: "20th", isEstimate: true, merchantPatterns: ["POWER", "ELECTRIC"], startDate: finStart },
+    { groupId, name: "Internet", category: "Utilities", necessity: "essential", amount: "75.00", paymentsPerYear: 12, paidFromAccountId: cardId, dueDay: "13th", merchantPatterns: ["FIBERNET"], startDate: finStart },
+    { groupId, name: "Netflix", category: "Subscriptions", necessity: "lifestyle", amount: "19.99", paymentsPerYear: 12, paidFromAccountId: cardId, dueDay: "15th", merchantPatterns: ["NETFLIX"], startDate: finStart },
+    { groupId, name: "Spotify", category: "Subscriptions", necessity: "lifestyle", amount: "11.99", paymentsPerYear: 12, paidFromAccountId: cardId, dueDay: "8th", merchantPatterns: ["SPOTIFY"], startDate: finStart },
+    { groupId, name: "Car Insurance", category: "Car", necessity: "essential", amount: "1180.00", paymentsPerYear: 2, dueMonths: [3, 9], dueDay: "Mar / Sep", paidFromAccountId: cardId, startDate: finStart },
+    { groupId, name: "Amazon Prime", category: "Subscriptions", necessity: "lifestyle", amount: "139.00", paymentsPerYear: 1, dueMonths: [2], dueDay: "Feb", paidFromAccountId: cardId, startDate: finStart },
+    { groupId, name: "Savings transfer", category: "Financial Commitment", necessity: "commitment", amount: "1000.00", paymentsPerYear: 12, paidFromAccountId: checkingId, dueDay: "1st", startDate: finStart },
+    { groupId, name: "Giving", category: "Financial Commitment", necessity: "commitment", amount: "400.00", paymentsPerYear: 12, paidFromAccountId: checkingId, dueDay: "1st", startDate: finStart },
+  ]);
 }

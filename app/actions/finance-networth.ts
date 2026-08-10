@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { financialAccounts, accountSnapshots, savingsGoals } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
 import { requireGroupId } from "@/lib/session";
+import { accountOrder } from "@/lib/queries/finance-networth";
 
 // Net worth writes. Everything here is HOUSEHOLD data → requireEditor()
 // (communal), scoped to the session group. Money fields arrive as raw strings
@@ -182,6 +183,71 @@ export async function updateAccountAction(
     .where(
       and(eq(financialAccounts.id, id), eq(financialAccounts.groupId, groupId)),
     );
+  revalidatePath(FINANCE);
+}
+
+/**
+ * Move an account one slot up/down in display order — which is also the history
+ * table's column order and the chart's stacking order.
+ *
+ * Renumbers the whole group 1..n in ONE statement rather than swapping the two
+ * rows: it's atomic on the transactionless driver, and it self-heals duplicate
+ * sortOrders (a plain swap between two rows sharing a value is a no-op).
+ */
+export async function moveAccountAction(
+  id: number,
+  dir: "up" | "down",
+  _formData: FormData,
+): Promise<void> {
+  await requireEditor();
+  const groupId = await requireGroupId();
+
+  const rows = await db
+    .select({
+      id: financialAccounts.id,
+      archivedAt: financialAccounts.archivedAt,
+    })
+    .from(financialAccounts)
+    .where(eq(financialAccounts.groupId, groupId))
+    .orderBy(...accountOrder);
+
+  const target = rows.find((r) => r.id === id);
+  if (!target) return;
+
+  // Active and archived render as separate blocks — a move never jumps between
+  // them, so find the neighbor within the target's own block.
+  const isActive = (r: { archivedAt: Date | null }) => r.archivedAt === null;
+  const block = rows.filter((r) => isActive(r) === isActive(target));
+  const idx = block.findIndex((r) => r.id === id);
+  const nIdx = dir === "up" ? idx - 1 : idx + 1;
+  if (nIdx < 0 || nIdx >= block.length) return; // already at the end — no-op
+
+  [block[idx], block[nIdx]] = [block[nIdx], block[idx]];
+
+  // Splice the reordered block back over the full list, then number 1..n.
+  const blockIds = block.map((r) => r.id);
+  let cursor = 0;
+  const ordered = rows.map((r) =>
+    isActive(r) === isActive(target) ? blockIds[cursor++] : r.id,
+  );
+
+  await db
+    .update(financialAccounts)
+    .set({
+      // ::int on every branch — untyped placeholders in a CASE come back as
+      // text, which Postgres refuses to assign to an integer column.
+      sortOrder: sql`case ${financialAccounts.id} ${sql.join(
+        ordered.map((rowId, i) => sql`when ${rowId} then ${i + 1}::int`),
+        sql` `,
+      )} end`,
+    })
+    .where(
+      and(
+        eq(financialAccounts.groupId, groupId),
+        inArray(financialAccounts.id, ordered),
+      ),
+    );
+
   revalidatePath(FINANCE);
 }
 

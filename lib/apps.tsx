@@ -63,8 +63,11 @@ export const APPS: AppDef[] = [
     href: "/finance",
     Icon: SavingsIcon,
     accent: "#3fa796",
-    // ATLAS + Budget tabs arrive in F2/F3 of the finance roadmap.
-    nav: [{ label: "Net Worth", href: "/finance" }],
+    // Budget tab arrives in F3 of the finance roadmap.
+    nav: [
+      { label: "Net Worth", href: "/finance" },
+      { label: "ATLAS", href: "/finance/atlas" },
+    ],
   },
 ];
 

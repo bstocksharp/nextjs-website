@@ -1,5 +1,5 @@
 import "server-only";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   financialAccounts,
@@ -21,6 +21,18 @@ import { requireGroupId } from "@/lib/session";
 // measure against it. First tracked year (no prior month): the window's first
 // month is the anchor (its own MoM/cumulative are null/0).
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * THE account display order — the accounts manager, the history table's columns
+ * and the chart's stacking all share it, so a reorder moves them together.
+ * Archived last: plain `asc(archivedAt)` would put them FIRST, since Postgres
+ * sorts NULLs last in ASC — hence the explicit is-not-null flag.
+ */
+export const accountOrder = [
+  asc(sql`${financialAccounts.archivedAt} is not null`),
+  asc(financialAccounts.sortOrder),
+  asc(financialAccounts.id),
+];
 
 /** Does `month` (YYYY-MM-01) fall inside a goal segment? */
 function segmentCovers(g: SavingsGoal, month: string): boolean {
@@ -74,11 +86,7 @@ export async function listFinancialAccounts(): Promise<FinancialAccount[]> {
     .select()
     .from(financialAccounts)
     .where(eq(financialAccounts.groupId, groupId))
-    .orderBy(
-      asc(financialAccounts.archivedAt),
-      asc(financialAccounts.sortOrder),
-      asc(financialAccounts.id),
-    );
+    .orderBy(...accountOrder);
 }
 
 /** The whole Net Worth tab in one call (weight-dashboard shape). */
@@ -89,11 +97,7 @@ export async function getNetWorthDashboard(year?: number): Promise<NetWorthDashb
     .select()
     .from(financialAccounts)
     .where(eq(financialAccounts.groupId, groupId))
-    .orderBy(
-      asc(financialAccounts.archivedAt),
-      asc(financialAccounts.sortOrder),
-      asc(financialAccounts.id),
-    );
+    .orderBy(...accountOrder);
 
   const accountIds = allAccounts.map((a) => a.id);
   const snaps = accountIds.length
