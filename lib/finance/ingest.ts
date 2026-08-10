@@ -19,6 +19,12 @@ export type IngestResult =
 
 const DEDUPE_WINDOW_MS = 10 * 60 * 1000; // Shortcuts double-fires within seconds
 
+// A card alert is a couple hundred characters. Cap the body so a runaway (or
+// hostile) POST can't become a multi-megabyte rawText row. Truncating rather
+// than rejecting keeps the "never silently dropped" promise — an oversized body
+// still lands as a needs-review row you can see.
+const MAX_ALERT_CHARS = 2000;
+
 /** Recurring-bill matching rules effective on a given date, for this group.
  *  Exported so manual "Auto-detect" add can categorize like the SMS path. */
 export async function merchantRulesFor(groupId: number, onDate: string): Promise<MerchantRule[]> {
@@ -55,7 +61,7 @@ export async function ingestAlert(
   text: string,
   accountId: number | null,
 ): Promise<IngestResult> {
-  const body = text.trim();
+  const body = text.trim().slice(0, MAX_ALERT_CHARS);
   if (!body) return { ok: false, reason: "empty" };
 
   const rawHash = createHash("sha256").update(body).digest("hex");

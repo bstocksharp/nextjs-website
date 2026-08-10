@@ -23,7 +23,16 @@ export type ParsedAlert = {
 };
 
 // The gist's main-alert regex, verbatim in spirit — matches anywhere in the text.
-const TXN_RE = /You made a \$([\d,.]+) transaction with (.+) on (\w+ \d{1,2}, \d{4})/i;
+//
+// Every quantifier is BOUNDED on purpose. The pattern is unanchored, so the
+// engine retries at each start offset; an unbounded `(.+)` before ` on ` made
+// that O(n²) on hostile input ("You made a $, transaction with aaaa…"), which
+// is a denial-of-service on the ingest route (CodeQL js/polynomial-redos).
+// Bounding caps the work per offset at a constant, so the scan is linear. The
+// limits are far past any real card alert — a merchant field is ~20 chars, and
+// "September" is the longest month — so nothing that used to parse stops.
+const TXN_RE =
+  /You made a \$([\d,.]{1,20}) transaction with (.{1,120}) on (\w{1,12} \d{1,2}, \d{4})/i;
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,

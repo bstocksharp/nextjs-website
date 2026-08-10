@@ -139,8 +139,17 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
   // bill); an explicit non-income choice is honored as-is.
   let category: string;
   let autoRecurringId: number | null = null;
+  let storeAmount = amount; // the signed value actually stored
   if (kind === "income") {
-    category = "income";
+    // Money in picks a budget destination: "spend" credits Left-to-Spend (a
+    // negative discretionary row — reads green "+", raises the budget); anything
+    // else is just tracked with no budget effect.
+    if (String(formData.get("destination")) === "spend") {
+      category = "discretionary";
+      storeAmount = (-Number(amount)).toFixed(2);
+    } else {
+      category = "income";
+    }
   } else if (categoryRaw === "auto") {
     const rules = await merchantRulesFor(groupId, postedOn);
     const c = categorizeMerchant(merchant ?? "", rules);
@@ -178,8 +187,8 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
     accountId,
     postedOn,
     merchant,
-    amount,
-    originalAmount: amount,
+    amount: storeAmount,
+    originalAmount: storeAmount,
     category,
     fundId,
     recurringExpenseId,
@@ -187,26 +196,26 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
     note: parseStr(formData.get("note")),
   });
 
-  // Income can ALSO top up a fund in one go (Lauren's $100 birthday money →
-  // tracked as income AND added to her fund). A deposit is a negative fund txn
-  // (raises the derived balance), separate from the income row above.
+  // Income can ALSO bump a fund in one go (grandma's $100 → Lauren's envelope).
+  // Funds are play money, so this adjusts the fund's balance DIRECTLY — not a
+  // second ledger row, so no phantom "+$100 / −$100" pair.
   if (kind === "income") {
-    const depositFundId = await validFund(
+    const bumpFundId = await validFund(
       groupId,
       parseBoundedInt(formData.get("depositFundId"), 1, 2 ** 31),
     );
-    if (depositFundId !== null) {
-      await db.insert(transactions).values({
-        groupId,
-        accountId,
-        postedOn,
-        merchant,
-        amount: (-Number(amount)).toFixed(2),
-        originalAmount: (-Number(amount)).toFixed(2),
-        category: "fund",
-        fundId: depositFundId,
-        source: "manual",
-      });
+    if (bumpFundId !== null) {
+      const [f] = await db
+        .select({ b: funds.startingBalance })
+        .from(funds)
+        .where(eq(funds.id, bumpFundId))
+        .limit(1);
+      if (f) {
+        await db
+          .update(funds)
+          .set({ startingBalance: (Number(f.b) + Number(amount)).toFixed(2) })
+          .where(eq(funds.id, bumpFundId));
+      }
     }
   }
   revalidatePath(BUDGET);
@@ -258,33 +267,22 @@ async function scopedFund(id: number) {
 }
 
 /**
- * Adjust a fund's balance. Balances are derived as startingBalance − Σ(fund
- * txns), so this stores the NEGATED amount: a positive "amount to add" raises
- * the balance (stored negative), and a NEGATIVE amount removes money / zeroes it
- * out (stored positive, like a spend). One field, both directions — no real
- * account is ever touched (works for pretend money too, e.g. Lauren's bet win).
+ * Adjust a fund's balance DIRECTLY — funds are imaginary envelopes, so this is
+ * play money, NOT a real transaction, and never touches the ledger. A positive
+ * amount adds, a negative removes / zeroes out. The set balance lives on the
+ * fund; only real spends (fund-category ledger rows) draw it down elsewhere, so
+ * balance = startingBalance − Σ(real draws).
  */
-export async function depositToFundAction(
+export async function adjustFundAction(
   fundId: number,
   formData: FormData,
 ): Promise<void> {
   await requireEditor();
-  const { groupId } = await scopedFund(fundId);
+  const { row } = await scopedFund(fundId);
   const amount = parseMoney(formData.get("amount"));
   if (amount === null || Number(amount) === 0) throw new Error("Enter an amount.");
-  const postedOn = parseStr(formData.get("postedOn")) ?? todayISO();
-  const signed = -Number(amount); // + input raises balance; − input lowers it
-
-  await db.insert(transactions).values({
-    groupId,
-    postedOn,
-    merchant: parseStr(formData.get("note")) ?? (signed < 0 ? "Removed from fund" : "Added to fund"),
-    amount: signed.toFixed(2),
-    originalAmount: signed.toFixed(2),
-    category: "fund",
-    fundId,
-    source: "manual",
-  });
+  const next = (Number(row.startingBalance) + Number(amount)).toFixed(2);
+  await db.update(funds).set({ startingBalance: next }).where(eq(funds.id, fundId));
   revalidatePath(BUDGET);
 }
 

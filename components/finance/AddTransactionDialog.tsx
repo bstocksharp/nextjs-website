@@ -43,6 +43,9 @@ export default function AddTransactionDialog({
   // Default "auto" = let the merchant categorizer decide (same as SMS); you
   // only pick a category to override for the special lanes.
   const [category, setCategory] = React.useState("auto");
+  // Income destination: "track" = recorded, no budget effect; "spend" = adds to
+  // this month's Left-to-Spend. (A fund bump is separate + optional, below.)
+  const [destination, setDestination] = React.useState("track");
   const [error, setError] = React.useState<string | null>(null);
   const billChoices = bills.filter((b) =>
     category === "fixed" ? b.paymentsPerYear === 12 : b.paymentsPerYear !== 12,
@@ -97,23 +100,42 @@ export default function AddTransactionDialog({
               placeholder={kind === "income" ? "e.g. Paycheck, Grandma" : "e.g. Shell, gas"}
             />
 
-            {kind === "income" && funds.length > 0 ? (
-              <TextField
-                name="depositFundId"
-                label="Also add to a fund (optional)"
-                select
-                defaultValue=""
-                helperText="Bumps that fund's balance by this amount too — one entry, both."
-              >
-                <MenuItem value="">
-                  <em>Don&apos;t add to a fund</em>
-                </MenuItem>
-                {funds.map((f) => (
-                  <MenuItem key={f.id} value={f.id}>
-                    {f.name}
-                  </MenuItem>
-                ))}
-              </TextField>
+            {kind === "income" ? (
+              <>
+                <TextField
+                  name="destination"
+                  label="What should this money do?"
+                  select
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  helperText={
+                    destination === "spend"
+                      ? "Adds to this month's Left-to-Spend."
+                      : "Just recorded — no effect on the budget."
+                  }
+                >
+                  <MenuItem value="track">Just track it</MenuItem>
+                  <MenuItem value="spend">Spend it this month</MenuItem>
+                </TextField>
+                {funds.length > 0 ? (
+                  <TextField
+                    name="depositFundId"
+                    label="Also add to a fund (optional)"
+                    select
+                    defaultValue=""
+                    helperText="Bumps that envelope's balance — play money, not a real transaction."
+                  >
+                    <MenuItem value="">
+                      <em>Don&apos;t add to a fund</em>
+                    </MenuItem>
+                    {funds.map((f) => (
+                      <MenuItem key={f.id} value={f.id}>
+                        {f.name}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+                ) : null}
+              </>
             ) : null}
 
             {kind === "expense" ? (

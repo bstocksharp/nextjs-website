@@ -44,9 +44,18 @@ const CATEGORY_LABEL: Record<string, string> = {
 // Money IN (raises what you can spend) vs OUT vs neutral transfers.
 const INFLOW = new Set(["income", "reimbursement"]);
 const NEUTRAL = new Set(["ignored"]);
-function amountColor(category: string): string {
-  if (INFLOW.has(category)) return "success.main";
-  if (NEUTRAL.has(category)) return "text.secondary";
+// Direction of the row by MEANING, not raw sign: money into your pocket OR into
+// a fund reads green "+", money out reads red — magnitude always positive, so a
+// fund deposit (stored negative) never shows as a baffling red "-$100".
+function direction(category: string, amount: number): "in" | "out" | "neutral" {
+  if (NEUTRAL.has(category)) return "neutral";
+  if (INFLOW.has(category)) return "in";
+  if (category === "fund") return amount < 0 ? "in" : "out"; // deposit vs draw
+  return amount < 0 ? "in" : "out"; // a refund on a spend row is money back
+}
+function amountColor(dir: "in" | "out" | "neutral"): string {
+  if (dir === "in") return "success.main";
+  if (dir === "neutral") return "text.secondary";
   return "error.main";
 }
 function chipColor(category: string): "primary" | "success" | "warning" | "default" {
@@ -70,7 +79,7 @@ export default function TransactionRow({
 }) {
   const adjusted = txn.amount !== txn.originalAmount;
   const fundName = txn.fundId ? funds.find((f) => f.id === txn.fundId)?.name : null;
-  const inflow = INFLOW.has(txn.category);
+  const dir = direction(txn.category, txn.amount);
 
   return (
     <TableRow hover sx={{ bgcolor: txn.needsReview ? "action.hover" : undefined }}>
@@ -108,9 +117,9 @@ export default function TransactionRow({
         </Box>
       </TableCell>
 
-      <TableCell align="right" sx={{ whiteSpace: "nowrap", color: amountColor(txn.category), fontWeight: 600 }}>
-        {inflow ? "+" : ""}
-        {formatMoney(txn.amount)}
+      <TableCell align="right" sx={{ whiteSpace: "nowrap", color: amountColor(dir), fontWeight: 600 }}>
+        {dir === "in" ? "+" : ""}
+        {formatMoney(Math.abs(txn.amount))}
         {adjusted ? (
           <Tooltip title={`Adjusted from ${formatMoney(txn.originalAmount)}`}>
             <Box component="span" sx={{ color: "text.disabled", ml: 0.25 }}>

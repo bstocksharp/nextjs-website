@@ -24,7 +24,7 @@ import NumberField from "@/components/shared/NumberField";
 import { formatMoney } from "@/lib/format";
 import {
   createFundAction,
-  depositToFundAction,
+  adjustFundAction,
   closeFundAction,
 } from "@/app/actions/finance-budget";
 
@@ -68,7 +68,7 @@ export default function FundsPanel({
     if (!depositFor) return;
     setError(null);
     try {
-      await depositToFundAction(depositFor.id, fd);
+      await adjustFundAction(depositFor.id, fd);
       setDepositFor(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't update the fund.");
