@@ -580,6 +580,11 @@ export const financialAccounts = pgTable(
     // false = not part of the monthly balance ritual (e.g. a credit card row
     // that exists only as a payment source for recurring expenses, F2+).
     trackBalance: boolean("track_balance").notNull().default(true),
+    // The account day-to-day discretionary spending runs through (the budget
+    // envelope = discretion + this account's fixed bills). An EXPLICIT flag —
+    // never inferred from kind — because multi-card households are normal and
+    // a debit family's "spending card" is their checking account.
+    carriesDiscretion: boolean("carries_discretion").notNull().default(false),
     sortOrder: integer("sort_order").default(0),
     // Soft close — accounts come and go (an HSA opens mid-year, Venmo+ dies).
     // Hidden from new snapshots, history intact. Mirrors profiles.archivedAt.
@@ -741,6 +746,118 @@ export type IncomeDeduction = typeof incomeDeductions.$inferSelect;
 export type NewIncomeDeduction = typeof incomeDeductions.$inferInsert;
 export type RecurringExpense = typeof recurringExpenses.$inferSelect;
 export type NewRecurringExpense = typeof recurringExpenses.$inferInsert;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FINANCE — Budget (F3): the transaction ledger + its machinery. Open months
+// are computed LIVE by lib/finance/budget-engine from transactions + the
+// effective ATLAS config; CLOSED months render from their stored snapshot (the
+// one sanctioned derived-storage bend — txn categories stay editable forever,
+// and immutability of the past is the requirement). The engine's lanes:
+// discretionary spent-vs-budget is the headline; fixed = billed-vs-expected;
+// amortized = sinking-fund reserve accrue/consume. NEVER raw outflow vs
+// envelope (matching the envelope in a no-bills month means the reserves got
+// spent).
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Every card alert / manual entry. Direct groupId (the ingest route has no
+// session — a token resolves the tenant). `amount` is the EFFECTIVE, editable
+// value (signed; negative = credit / fund top-up); originalAmount preserves
+// what actually posted so adjustments are visible ("adjusted from $X").
+export const transactions = pgTable(
+  "transactions",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    // Which account the charge hit (per-card analytics; per-bank feeds).
+    accountId: integer("account_id").references(() => financialAccounts.id, {
+      onDelete: "set null",
+    }),
+    postedOn: date("posted_on").notNull(),
+    merchant: varchar("merchant", { length: 200 }),
+    amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+    originalAmount: numeric("original_amount", { precision: 10, scale: 2 }).notNull(),
+    // Engine semantics (fixed enum — labels live on ATLAS categories instead):
+    // discretionary | fixed | amortized | savings | reimbursement | fund |
+    // income | ignored. income never touches spend math; ignored is the trash
+    // that still keeps its audit trail.
+    category: varchar("category", { length: 20 }).notNull().default("discretionary"),
+    // fixed/amortized txns match a recurring bill → estimate-vs-actual deltas
+    // and sinking-fund consumption.
+    recurringExpenseId: integer("recurring_expense_id").references(
+      () => recurringExpenses.id,
+      { onDelete: "set null" },
+    ),
+    fundId: integer("fund_id").references(() => funds.id, { onDelete: "set null" }),
+    source: varchar("source", { length: 20 }).notNull(), // sms | manual
+    rawText: text("raw_text"), // full SMS body kept for audit + re-parse
+    rawHash: varchar("raw_hash", { length: 64 }), // sha256; short-window dedupe, NOT unique
+    // Unparseable SMS lands as amount 0 + needsReview — surfaced, never dropped.
+    needsReview: boolean("needs_review").notNull().default(false),
+    note: text("note"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("idx_txn_group_posted").on(t.groupId, t.postedOn),
+    index("idx_txn_recurring").on(t.recurringExpenseId),
+  ],
+);
+
+// One-time pools (Lauren's fund, Bryce's fund, a shared vacation pot…) — a txn
+// assigned to a fund draws it down instead of the month's budget. Balance is
+// ALWAYS derived: startingBalance − Σ(fund txns); top-ups are negative txns.
+// ownerProfileId is display/ownership (and the future teen-budget seam).
+export const funds = pgTable("funds", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  ownerProfileId: integer("owner_profile_id").references(() => profiles.id, {
+    onDelete: "set null",
+  }),
+  startingBalance: numeric("starting_balance", { precision: 10, scale: 2 }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  notes: text("notes"),
+  createdAt: createdAt(),
+});
+
+// NOTE: there is deliberately NO budget_months / snapshot table. Months are
+// never "frozen" — config is effective-dated (a past month always reads the pay
+// & bills that were true then), so history can't be rewritten by a later change
+// and every month stays freely editable. The whole budget computes live.
+
+// Machine auth for the ingest + widget endpoints (the hub's first). Per-device
+// tokens ("Bryce shortcut", "Lauren widget") so revoking a lost phone breaks
+// nothing else. Only the sha256 lands in the DB — the secret is shown ONCE at
+// mint (a leak of this table leaks nothing usable). Liveness = revokedAt null,
+// invites-style.
+export const apiTokens = pgTable("api_tokens", {
+  id: serial("id").primaryKey(),
+  groupId: integer("group_id")
+    .notNull()
+    .references(() => groups.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  label: varchar("label", { length: 120 }).notNull(),
+  scope: varchar("scope", { length: 20 }).notNull(), // ingest | widget
+  // Ingest tokens are per-FEED (the Chase SMS shortcut, a future Ally feed) —
+  // binding one to an account stamps every transaction it ingests with where
+  // the money moved. Null = unattributed.
+  accountId: integer("account_id").references(() => financialAccounts.id, {
+    onDelete: "set null",
+  }),
+  lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: createdAt(),
+});
+
+export type Transaction = typeof transactions.$inferSelect;
+export type NewTransaction = typeof transactions.$inferInsert;
+export type Fund = typeof funds.$inferSelect;
+export type NewFund = typeof funds.$inferInsert;
+export type ApiToken = typeof apiTokens.$inferSelect;
+export type NewApiToken = typeof apiTokens.$inferInsert;
 
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;

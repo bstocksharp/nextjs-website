@@ -12,6 +12,10 @@ import { accountOrder } from "@/lib/queries/finance-networth";
 // (communal), scoped to the session group. Money fields arrive as raw strings
 // from NumberField's hidden input.
 
+// Net Worth renders at /finance/net-worth, but ACCOUNTS are shared with Budget
+// (/finance), ATLAS and Settings — so revalidate the whole finance subtree with
+// layout scope rather than tracking which page reads what. Also keeps this
+// correct if the tabs ever move again.
 const FINANCE = "/finance";
 
 /** "2026-08" (input type=month) or "2026-08-xx" → "2026-08-01"; null if bogus. */
@@ -77,7 +81,7 @@ export async function saveSnapshotsAction(formData: FormData): Promise<void> {
       set: { balance: sql`excluded.balance` },
     });
 
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /** Remove one account's snapshot for one month (fat-fingered a month). */
@@ -108,7 +112,7 @@ export async function deleteSnapshotAction(
         eq(accountSnapshots.month, normalized),
       ),
     );
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /** Delete a whole month's row — every account's balance for that month. */
@@ -136,7 +140,7 @@ export async function deleteMonthSnapshotsAction(
         eq(accountSnapshots.month, normalized),
       ),
     );
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 // ── Accounts ──────────────────────────────────────────────────────────────────
@@ -147,6 +151,7 @@ function parseAccount(formData: FormData) {
     kind: ACCOUNT_KINDS.has(kindRaw) ? kindRaw : "other",
     includeInBankSaved: formData.get("includeInBankSaved") != null,
     trackBalance: formData.get("trackBalance") != null,
+    carriesDiscretion: formData.get("carriesDiscretion") != null,
     notes: String(formData.get("notes") ?? "").trim() || null,
   };
 }
@@ -165,7 +170,7 @@ export async function addAccountAction(formData: FormData): Promise<void> {
   await db
     .insert(financialAccounts)
     .values({ ...data, groupId, sortOrder: (maxSort ?? 0) + 1 });
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 export async function updateAccountAction(
@@ -183,7 +188,7 @@ export async function updateAccountAction(
     .where(
       and(eq(financialAccounts.id, id), eq(financialAccounts.groupId, groupId)),
     );
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /**
@@ -248,7 +253,7 @@ export async function moveAccountAction(
       ),
     );
 
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /** Soft-close (keep history) or reopen an account. */
@@ -265,7 +270,7 @@ export async function setAccountArchivedAction(
     .where(
       and(eq(financialAccounts.id, id), eq(financialAccounts.groupId, groupId)),
     );
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /** Hard delete — cascades every snapshot. The UI confirms loudly. */
@@ -280,7 +285,7 @@ export async function deleteAccountAction(
     .where(
       and(eq(financialAccounts.id, id), eq(financialAccounts.groupId, groupId)),
     );
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 // ── Savings goal (effective-dated segments, weightPlans-style) ────────────────
@@ -319,7 +324,7 @@ export async function saveSavingsGoalAction(formData: FormData): Promise<void> {
   } else {
     await db.insert(savingsGoals).values({ groupId, monthlyGoal, startMonth });
   }
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }
 
 /**
@@ -362,5 +367,5 @@ export async function startSavingsGoalAction(formData: FormData): Promise<void> 
       .set({ endMonth: active.startMonth })
       .where(eq(savingsGoals.id, active.id));
   }
-  revalidatePath(FINANCE);
+  revalidatePath(FINANCE, "layout");
 }

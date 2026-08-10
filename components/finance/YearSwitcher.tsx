@@ -20,7 +20,7 @@ export default function YearSwitcher({
           key={y}
           value={y}
           component={Link}
-          href={`/finance?year=${y}`}
+          href={`/finance/net-worth?year=${y}`}
           selected={y === current}
           sx={{ px: 1.5, py: 0.4 }}
         >

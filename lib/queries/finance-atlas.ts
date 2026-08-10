@@ -1,18 +1,18 @@
 import "server-only";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   compensationPlans,
   incomeDeductions,
   recurringExpenses,
   financialAccounts,
+  profiles,
   type CompensationPlan,
   type IncomeDeduction,
   type RecurringExpense,
 } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
 import { profileInGroup } from "./scope";
-import { listProfiles } from "./profiles";
 import { currentMonthISO, lastDayOfMonth, todayISO } from "@/lib/finance/parse";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -117,9 +117,20 @@ export type AtlasView = {
   };
 };
 
+/** Session wrapper: scopes to the signed-in group, then delegates. */
 export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
-  const groupId = await requireGroupId();
+  return getAtlasViewForGroup(await requireGroupId(), monthParam);
+}
 
+/**
+ * Group-explicit ATLAS view — the real work. Callable without a session (the
+ * budget/widget layers pass a token-resolved groupId), same "two front doors,
+ * one scoped core" split the tenancy model uses everywhere.
+ */
+export async function getAtlasViewForGroup(
+  groupId: number,
+  monthParam?: string,
+): Promise<AtlasView> {
   const currentMonth = currentMonthISO();
   const month =
     monthParam && /^\d{4}-\d{2}/.test(monthParam)
@@ -130,9 +141,13 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
   // current month reads as of today (a raise landing Aug 15 shows from Aug 15).
   const asOf = isCurrentMonth ? todayISO() : lastDayOfMonth(month);
 
-  const [profiles, allPlans, allDeductions, allExpenses, accounts] =
+  const [groupProfiles, allPlans, allDeductions, allExpenses, accounts] =
     await Promise.all([
-      listProfiles(),
+      db
+        .select()
+        .from(profiles)
+        .where(and(eq(profiles.groupId, groupId), isNull(profiles.archivedAt)))
+        .orderBy(asc(profiles.sortOrder), asc(profiles.id)),
       db
         .select()
         .from(compensationPlans)
@@ -153,6 +168,7 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
           id: financialAccounts.id,
           name: financialAccounts.name,
           kind: financialAccounts.kind,
+          carriesDiscretion: financialAccounts.carriesDiscretion,
         })
         .from(financialAccounts)
         .where(eq(financialAccounts.groupId, groupId)),
@@ -165,7 +181,7 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
 
   // ── Per-person income ────────────────────────────────────────────────────────
   const people: AtlasProfileView[] = [];
-  for (const p of profiles) {
+  for (const p of groupProfiles) {
     // Latest-starting effective plan wins (overlaps happen mid-transition).
     const plan = effectiveAt(
       allPlans.filter((r) => r.profileId === p.id),
@@ -275,8 +291,8 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
   const fixedC = sumMonthlyC(expenses);
   const discretionC = monthlyNetC - fixedC;
 
-  // Per-source planned outflow; discretion rides on the spending card (first
-  // credit_card until F3's explicit flag).
+  // Per-source planned outflow; discretion rides on the account flagged
+  // carriesDiscretion (explicit, user-set — never inferred from kind).
   const byAccountRaw = groupBy((e) => e.paidFromName ?? "Unassigned").map(
     ({ key, monthly }) => ({
       name: key,
@@ -290,15 +306,41 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
     ...a,
     includesDiscretion: false,
   }));
-  const cardIdx = expectedOutflows.findIndex((a) => a.kind === "credit_card");
-  if (cardIdx >= 0 && discretionC > 0) {
-    expectedOutflows[cardIdx] = {
-      ...expectedOutflows[cardIdx],
-      monthly: dollars(
-        Math.round(expectedOutflows[cardIdx].monthly * 100) + discretionC,
-      ),
-      includesDiscretion: true,
-    };
+  // Where the discretionary pot shows up depends on how many accounts are
+  // flagged: exactly ONE → the classic envelope (that account's row absorbs
+  // it); SEVERAL → discretion gets its own row (the plan can't know which
+  // card you'll swipe); NONE → its own unrouted row.
+  const spendingAccounts = accounts.filter((a) => a.carriesDiscretion);
+  if (discretionC > 0) {
+    if (spendingAccounts.length === 1) {
+      const s = spendingAccounts[0];
+      let idx = expectedOutflows.findIndex((a) => a.name === s.name);
+      if (idx < 0) {
+        // The spending account may carry no fixed bills — it still owns the pot.
+        expectedOutflows.push({
+          name: s.name,
+          kind: s.kind,
+          monthly: 0,
+          includesDiscretion: false,
+        });
+        idx = expectedOutflows.length - 1;
+      }
+      expectedOutflows[idx] = {
+        ...expectedOutflows[idx],
+        monthly: dollars(
+          Math.round(expectedOutflows[idx].monthly * 100) + discretionC,
+        ),
+        includesDiscretion: true,
+      };
+    } else {
+      const via = spendingAccounts.map((a) => a.name).join(" + ");
+      expectedOutflows.push({
+        name: via ? `Discretionary (via ${via})` : "Discretionary",
+        kind: null,
+        monthly: dollars(discretionC),
+        includesDiscretion: false, // the name already says it
+      });
+    }
   }
   expectedOutflows.sort((a, b) => b.monthly - a.monthly);
 

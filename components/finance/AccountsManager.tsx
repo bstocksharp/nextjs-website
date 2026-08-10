@@ -40,6 +40,7 @@ export type ManagedAccount = {
   kind: string;
   includeInBankSaved: boolean;
   trackBalance: boolean;
+  carriesDiscretion: boolean;
   archived: boolean;
   notes: string | null;
 };
@@ -161,6 +162,9 @@ export default function AccountsManager({
                     {a.includeInBankSaved ? (
                       <Chip size="small" color="primary" variant="outlined" label="bank saved" />
                     ) : null}
+                    {a.carriesDiscretion ? (
+                      <Chip size="small" color="warning" variant="outlined" label="spending" />
+                    ) : null}
                     {!a.trackBalance ? (
                       <Chip size="small" variant="outlined" label="not tracked" />
                     ) : null}
@@ -272,6 +276,25 @@ export default function AccountsManager({
                     <Typography variant="caption" color="text.secondary" display="block">
                       Untick for accounts that only pay bills (a credit card) —
                       they skip the monthly ritual.
+                    </Typography>
+                  </>
+                }
+              />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    name="carriesDiscretion"
+                    defaultChecked={editing?.carriesDiscretion ?? false}
+                  />
+                }
+                label={
+                  <>
+                    Free spending happens here
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Routes the discretionary budget to this account (usually
+                      just your main card). NOT needed to track its
+                      transactions — bills paid from any account are always in
+                      the plan.
                     </Typography>
                   </>
                 }

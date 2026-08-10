@@ -423,7 +423,14 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
         includeInBankSaved: a.bank ?? false,
         sortOrder: i,
       })),
-      { groupId, name: "Rewards Card", kind: "credit_card", trackBalance: false, sortOrder: 6 },
+      {
+        groupId,
+        name: "Rewards Card",
+        kind: "credit_card",
+        trackBalance: false,
+        carriesDiscretion: true,
+        sortOrder: 6,
+      },
     ])
     .returning({ id: financialAccounts.id, name: financialAccounts.name });
   const idByName = Object.fromEntries(finAccounts.map((a) => [a.name, a.id]));

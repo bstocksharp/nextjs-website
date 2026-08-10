@@ -20,10 +20,16 @@ import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
 import AddIcon from "@mui/icons-material/Add";
 import LabelOutlinedIcon from "@mui/icons-material/LabelOutlined";
 import { formatMoney } from "@/lib/format";
-import ExpenseDialog, { type ExpenseValues, type PayAccount } from "./ExpenseDialog";
+import ExpenseDialog, {
+  type ExpenseValues,
+  type PayAccount,
+} from "./ExpenseDialog";
 import CategoryManager, { type CategoryUsage } from "./CategoryManager";
 
-const NECESSITY_META: Record<string, { label: string; color: "default" | "warning" | "success" }> = {
+const NECESSITY_META: Record<
+  string,
+  { label: string; color: "default" | "warning" | "success" }
+> = {
   essential: { label: "essential", color: "default" },
   lifestyle: { label: "lifestyle", color: "warning" },
   commitment: { label: "commitment", color: "success" },
@@ -52,7 +58,7 @@ function Tile({
   children,
 }: {
   label: string;
-  value: string;
+  value?: string;
   sub?: string;
   color?: string;
   children?: React.ReactNode;
@@ -66,11 +72,17 @@ function Tile({
       >
         {label}
       </Typography>
-      <Typography variant="h5" component="div" sx={{ mt: 0.5, color }}>
-        {value}
-      </Typography>
+      {value != null ? (
+        <Typography variant="h5" component="div" sx={{ mt: 0.5, color }}>
+          {value}
+        </Typography>
+      ) : null}
       {sub ? (
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: "block" }}
+        >
           {sub}
         </Typography>
       ) : null}
@@ -101,7 +113,9 @@ export default function ExpensesSection({
   yearOptions: number[];
   defaultMonth: string;
 }) {
-  const [editing, setEditing] = React.useState<ExpenseValues | "new" | null>(null);
+  const [editing, setEditing] = React.useState<ExpenseValues | "new" | null>(
+    null,
+  );
   const [categoriesOpen, setCategoriesOpen] = React.useState(false);
   // For "bills actually hitting this month" awareness on non-monthly rows.
   const viewedMonthNum = Number(defaultMonth.slice(5, 7));
@@ -113,7 +127,9 @@ export default function ExpensesSection({
     byCategory.set(key, [...(byCategory.get(key) ?? []), e]);
   }
   const categoryOrder = totals.byCategory.map((c) => c.category);
-  const categorySubtotal = new Map(totals.byCategory.map((c) => [c.category, c.monthly]));
+  const categorySubtotal = new Map(
+    totals.byCategory.map((c) => [c.category, c.monthly]),
+  );
 
   return (
     <>
@@ -156,48 +172,50 @@ export default function ExpensesSection({
         }}
       >
         <Tile
+          label="Monthly net income"
+          value={formatMoney(totals.monthlyNet)}
+        />
+        <Tile
           label="Fixed monthly"
           value={formatMoney(totals.fixedMonthly)}
           sub={`${expenses.length} recurring ${expenses.length === 1 ? "bill" : "bills"}`}
         />
-        <Tile
-          label="Monthly net income"
-          value={formatMoney(totals.monthlyNet)}
-        />
+
         <Tile
           label="Discretion left"
           value={formatMoney(totals.discretionLeft)}
           color={totals.discretionLeft >= 0 ? "success.main" : "warning.main"}
           sub="net income − fixed"
         />
+        {/* No headline on purpose: the sum is always monthly net (fixed +
+            discretion ≡ net) — the information here is the SPLIT by source. */}
         <Tile
-          label="Expected outflows"
-          value={
-            totals.expectedOutflows.length > 0
-              ? formatMoney(
-                  totals.expectedOutflows.reduce((s, o) => s + o.monthly, 0),
-                )
-              : "—"
-          }
+          label="Where it flows out"
           sub="budgeted per source · annual bills amortized, not billed"
         >
-          <Stack spacing={0.25} sx={{ mt: 1 }}>
-            {totals.expectedOutflows.map((o) => (
-              <Stack
-                key={o.name}
-                direction="row"
-                justifyContent="space-between"
-                spacing={1}
-              >
-                <Typography variant="caption" color="text.secondary" noWrap>
-                  {o.name}
-                  {o.includesDiscretion ? " · incl. discretionary" : ""}
-                </Typography>
-                <Typography variant="caption" fontWeight={600}>
-                  {formatMoney(o.monthly)}
-                </Typography>
-              </Stack>
-            ))}
+          <Stack spacing={0.5} sx={{ mt: 1 }}>
+            {totals.expectedOutflows.length === 0 ? (
+              <Typography variant="caption" color="text.secondary">
+                Assign bills to accounts to see the split.
+              </Typography>
+            ) : (
+              totals.expectedOutflows.map((o) => (
+                <Stack
+                  key={o.name}
+                  direction="row"
+                  justifyContent="space-between"
+                  spacing={1}
+                >
+                  <Typography variant="body2" color="text.secondary" noWrap>
+                    {o.name}
+                    {o.includesDiscretion ? " · incl. discretionary" : ""}
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600}>
+                    {formatMoney(o.monthly)}
+                  </Typography>
+                </Stack>
+              ))
+            )}
           </Stack>
         </Tile>
       </Box>
@@ -219,14 +237,28 @@ export default function ExpensesSection({
               };
               const pct = (n.monthly / totals.fixedMonthly) * 100;
               return (
-                <Stack key={n.necessity} direction="row" alignItems="center" spacing={1.5}>
-                  <Chip size="small" color={meta.color} variant="outlined" label={meta.label} sx={{ width: 110 }} />
+                <Stack
+                  key={n.necessity}
+                  direction="row"
+                  alignItems="center"
+                  spacing={1.5}
+                >
+                  <Chip
+                    size="small"
+                    color={meta.color}
+                    variant="outlined"
+                    label={meta.label}
+                    sx={{ width: 110 }}
+                  />
                   <LinearProgress
                     variant="determinate"
                     value={pct}
                     sx={{ flexGrow: 1, height: 8, borderRadius: 4 }}
                   />
-                  <Typography variant="body2" sx={{ minWidth: 110, textAlign: "right" }}>
+                  <Typography
+                    variant="body2"
+                    sx={{ minWidth: 110, textAlign: "right" }}
+                  >
                     {formatMoney(n.monthly)} · {Math.round(pct)}%
                   </Typography>
                 </Stack>
@@ -245,7 +277,11 @@ export default function ExpensesSection({
           </Typography>
         </Paper>
       ) : (
-        <TableContainer component={Paper} variant="outlined" sx={{ overflowX: "auto" }}>
+        <TableContainer
+          component={Paper}
+          variant="outlined"
+          sx={{ overflowX: "auto" }}
+        >
           <Table size="small" sx={{ minWidth: 640 }}>
             <TableHead>
               <TableRow>
@@ -280,24 +316,42 @@ export default function ExpensesSection({
                         <TableCell sx={{ pl: 3, whiteSpace: "nowrap" }}>
                           {e.name}
                           {e.isEstimate ? (
-                            <Chip label="estimate" size="small" variant="outlined" sx={{ ml: 1 }} />
+                            <Chip
+                              label="estimate"
+                              size="small"
+                              variant="outlined"
+                              sx={{ ml: 1 }}
+                            />
                           ) : null}
                         </TableCell>
                         <TableCell>
-                          <Chip size="small" color={meta.color} variant="outlined" label={meta.label} />
+                          <Chip
+                            size="small"
+                            color={meta.color}
+                            variant="outlined"
+                            label={meta.label}
+                          />
                         </TableCell>
                         <TableCell align="right" sx={{ whiteSpace: "nowrap" }}>
                           {formatMoney(e.amount)}
                           {e.paymentsPerYear !== 12 ? (
-                            <Typography component="span" variant="caption" color="text.secondary">
+                            <Typography
+                              component="span"
+                              variant="caption"
+                              color="text.secondary"
+                            >
                               {" "}
                               ×{e.paymentsPerYear}/yr
                             </Typography>
                           ) : null}
                         </TableCell>
-                        <TableCell align="right">{formatMoney(e.monthly)}</TableCell>
+                        <TableCell align="right">
+                          {formatMoney(e.monthly)}
+                        </TableCell>
                         <TableCell>{e.paidFromName ?? "—"}</TableCell>
-                        <TableCell sx={{ color: "text.secondary", whiteSpace: "nowrap" }}>
+                        <TableCell
+                          sx={{ color: "text.secondary", whiteSpace: "nowrap" }}
+                        >
                           {e.paymentsPerYear !== 12 &&
                           e.dueMonths?.includes(viewedMonthNum) ? (
                             <Tooltip

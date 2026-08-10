@@ -14,18 +14,19 @@ function shiftMonth(month: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Time travel for ATLAS: step through months to see the config AS IT WAS THEN
-// (each ?month= is a full server render against that month's effective rows).
-// Bounded by the earliest config and the current month; editing is only
-// offered on "now" — the past is a read-only exhibit.
+// Month stepper shared by ATLAS (config time-travel) and Budget (past ledgers).
+// Each ?month= is a full server render. Bounded by the earliest data and the
+// current month; a "back to now" chip appears when viewing the past.
 export default function AtlasMonthSwitcher({
   month,
   earliestMonth,
   currentMonth,
+  basePath = "/finance/atlas",
 }: {
   month: string; // YYYY-MM-01 being viewed
   earliestMonth: string | null;
   currentMonth: string; // YYYY-MM-01
+  basePath?: string;
 }) {
   if (!earliestMonth || earliestMonth === currentMonth) return null;
 
@@ -38,7 +39,7 @@ export default function AtlasMonthSwitcher({
       <IconButton
         size="small"
         component={Link}
-        href={`/finance/atlas?month=${prev.slice(0, 7)}`}
+        href={`${basePath}?month=${prev.slice(0, 7)}`}
         disabled={prev < earliestMonth}
         aria-label="Previous month"
       >
@@ -50,7 +51,7 @@ export default function AtlasMonthSwitcher({
       <IconButton
         size="small"
         component={Link}
-        href={`/finance/atlas?month=${next.slice(0, 7)}`}
+        href={`${basePath}?month=${next.slice(0, 7)}`}
         disabled={isCurrent}
         aria-label="Next month"
       >
@@ -63,7 +64,7 @@ export default function AtlasMonthSwitcher({
           variant="outlined"
           label="back to now"
           component={Link}
-          href="/finance/atlas"
+          href={basePath}
           clickable
         />
       ) : null}
