@@ -49,8 +49,18 @@ export type ExpenseValues = {
 export type PayAccount = { id: number; name: string };
 
 const MONTH_NAMES = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
 ];
 
 // The "creatable dropdown" recipe: existing categories are the menu; an
@@ -95,7 +105,9 @@ export default function ExpenseDialog({
 }) {
   const [flavor, setFlavor] = React.useState<"fix" | "asof">("fix");
   const [startMonth, setStartMonth] = React.useState(defaultMonth);
-  const [category, setCategory] = React.useState<string>(expense?.category ?? "");
+  const [category, setCategory] = React.useState<string>(
+    expense?.category ?? "",
+  );
   const options = React.useMemo(() => {
     const seen = new Set(categoryOptions.map((c) => c.toLowerCase()));
     return [
@@ -103,7 +115,9 @@ export default function ExpenseDialog({
       ...STARTER_CATEGORIES.filter((s) => !seen.has(s.toLowerCase())),
     ];
   }, [categoryOptions]);
-  const [dueMonths, setDueMonths] = React.useState<number[]>(expense?.dueMonths ?? []);
+  const [dueMonths, setDueMonths] = React.useState<number[]>(
+    expense?.dueMonths ?? [],
+  );
   const [error, setError] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
 
@@ -111,7 +125,8 @@ export default function ExpenseDialog({
     setError(null);
     try {
       if (!expense) await addExpenseAction(formData);
-      else if (flavor === "asof") await replaceExpenseAction(expense.id, formData);
+      else if (flavor === "asof")
+        await replaceExpenseAction(expense.id, formData);
       else await updateExpenseAction(expense.id, formData);
       onClose();
     } catch (err) {
@@ -133,7 +148,9 @@ export default function ExpenseDialog({
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>{expense ? `Edit ${expense.name}` : "Add a recurring expense"}</DialogTitle>
+      <DialogTitle>
+        {expense ? `Edit ${expense.name}` : "Add a recurring expense"}
+      </DialogTitle>
       <form action={handle}>
         <DialogContent sx={{ pt: 1 }}>
           <Stack spacing={2.5}>
@@ -155,7 +172,7 @@ export default function ExpenseDialog({
                 />
               </RadioGroup>
             ) : null}
-            {(!expense || flavor === "asof") ? (
+            {!expense || flavor === "asof" ? (
               <MonthYearField
                 name="startMonth"
                 value={startMonth}
@@ -166,7 +183,9 @@ export default function ExpenseDialog({
               />
             ) : null}
 
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "2fr 1fr" }}>
+            <Box
+              sx={{ display: "grid", gap: 2, gridTemplateColumns: "2fr 1fr" }}
+            >
               <TextField
                 name="name"
                 label="Name"
@@ -187,7 +206,9 @@ export default function ExpenseDialog({
               </TextField>
             </Box>
 
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}>
+            <Box
+              sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr" }}
+            >
               <Autocomplete
                 freeSolo
                 selectOnFocus
@@ -245,7 +266,13 @@ export default function ExpenseDialog({
             </Box>
             <input type="hidden" name="category" value={category} readOnly />
 
-            <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: "1fr 1fr 1fr" }}>
+            <Box
+              sx={{
+                display: "grid",
+                gap: 2,
+                gridTemplateColumns: "1fr 1fr 1fr",
+              }}
+            >
               <NumberField
                 name="amount"
                 label="Amount per payment"
@@ -265,9 +292,13 @@ export default function ExpenseDialog({
                 placeholder="15th, EOM, ???"
               />
             </Box>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: -1 }}>
-              The real price at its real cadence — 12/yr = monthly, 2 = every six
-              months, 1 = yearly. The monthly figure is derived.
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ mt: -1 }}
+            >
+              The real price at its real cadence — 12/yr = monthly, 2 = every
+              six months, 1 = yearly. The monthly figure is derived.
             </Typography>
 
             <Autocomplete
@@ -275,7 +306,9 @@ export default function ExpenseDialog({
               options={MONTH_NAMES.map((_, i) => i + 1)}
               getOptionLabel={(m) => MONTH_NAMES[(m as number) - 1]}
               value={dueMonths}
-              onChange={(_, v) => setDueMonths((v as number[]).sort((a, b) => a - b))}
+              onChange={(_, v) =>
+                setDueMonths((v as number[]).sort((a, b) => a - b))
+              }
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -284,18 +317,29 @@ export default function ExpenseDialog({
                 />
               )}
             />
-            <input type="hidden" name="dueMonths" value={JSON.stringify(dueMonths)} readOnly />
+            <input
+              type="hidden"
+              name="dueMonths"
+              value={JSON.stringify(dueMonths)}
+              readOnly
+            />
 
             <FormControlLabel
               control={
-                <Checkbox name="isEstimate" defaultChecked={expense?.isEstimate ?? false} />
+                <Checkbox
+                  name="isEstimate"
+                  defaultChecked={expense?.isEstimate ?? false}
+                />
               }
               label={
                 <>
                   Amount is an estimate
-                  <Typography variant="caption" color="text.secondary" display="block">
-                    Variable bills (electric, water) — the future Budget tab
-                    adjusts when the real charge posts.
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    display="block"
+                  >
+                    Label for variable bills (electric, water).
                   </Typography>
                 </>
               }
@@ -322,8 +366,17 @@ export default function ExpenseDialog({
             {expense ? (
               <>
                 <Divider />
-                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                  <Typography variant="overline" sx={{ color: "error.main", mr: 1 }}>
+                <Stack
+                  direction="row"
+                  spacing={1}
+                  alignItems="center"
+                  flexWrap="wrap"
+                  useFlexGap
+                >
+                  <Typography
+                    variant="overline"
+                    sx={{ color: "error.main", mr: 1 }}
+                  >
                     Danger zone
                   </Typography>
                   <Button
@@ -331,7 +384,11 @@ export default function ExpenseDialog({
                     color="inherit"
                     disabled={pending}
                     onClick={() => {
-                      if (window.confirm(`End ${expense.name} as of today (canceled it)? Past months keep it.`))
+                      if (
+                        window.confirm(
+                          `End ${expense.name} as of today (canceled it)? Past months keep it.`,
+                        )
+                      )
                         runDanger(endExpenseAction);
                     }}
                   >
@@ -342,7 +399,11 @@ export default function ExpenseDialog({
                     color="error"
                     disabled={pending}
                     onClick={() => {
-                      if (window.confirm(`Delete ${expense.name} entirely? It disappears from every month it ever touched.`))
+                      if (
+                        window.confirm(
+                          `Delete ${expense.name} entirely? It disappears from every month it ever touched.`,
+                        )
+                      )
                         runDanger(deleteExpenseAction);
                     }}
                   >
@@ -357,7 +418,11 @@ export default function ExpenseDialog({
           <Button onClick={onClose} color="inherit">
             Cancel
           </Button>
-          <SubmitButton variant="contained" pendingLabel="Saving…" disabled={pending}>
+          <SubmitButton
+            variant="contained"
+            pendingLabel="Saving…"
+            disabled={pending}
+          >
             Save
           </SubmitButton>
         </DialogActions>
