@@ -271,9 +271,8 @@ export async function listMerchantSuggestions(): Promise<{
   return { merchants, sources };
 }
 
-/** Months that have transactions (drives the month switcher). */
-export async function listBudgetMonths(): Promise<string[]> {
-  const groupId = await requireGroupId();
+/** Months that have transactions — session-less core (for the token endpoint). */
+export async function listBudgetMonthsForGroup(groupId: number): Promise<string[]> {
   const txnMonths = await db
     .selectDistinct({ m: transactions.postedOn })
     .from(transactions)
@@ -281,6 +280,37 @@ export async function listBudgetMonths(): Promise<string[]> {
   const set = new Set<string>();
   for (const r of txnMonths) set.add(`${r.m.slice(0, 7)}-01`);
   return [...set].sort();
+}
+
+/** Months that have transactions (drives the month switcher). */
+export async function listBudgetMonths(): Promise<string[]> {
+  return listBudgetMonthsForGroup(await requireGroupId());
+}
+
+export type RecentMonthTotal = { month: string; total: number; fullBudget: number };
+
+/**
+ * The last few completed months as TOTAL spend vs the full monthly budget
+ * (fixed + amortized + discretionary) — the widget's "Recent Months" list.
+ * Session-less so the token-authed widget route can call it.
+ */
+export async function listRecentMonthsForGroup(
+  groupId: number,
+  limit: number,
+  today: string,
+): Promise<RecentMonthTotal[]> {
+  const current = `${today.slice(0, 7)}-01`;
+  const past = (await listBudgetMonthsForGroup(groupId)).filter((m) => m < current);
+  const recent = past.slice(-limit).reverse(); // newest first
+  const dl = (c: number) => Math.round(c) / 100;
+  const out: RecentMonthTotal[] = [];
+  for (const m of recent) {
+    const { computation: c } = await getBudgetMonthForGroup(groupId, m, today);
+    const total = c.fixed.actualC + c.amortized.paidThisMonthC + c.discretionary.netSpentC;
+    const full = c.discretionary.budgetC + c.fixed.expectedC + c.amortized.reservedMonthlyC;
+    out.push({ month: m, total: dl(total), fullBudget: dl(full) });
+  }
+  return out;
 }
 
 /** Raw transaction rows for a month (the editable table). */
