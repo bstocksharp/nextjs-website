@@ -83,7 +83,7 @@ export type FixedRow = {
   /** Σ matched txns this month; null = nothing posted yet. */
   actualC: number | null;
   isEstimate: boolean;
-  /** expected − actual (positive frees budget); estimates only. */
+  /** expected − actual (positive frees budget); any posted fixed bill. */
   deltaC: number | null;
 };
 
@@ -189,7 +189,7 @@ export function computeBudgetMonth(input: EngineInput): BudgetComputation {
     );
   }
 
-  // ── Fixed lane: billed vs expected; estimates adjust the discretionary pot ──
+  // ── Fixed lane: billed vs expected; EVERY posted bill reconciles ─────────────
   const fixedRows: FixedRow[] = fixedRecurring.map((r) => {
     const actual = actualByRecurring.get(r.id) ?? null;
     return {
@@ -198,11 +198,16 @@ export function computeBudgetMonth(input: EngineInput): BudgetComputation {
       expectedC: r.monthlyC,
       actualC: actual,
       isEstimate: r.isEstimate,
-      deltaC: r.isEstimate && actual !== null ? r.monthlyC - actual : null,
+      // Every fixed bill reconciles its real charge against the plan; the gap
+      // frees up (or eats into) discretionary — a Spectrum overrun is real money
+      // gone, same as an electric one. isEstimate is now only a display label
+      // ("this one's a guess"), no longer a switch on this math.
+      deltaC: actual !== null ? r.monthlyC - actual : null,
     };
   });
-  // The gist's estimate adjustment: a posted actual replaces its estimate, and
-  // the difference flows into (or out of) the discretionary budget.
+  // A posted actual replaces its plan; the difference flows into (or out of) the
+  // discretionary budget. (Named "estimate" adjustment for history — it's now
+  // every fixed bill, not just estimates.)
   const estimateAdjustmentC = fixedRows.reduce((s, r) => s + (r.deltaC ?? 0), 0);
 
   // ── Amortized lane: sinking funds ────────────────────────────────────────────

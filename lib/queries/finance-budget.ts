@@ -287,28 +287,30 @@ export async function listBudgetMonths(): Promise<string[]> {
   return listBudgetMonthsForGroup(await requireGroupId());
 }
 
-export type RecentMonthTotal = { month: string; total: number; fullBudget: number };
+export type RecentMonthBar = { month: string; spent: number; budget: number };
 
 /**
- * The last few completed months as TOTAL spend vs the full monthly budget
- * (fixed + amortized + discretionary) — the widget's "Recent Months" list.
- * Session-less so the token-authed widget route can call it.
+ * The last few completed months as DISCRETIONARY spent-vs-budget — the widget's
+ * "Recent Months" list. Discretionary (not whole-household) so it's coherent
+ * with the widget's "left to spend" framing. Session-less for the token route.
  */
 export async function listRecentMonthsForGroup(
   groupId: number,
   limit: number,
   today: string,
-): Promise<RecentMonthTotal[]> {
+): Promise<RecentMonthBar[]> {
   const current = `${today.slice(0, 7)}-01`;
   const past = (await listBudgetMonthsForGroup(groupId)).filter((m) => m < current);
   const recent = past.slice(-limit).reverse(); // newest first
   const dl = (c: number) => Math.round(c) / 100;
-  const out: RecentMonthTotal[] = [];
+  const out: RecentMonthBar[] = [];
   for (const m of recent) {
     const { computation: c } = await getBudgetMonthForGroup(groupId, m, today);
-    const total = c.fixed.actualC + c.amortized.paidThisMonthC + c.discretionary.netSpentC;
-    const full = c.discretionary.budgetC + c.fixed.expectedC + c.amortized.reservedMonthlyC;
-    out.push({ month: m, total: dl(total), fullBudget: dl(full) });
+    out.push({
+      month: m,
+      spent: dl(c.discretionary.netSpentC),
+      budget: dl(c.discretionary.budgetC),
+    });
   }
   return out;
 }

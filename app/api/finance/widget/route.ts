@@ -37,13 +37,10 @@ export async function GET(req: NextRequest) {
   const disc = c.discretionary;
   const recentMonths = await listRecentMonthsForGroup(auth.groupId, 3, today);
 
-  // "Total spend" the widget headlines = fixed + amortized + net discretionary
-  // (NOT savings/fund draws — those aren't budget spend). fullBudget is the
-  // whole monthly envelope. Dollars on the wire so the widget renders directly.
-  const fullBudget = d(disc.budgetC + c.fixed.expectedC + c.amortized.reservedMonthlyC);
-  const spent = d(c.fixed.actualC + c.amortized.paidThisMonthC + disc.netSpentC);
-
-  // v2 — the full contract the Scriptable widget (compact + tap-to-detail) reads.
+  // The widget is a DISCRETIONARY story — "how much can I still spend." The bar
+  // is discretionary spend vs the discretionary budget; fixed/amortized are
+  // committed bills shown only in the tap-detail as context, never on the bar.
+  // Dollars on the wire so the widget renders directly.
   return NextResponse.json(
     {
       ok: true,
@@ -52,9 +49,6 @@ export async function GET(req: NextRequest) {
       day: c.dayOfMonth,
       daysInMonth: c.daysInMonth,
       daysLeft: Math.max(0, c.daysInMonth - c.dayOfMonth),
-      fullBudget,
-      spent,
-      plannedTick: d(c.plannedTickC), // spend "you should be at" today (for the bar tick)
       discretionary: {
         budget: d(disc.budgetC),
         spent: d(disc.netSpentC),
@@ -64,8 +58,8 @@ export async function GET(req: NextRequest) {
         paceDelta: d(disc.paceDeltaC),
         daysToCatchUp: c.analytics.daysToCatchUp,
       },
-      fixed: { budget: d(c.fixed.expectedC), actual: d(c.fixed.actualC) },
-      amortized: { budget: d(c.amortized.reservedMonthlyC), actual: d(c.amortized.paidThisMonthC) },
+      // Committed bills that actually posted this month — detail context only.
+      billed: { fixed: d(c.fixed.actualC), amortized: d(c.amortized.paidThisMonthC) },
       analytics: {
         today: d(c.analytics.todayC),
         yesterday: d(c.analytics.yesterdayC),
@@ -79,7 +73,7 @@ export async function GET(req: NextRequest) {
         balance: d(f.balanceC),
         drawnThisMonth: d(f.drawnThisMonthC),
       })),
-      recentMonths, // [{ month: "YYYY-MM-01", total, fullBudget }] newest first
+      recentMonths, // [{ month, spent, budget }] discretionary, newest first
       needsReview: c.needsReviewCount,
     },
     { headers: { "Cache-Control": "no-store" } },

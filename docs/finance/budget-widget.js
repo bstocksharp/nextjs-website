@@ -93,8 +93,11 @@ function buildGradient(actualSpendRatio, plannedThresholdRatio) {
 // ── Compact (home/lock screen) ────────────────────────────────────────────────
 function buildCompact(d) {
   const disc = d.discretionary;
-  const actualSpendRatio = Math.min(Math.max(d.spent / d.fullBudget, 0), 1);
-  const plannedThresholdRatio = Math.min(d.plannedTick / d.fullBudget, 1);
+  // The bar is DISCRETIONARY: spent vs your spending budget, with the tick at
+  // where you should be by today. Fixed/amortized never touch it (they're in
+  // the tap-detail) — the bar is only the money you actually steer.
+  const actualSpendRatio = disc.budget > 0 ? Math.min(Math.max(disc.spent / disc.budget, 0), 1) : 0;
+  const plannedThresholdRatio = d.daysInMonth > 0 ? Math.min(d.day / d.daysInMonth, 1) : 0;
 
   const widget = new ListWidget();
   widget.backgroundColor = C(COLORS.background);
@@ -112,9 +115,9 @@ function buildCompact(d) {
   widget.addSpacer(12);
 
   addLine(widget, "SPENT", { font: Font.semiboldSystemFont(9), color: COLORS.textSecondary });
-  addLine(widget, money(d.spent), {
+  addLine(widget, money(disc.spent), {
     font: Font.systemFont(13),
-    color: d.spent > d.fullBudget ? COLORS.danger : COLORS.textPrimary,
+    color: disc.spent > disc.budget ? COLORS.danger : COLORS.textPrimary,
   });
 
   widget.addSpacer(5);
@@ -134,6 +137,8 @@ function buildCompact(d) {
 }
 
 // ── Detail (tap → presentLarge) ───────────────────────────────────────────────
+// Leads with the discretionary spend (same story as the compact bar), then the
+// committed bills / funds / history as "everything else" context.
 function buildDetail(d) {
   const disc = d.discretionary;
   const w = new ListWidget();
@@ -144,25 +149,19 @@ function buildDetail(d) {
   const fontBody = Font.systemFont(12);
   const yellow = Color.yellow();
 
-  addLine(w, `Total: ${money(d.spent)} / ${money(d.fullBudget)} (${safePct(d.spent, d.fullBudget)}%)`, {
+  addLine(w, `Spend: ${money(disc.spent)} / ${money(disc.budget)} (${safePct(disc.spent, disc.budget)}%)`, {
     font: fontHeadline,
-    color: d.spent > d.fullBudget ? COLORS.danger : COLORS.textPrimary,
+    color: disc.spent > disc.budget ? COLORS.danger : COLORS.textPrimary,
   });
-  w.addSpacer(4);
-  addLine(w, `Fixed: ${money(d.fixed.actual)} / ${money(d.fixed.budget)} (${safePct(d.fixed.actual, d.fixed.budget)}%)`, { font: fontBody, color: COLORS.textSecondary });
-  addLine(w, `Amortized: ${money(d.amortized.actual)} / ${money(d.amortized.budget)} (${safePct(d.amortized.actual, d.amortized.budget)}%)`, { font: fontBody, color: COLORS.textSecondary });
-  addLine(w, `Spend: ${money(disc.spent)} / ${money(disc.budget)} (${safePct(disc.spent, disc.budget)}%)`, { font: fontBody, color: COLORS.textSecondary });
-
-  w.addSpacer(12);
-  addLine(w, `Spend Remaining: ${money(disc.remaining)}`, {
-    font: fontHeadline,
-    color: disc.remaining < 0 ? COLORS.danger : COLORS.textPrimary,
+  addLine(w, `Left to spend: ${money(disc.remaining)}`, {
+    font: fontPace,
+    color: disc.remaining < 0 ? COLORS.danger : COLORS.underBudget,
   });
 
   if (disc.paceDelta >= 0) {
-    addLine(w, `Under pace by: ${money(disc.paceDelta)}`, { font: fontPace, color: COLORS.underBudget });
+    addLine(w, `Under pace by: ${money(disc.paceDelta)}`, { font: fontBody, color: COLORS.underBudget });
   } else {
-    addLine(w, `Over pace by: ${money(-disc.paceDelta)}`, { font: fontPace, color: COLORS.danger });
+    addLine(w, `Over pace by: ${money(-disc.paceDelta)}`, { font: fontBody, color: COLORS.danger });
     if (disc.daysToCatchUp > 0 && disc.daysToCatchUp <= d.daysLeft) {
       addLine(w, `Days till back in the green: ${disc.daysToCatchUp}`, { font: fontBody, color: COLORS.textSecondary });
     } else if (disc.daysToCatchUp > d.daysLeft) {
@@ -170,17 +169,24 @@ function buildDetail(d) {
     }
   }
 
-  w.addSpacer(12);
+  w.addSpacer(10);
   const todayOverDaily = d.analytics.today > disc.perDay;
   addLine(w, `Today: ${money(d.analytics.today)} / ${money(disc.perDay)} daily`, {
     font: fontBody,
     color: todayOverDaily ? COLORS.danger : COLORS.underBudget,
   });
   addLine(w, `Yesterday: ${money(d.analytics.yesterday)}`, { font: fontBody, color: COLORS.textSecondary });
-  addLine(w, `Spent This Week: ${money(d.analytics.last7)}`, { font: fontBody, color: COLORS.textSecondary });
+  addLine(w, `This week: ${money(d.analytics.last7)}`, { font: fontBody, color: COLORS.textSecondary });
+  addLine(w, d.daysLeft > 0 ? `Days left: ${d.daysLeft}` : `Last day of the month!`, { font: fontBody, color: COLORS.textSecondary });
 
-  w.addSpacer(8);
-  addLine(w, d.daysLeft > 0 ? `Days Left: ${d.daysLeft}` : `Last day of the month!`, { font: fontBody, color: COLORS.textSecondary });
+  // Committed bills that posted this month — context, NOT part of the spend bar.
+  if (d.billed && (d.billed.fixed > 0 || d.billed.amortized > 0)) {
+    w.addSpacer(8);
+    addLine(w, `Also billed — Fixed ${money(d.billed.fixed)} · Amortized ${money(d.billed.amortized)}`, {
+      font: fontBody,
+      color: COLORS.textSecondary,
+    });
+  }
 
   w.addSpacer(10);
   for (const f of d.funds || []) {
@@ -196,17 +202,18 @@ function buildDetail(d) {
   }
 
   if (d.reimbursed > 0) addLine(w, `Reimbursed back this month: ${money(d.reimbursed)}`, { font: fontBody, color: yellow });
-  if (d.savings > 0) addLine(w, `Paid From Savings: ${money(d.savings)}`, { font: fontBody, color: yellow });
-  if (d.estimateAdjustment !== 0) addLine(w, `Fixed Budget Adjustments: ${money(d.estimateAdjustment)}`, { font: fontBody, color: yellow });
+  if (d.savings > 0) addLine(w, `Paid from savings: ${money(d.savings)}`, { font: fontBody, color: yellow });
+  if (d.estimateAdjustment !== 0) addLine(w, `Fixed budget adjustments: ${money(d.estimateAdjustment)}`, { font: fontBody, color: yellow });
 
+  // Recent months — discretionary spent vs budget (same lens as the bar).
   if (d.recentMonths && d.recentMonths.length) {
     w.addSpacer(8);
-    addLine(w, `Recent Months:`, { font: fontBody, color: COLORS.textSecondary });
+    addLine(w, `Recent months (spend):`, { font: fontBody, color: COLORS.textSecondary });
     for (const entry of d.recentMonths) {
-      const pct = safePct(entry.total, entry.fullBudget);
-      const delta = entry.total - entry.fullBudget;
+      const pct = safePct(entry.spent, entry.budget);
+      const delta = entry.spent - entry.budget;
       const arrow = delta <= 0 ? "▼" : "▲";
-      addLine(w, `  ${formatMonthLabel(entry.month)}: ${money(entry.total)} (${pct}%) ${arrow}${money(Math.abs(delta))}`, {
+      addLine(w, `  ${formatMonthLabel(entry.month)}: ${money(entry.spent)} (${pct}%) ${arrow}${money(Math.abs(delta))}`, {
         font: fontBody,
         color: delta <= 0 ? COLORS.underBudget : COLORS.danger,
       });
