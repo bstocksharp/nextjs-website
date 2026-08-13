@@ -12,6 +12,7 @@ import { computeBudgetMonth, type EngineTxn, type BudgetComputation } from "@/li
 import { getAtlasViewForGroup } from "@/lib/queries/finance-atlas";
 import { lastDayOfMonth, todayISO, currentMonthISO } from "@/lib/finance/parse";
 import { requireGroupId } from "@/lib/session";
+import { getGroupTimezone } from "@/lib/queries/group";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BUDGET reads. The engine (lib/finance/budget-engine) is pure; this layer
@@ -51,7 +52,8 @@ export async function getBudgetMonthForGroup(
   const { start, end } = monthBounds(month);
 
   // ATLAS discretion-left for this month's effective config (the budget base).
-  const atlas = await getAtlasViewForGroup(groupId, month);
+  // Pass `today` so its point-in-time asOf uses the household's zone, not UTC.
+  const atlas = await getAtlasViewForGroup(groupId, month, today);
   const discretionaryBudgetC = cents(atlas.totals.discretionLeft);
   const hasIncome = atlas.totals.monthlyNet > 0;
 
@@ -175,7 +177,8 @@ export async function getBudgetMonthForGroup(
 
 // ── Session wrappers (the budget page; the API routes use the …ForGroup core) ─
 export async function getBudgetMonth(month: string): Promise<BudgetView> {
-  return getBudgetMonthForGroup(await requireGroupId(), month, todayISO());
+  const groupId = await requireGroupId();
+  return getBudgetMonthForGroup(groupId, month, todayISO(await getGroupTimezone(groupId)));
 }
 
 export async function listMonthTransactionsForSession(
@@ -198,14 +201,15 @@ export type RecentMonth = {
  */
 export async function listRecentMonths(limit = 3): Promise<RecentMonth[]> {
   const groupId = await requireGroupId();
-  const current = currentMonthISO();
+  const tz = await getGroupTimezone(groupId);
+  const current = currentMonthISO(tz);
   const past = (await listBudgetMonths()).filter((m) => m < current);
   const recent = past.slice(-limit).reverse(); // newest first
   const dl = (c: number) => Math.round(c) / 100;
 
   const out: RecentMonth[] = [];
   for (const m of recent) {
-    const v = await getBudgetMonthForGroup(groupId, m, todayISO());
+    const v = await getBudgetMonthForGroup(groupId, m, todayISO(tz));
     out.push({
       month: m,
       spent: dl(v.computation.discretionary.netSpentC),

@@ -45,14 +45,23 @@ export function lastDayOfMonth(month: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-/** Today as YYYY-MM-DD (UTC-shifted to local calendar day). */
-export function todayISO(): string {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 10);
+// Fallback timezone when the household hasn't set one. Vercel runs in UTC, so
+// date math MUST be pinned to a real zone or "today" flips at ~7pm Central
+// instead of midnight. Callers pass the group's timezone (getGroupTimezone).
+export const DEFAULT_TZ = "America/Chicago";
+
+/** Today as YYYY-MM-DD in the given timezone (not the server's UTC). */
+export function todayISO(tz: string = DEFAULT_TZ): string {
+  // en-CA formats as YYYY-MM-DD; timeZone pins it to that zone's calendar day.
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
 }
 
-/** First-of-current-month as YYYY-MM-01. */
-export function currentMonthISO(): string {
-  return `${todayISO().slice(0, 7)}-01`;
+/** First-of-current-month as YYYY-MM-01, in the given timezone. */
+export function currentMonthISO(tz: string = DEFAULT_TZ): string {
+  return `${todayISO(tz).slice(0, 7)}-01`;
 }

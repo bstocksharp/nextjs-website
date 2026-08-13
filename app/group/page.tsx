@@ -20,6 +20,7 @@ import AddPersonButton from "@/components/shared/AddPersonButton";
 import EditProfileButton from "@/components/shared/EditProfileButton";
 import DeleteIconButton from "@/components/shared/DeleteIconButton";
 import GroupNameEditor from "./GroupNameEditor";
+import TimezoneSetting from "./TimezoneSetting";
 import InvitesPanel, { type InviteRow } from "./InvitesPanel";
 import DangerZone from "./DangerZone";
 import { getSession } from "@/lib/session";
@@ -108,6 +109,11 @@ export default async function GroupPage() {
 
       <Stack spacing={2.5}>
         <GroupNameEditor name={group?.name ?? "Group"} canEdit={canEdit} />
+
+        <TimezoneSetting
+          timezone={group?.timezone ?? "America/Chicago"}
+          canEdit={canEdit}
+        />
 
         <Typography variant="body2" color="text.secondary">
           Everyone here shares this hub&apos;s data. <strong>People</strong> are

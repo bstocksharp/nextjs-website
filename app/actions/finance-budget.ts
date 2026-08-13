@@ -12,6 +12,7 @@ import {
 } from "@/lib/db/schema";
 import { requireEditor } from "@/lib/auth";
 import { requireGroupId } from "@/lib/session";
+import { getGroupTimezone } from "@/lib/queries/group";
 import { parseMoney, parseStr, parseInt as parseBoundedInt, todayISO } from "@/lib/finance/parse";
 import { categorizeMerchant } from "@/lib/finance/sms";
 import { merchantRulesFor } from "@/lib/finance/ingest";
@@ -129,7 +130,7 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
 
   const amount = parseMoney(formData.get("amount"));
   if (amount === null || Number(amount) <= 0) throw new Error("Enter an amount.");
-  const postedOn = parseStr(formData.get("postedOn")) ?? todayISO();
+  const postedOn = parseStr(formData.get("postedOn")) ?? todayISO(await getGroupTimezone(groupId));
   const merchant = parseStr(formData.get("merchant"));
   const kind = formData.get("kind") === "income" ? "income" : "expense";
   const categoryRaw = String(formData.get("category") ?? "auto");

@@ -10,6 +10,8 @@ import { getAtlasView } from "@/lib/queries/finance-atlas";
 import { listFinancialAccounts } from "@/lib/queries/finance-networth";
 import { listProfiles } from "@/lib/queries/profiles";
 import { currentMonthISO } from "@/lib/finance/parse";
+import { requireGroupId } from "@/lib/session";
+import { getGroupTimezone } from "@/lib/queries/group";
 import { formatMonth } from "@/lib/format";
 import AtlasMonthSwitcher from "@/components/finance/AtlasMonthSwitcher";
 import AtlasPersonCard, {
@@ -40,7 +42,7 @@ export default async function AtlasPage({
   ]);
 
   const editable = editor && view.isCurrentMonth;
-  const currentMonth = currentMonthISO();
+  const currentMonth = currentMonthISO(await getGroupTimezone(await requireGroupId()));
   const defaultMonth = currentMonth.slice(0, 7);
 
   const cy = Number(currentMonth.slice(0, 4));
