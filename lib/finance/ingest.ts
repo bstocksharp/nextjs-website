@@ -4,6 +4,8 @@ import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions, recurringExpenses } from "@/lib/db/schema";
 import { parseAlertText, categorizeMerchant, type MerchantRule } from "@/lib/finance/sms";
+import { todayISO } from "@/lib/finance/parse";
+import { getGroupTimezone } from "@/lib/queries/group";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INGEST — the shared "an alert text becomes a transaction row" pipeline, used
@@ -88,7 +90,7 @@ export async function ingestAlert(
       .values({
         groupId,
         accountId,
-        postedOn: new Date().toISOString().slice(0, 10),
+        postedOn: todayISO(await getGroupTimezone(groupId)),
         merchant: null,
         amount: "0.00",
         originalAmount: "0.00",

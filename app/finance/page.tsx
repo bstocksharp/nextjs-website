@@ -20,6 +20,7 @@ import {
 import { listFinancialAccounts } from "@/lib/queries/finance-networth";
 import { listProfiles } from "@/lib/queries/profiles";
 import { currentMonthISO } from "@/lib/finance/parse";
+import { getGroupTimezone } from "@/lib/queries/group";
 import { formatMonth } from "@/lib/format";
 import AtlasMonthSwitcher from "@/components/finance/AtlasMonthSwitcher";
 import BudgetSummary from "@/components/finance/BudgetSummary";
@@ -39,10 +40,11 @@ export default async function BudgetPage({
 }: {
   searchParams: Promise<{ month?: string }>;
 }) {
-  if ((await getSession()) === null) redirect("/login");
+  const session = await getSession();
+  if (session === null) redirect("/login");
 
   const { month: monthParam } = await searchParams;
-  const currentMonth = currentMonthISO();
+  const currentMonth = currentMonthISO(await getGroupTimezone(session.groupId));
   const month =
     monthParam && /^\d{4}-\d{2}/.test(monthParam)
       ? `${monthParam.slice(0, 7)}-01`

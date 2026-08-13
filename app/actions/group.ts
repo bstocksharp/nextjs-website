@@ -303,3 +303,25 @@ export async function renameGroupAction(formData: FormData): Promise<void> {
   await db.update(groups).set({ name }).where(eq(groups.id, groupId));
   revalidatePath("/group");
 }
+
+/** A real IANA timezone? Intl throws on garbage — cheap, correct validation. */
+function isValidTimeZone(tz: string): boolean {
+  try {
+    Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Set the household timezone — pins the finance app's "today" (see parse.ts). */
+export async function updateGroupTimezoneAction(formData: FormData): Promise<void> {
+  await requireEditor();
+  const { groupId } = await requireSession();
+  const tz = String(formData.get("timezone") ?? "").trim().slice(0, 64);
+  if (!tz || !isValidTimeZone(tz)) throw new Error("Pick a valid timezone.");
+
+  await db.update(groups).set({ timezone: tz }).where(eq(groups.id, groupId));
+  revalidatePath("/group");
+  revalidatePath("/finance"); // budget/atlas recompute their "current month"
+}

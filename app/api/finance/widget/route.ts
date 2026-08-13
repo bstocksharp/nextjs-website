@@ -5,6 +5,7 @@ import {
   getBudgetMonthForGroup,
   listRecentMonthsForGroup,
 } from "@/lib/queries/finance-budget";
+import { getGroupTimezone } from "@/lib/queries/group";
 import { currentMonthISO, todayISO } from "@/lib/finance/parse";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -31,8 +32,9 @@ export async function GET(req: NextRequest) {
   if (!auth) return NextResponse.json({ ok: false }, { status: 401 });
   void touchApiToken(auth.id);
 
-  const month = currentMonthISO();
-  const today = todayISO();
+  const tz = await getGroupTimezone(auth.groupId);
+  const month = currentMonthISO(tz);
+  const today = todayISO(tz);
   const { computation: c } = await getBudgetMonthForGroup(auth.groupId, month, today);
   const disc = c.discretionary;
   const recentMonths = await listRecentMonthsForGroup(auth.groupId, 3, today);

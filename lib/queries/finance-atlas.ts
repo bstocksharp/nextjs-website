@@ -13,7 +13,8 @@ import {
 } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
 import { profileInGroup } from "./scope";
-import { currentMonthISO, lastDayOfMonth, todayISO } from "@/lib/finance/parse";
+import { getGroupTimezone } from "@/lib/queries/group";
+import { lastDayOfMonth, todayISO } from "@/lib/finance/parse";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ATLAS — reads + ALL derived income/spend math (nothing stored; the effective-
@@ -119,7 +120,8 @@ export type AtlasView = {
 
 /** Session wrapper: scopes to the signed-in group, then delegates. */
 export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
-  return getAtlasViewForGroup(await requireGroupId(), monthParam);
+  const groupId = await requireGroupId();
+  return getAtlasViewForGroup(groupId, monthParam, todayISO(await getGroupTimezone(groupId)));
 }
 
 /**
@@ -130,8 +132,9 @@ export async function getAtlasView(monthParam?: string): Promise<AtlasView> {
 export async function getAtlasViewForGroup(
   groupId: number,
   monthParam?: string,
+  today: string = todayISO(), // the household's "today"; defaults to Central
 ): Promise<AtlasView> {
-  const currentMonth = currentMonthISO();
+  const currentMonth = `${today.slice(0, 7)}-01`;
   const month =
     monthParam && /^\d{4}-\d{2}/.test(monthParam)
       ? `${monthParam.slice(0, 7)}-01`
@@ -139,7 +142,7 @@ export async function getAtlasViewForGroup(
   const isCurrentMonth = month === currentMonth;
   // Point-in-time semantics: past months read as of their last day; the
   // current month reads as of today (a raise landing Aug 15 shows from Aug 15).
-  const asOf = isCurrentMonth ? todayISO() : lastDayOfMonth(month);
+  const asOf = isCurrentMonth ? today : lastDayOfMonth(month);
 
   const [groupProfiles, allPlans, allDeductions, allExpenses, accounts] =
     await Promise.all([

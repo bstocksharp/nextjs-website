@@ -266,6 +266,11 @@ export const groups = pgTable("groups", {
     (): AnyPgColumn => accounts.id,
     { onDelete: "set null" },
   ),
+  // The household's IANA timezone (e.g. "America/Chicago"). Vercel runs in UTC,
+  // so this pins server-side "today"/"current month" — otherwise the budget
+  // flips at UTC midnight (~7pm Central). Set from the browser's detected zone in
+  // /group settings; defaults to Central.
+  timezone: varchar("timezone", { length: 64 }).notNull().default("America/Chicago"),
   createdAt: createdAt(),
 });
 
