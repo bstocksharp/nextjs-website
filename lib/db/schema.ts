@@ -801,12 +801,41 @@ export const transactions = pgTable(
     // Unparseable SMS lands as amount 0 + needsReview — surfaced, never dropped.
     needsReview: boolean("needs_review").notNull().default(false),
     note: text("note"),
+    // Analytics label (F4c) — Groceries / Dining / Gas… DISTINCT from `category`
+    // (the budget engine's lane). Bill-linked rows inherit their bill's ATLAS
+    // category; discretionary rows get tagged by merchant rules or by hand. Null
+    // = untagged.
+    spendCategory: varchar("spend_category", { length: 40 }),
     createdAt: createdAt(),
   },
   (t) => [
     index("idx_txn_group_posted").on(t.groupId, t.postedOn),
     index("idx_txn_recurring").on(t.recurringExpenseId),
   ],
+);
+
+// Merchant → spend-category rules (F4c). A pattern is a case-insensitive
+// substring of the card-alert merchant (same style as recurringExpenses
+// merchantPatterns); longest match wins, so "WM SUPERCENTER" beats a broad
+// "WALMART". Seeded from Bryce's real merchants, grown as he tags — the
+// "learns from you" auto-tagger, no LLM.
+export const merchantCategories = pgTable(
+  "merchant_categories",
+  {
+    id: serial("id").primaryKey(),
+    groupId: integer("group_id")
+      .notNull()
+      .references(() => groups.id, { onDelete: "cascade" }),
+    pattern: varchar("pattern", { length: 100 }).notNull(),
+    category: varchar("category", { length: 40 }).notNull(),
+    // The named merchant GROUP this pattern belongs to (F4d) — several patterns
+    // (WM SUPERCENTER, WAL-MART, WALMART.COM) can share one group name ("Walmart")
+    // and category. Purely organizational: categorization is still longest-pattern
+    // wins. Backfilled to = pattern, so every rule starts as its own group.
+    groupName: varchar("group_name", { length: 60 }),
+    createdAt: createdAt(),
+  },
+  (t) => [index("idx_merchcat_group").on(t.groupId)],
 );
 
 // One-time pools (Lauren's fund, Bryce's fund, a shared vacation pot…) — a txn
@@ -863,6 +892,8 @@ export type Fund = typeof funds.$inferSelect;
 export type NewFund = typeof funds.$inferInsert;
 export type ApiToken = typeof apiTokens.$inferSelect;
 export type NewApiToken = typeof apiTokens.$inferInsert;
+export type MerchantCategory = typeof merchantCategories.$inferSelect;
+export type NewMerchantCategory = typeof merchantCategories.$inferInsert;
 
 // ── Inferred types for use across the app ─────────────────────────────────────
 export type Group = typeof groups.$inferSelect;

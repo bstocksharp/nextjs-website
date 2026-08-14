@@ -94,8 +94,10 @@ export default function TransactionsTable({
           {editable ? " Add one, or let your card alerts flow in." : ""}
         </Typography>
       ) : (
-        <TableContainer sx={{ overflowX: "auto" }}>
-          <Table size="small" sx={{ minWidth: 520 }}>
+        <TableContainer
+          sx={{ overflowX: "auto", maxHeight: txns.length > 12 ? 520 : undefined }}
+        >
+          <Table size="small" stickyHeader={txns.length > 12} sx={{ minWidth: 520 }}>
             <TableHead>
               <TableRow>
                 <TableCell>Date</TableCell>

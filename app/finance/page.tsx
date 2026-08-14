@@ -16,6 +16,7 @@ import {
   listBillsForMonth,
   listRecentMonths,
   listMerchantSuggestions,
+  getSpendTrend,
 } from "@/lib/queries/finance-budget";
 import { listFinancialAccounts } from "@/lib/queries/finance-networth";
 import { listProfiles } from "@/lib/queries/profiles";
@@ -24,7 +25,7 @@ import { getGroupTimezone } from "@/lib/queries/group";
 import { formatMonth } from "@/lib/format";
 import AtlasMonthSwitcher from "@/components/finance/AtlasMonthSwitcher";
 import BudgetSummary from "@/components/finance/BudgetSummary";
-import BudgetAnalytics from "@/components/finance/BudgetAnalytics";
+import BudgetInsights from "@/components/finance/BudgetInsights";
 import TransactionsTable from "@/components/finance/TransactionsTable";
 import FundsPanel from "@/components/finance/FundsPanel";
 import type { TxnRowData } from "@/components/finance/TransactionRow";
@@ -50,7 +51,7 @@ export default async function BudgetPage({
       ? `${monthParam.slice(0, 7)}-01`
       : currentMonth;
 
-  const [view, txns, accounts, monthsWithData, bills, groupProfiles, recentMonths, suggest, editor] =
+  const [view, txns, accounts, monthsWithData, bills, groupProfiles, recentMonths, trend, suggest, editor] =
     await Promise.all([
       getBudgetMonth(month),
       listMonthTransactionsForSession(month),
@@ -59,6 +60,7 @@ export default async function BudgetPage({
       listBillsForMonth(month),
       listProfiles(),
       listRecentMonths(3),
+      getSpendTrend(month),
       listMerchantSuggestions(),
       isEditor(),
     ]);
@@ -72,6 +74,7 @@ export default async function BudgetPage({
     amount: Number(t.amount),
     originalAmount: Number(t.originalAmount),
     category: t.category,
+    spendCategory: t.spendCategory,
     fundId: t.fundId,
     recurringExpenseId: t.recurringExpenseId,
     needsReview: t.needsReview,
@@ -93,20 +96,26 @@ export default async function BudgetPage({
   const ownerPicks = groupProfiles.map((p) => ({ id: p.id, name: p.name }));
   const earliestMonth = monthsWithData[0] ?? null;
 
-  // Highlights computed from the month's real rows (not the engine — these are
-  // display flourishes). "Spend" = money that left, excluding credits/income.
-  const SPEND_CATS = new Set(["discretionary", "fixed", "amortized", "savings", "fund"]);
-  const spendRows = rows.filter((r) => SPEND_CATS.has(r.category) && r.amount > 0);
-  const biggest = spendRows.reduce<TxnRowData | null>(
-    (best, r) => (best === null || r.amount > best.amount ? r : best),
-    null,
-  );
-  const merchantTotals = new Map<string, number>();
-  for (const r of rows) {
-    if (r.category !== "discretionary" || !r.merchant) continue;
-    merchantTotals.set(r.merchant, (merchantTotals.get(r.merchant) ?? 0) + r.amount);
+  // Insights top-3s are DISCRETIONARY only — the controllable spend. Rent and
+  // tithing dominate raw "biggest purchase," which isn't insight; bills show in
+  // the billed breakdown instead.
+  const discSpend = rows.filter((r) => r.category === "discretionary" && r.amount > 0);
+  const topPurchases = [...discSpend]
+    .sort((a, b) => b.amount - a.amount)
+    .slice(0, 3)
+    .map((r) => ({ merchant: r.merchant ?? "—", amount: r.amount, date: r.postedOn }));
+  const merchantAgg = new Map<string, { total: number; count: number }>();
+  for (const r of discSpend) {
+    if (!r.merchant) continue;
+    const cur = merchantAgg.get(r.merchant) ?? { total: 0, count: 0 };
+    cur.total += r.amount;
+    cur.count += 1;
+    merchantAgg.set(r.merchant, cur);
   }
-  const topMerchantEntry = [...merchantTotals.entries()].sort((a, b) => b[1] - a[1])[0];
+  const topMerchants = [...merchantAgg.entries()]
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 3)
+    .map(([merchant, { total, count }]) => ({ merchant, total, count }));
 
   // Income this month, grouped by source (the merchant field on income rows).
   // Only true income rows — the fund top-up an income entry may spawn is a
@@ -180,6 +189,8 @@ export default async function BudgetPage({
             allowedSoFar: d(disc.allowedSoFarC),
             dayOfMonth: c.dayOfMonth,
             daysInMonth: c.daysInMonth,
+            fixed: { actual: d(c.fixed.actualC), expected: d(c.fixed.expectedC) },
+            amortized: { paid: d(c.amortized.paidThisMonthC), reserved: d(c.amortized.reservedMonthlyC) },
           }}
         />
       )}
@@ -193,51 +204,47 @@ export default async function BudgetPage({
         </Alert>
       ) : null}
 
-      <TransactionsTable
-        txns={rows}
-        funds={fundPicks}
-        bills={bills}
-        accounts={accountPicks}
-        merchants={suggest.merchants}
-        sources={suggest.sources}
-        editable={editor}
-      />
-
-      {c.needsReviewCount > 0 && editor ? (
-        <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" color="text.secondary">
-            Tip: the ⚠ rows couldn&apos;t be read automatically — open the ⋮ menu
-            to set their details.
-          </Typography>
-        </Box>
-      ) : null}
-
-      <BudgetAnalytics
+      <BudgetInsights
         d={{
-          isCurrentMonth: month === currentMonth,
-          totalSpent: d(c.totalOutflowC),
-          totalPlan: d(disc.budgetC + c.fixed.expectedC + c.amortized.reservedMonthlyC),
-          discretionary: { spent: d(disc.netSpentC), budget: d(disc.budgetC) },
-          fixed: { actual: d(c.fixed.actualC), expected: d(c.fixed.expectedC) },
-          amortized: { paid: d(c.amortized.paidThisMonthC), reserved: d(c.amortized.reservedMonthlyC) },
-          reimbursed: d(disc.reimbursedC),
-          savings: d(c.savingsC),
-          income: { total: incomeTotal, bySource: incomeBySource },
-          paceDelta: d(disc.paceDeltaC),
-          daysToCatchUp: c.analytics.daysToCatchUp,
-          daysLeft: c.analytics.daysLeft,
-          today: d(c.analytics.todayC),
-          yesterday: d(c.analytics.yesterdayC),
-          last7: d(c.analytics.last7C),
-          biggest: biggest ? { merchant: biggest.merchant ?? "—", amount: biggest.amount } : null,
-          topMerchant: topMerchantEntry
-            ? { merchant: topMerchantEntry[0], total: topMerchantEntry[1] }
-            : null,
-          recentMonths: recentMonths.filter((m) => m.month !== month),
+          trend,
+          topPurchases,
+          topMerchants,
+          details: {
+            isCurrentMonth: month === currentMonth,
+            reimbursed: d(disc.reimbursedC),
+            savings: d(c.savingsC),
+            income: { total: incomeTotal, bySource: incomeBySource },
+            today: d(c.analytics.todayC),
+            yesterday: d(c.analytics.yesterdayC),
+            last7: d(c.analytics.last7C),
+            recentMonths: recentMonths.filter((m) => m.month !== month),
+          },
         }}
       />
 
-      <FundsPanel funds={fundViews} owners={ownerPicks} editable={editor} />
+      <Box sx={{ mt: 3 }}>
+        <TransactionsTable
+          txns={rows}
+          funds={fundPicks}
+          bills={bills}
+          accounts={accountPicks}
+          merchants={suggest.merchants}
+          sources={suggest.sources}
+          editable={editor}
+        />
+        {c.needsReviewCount > 0 && editor ? (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="caption" color="text.secondary">
+              Tip: the ⚠ rows couldn&apos;t be read automatically — open the ⋮ menu
+              to set their details.
+            </Typography>
+          </Box>
+        ) : null}
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <FundsPanel funds={fundViews} owners={ownerPicks} editable={editor} />
+      </Box>
     </Container>
   );
 }
