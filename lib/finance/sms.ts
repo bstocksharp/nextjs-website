@@ -14,12 +14,18 @@
 // it as a needs-review row so nothing is ever silently dropped.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ianaForAbbrev, zonedWallToInstant } from "@/lib/finance/parse";
+
 export type ParsedAlert = {
   /** Dollars as a "1234.56" string (DB numeric-friendly). */
   amount: string;
   merchant: string;
-  /** YYYY-MM-DD. */
+  /** YYYY-MM-DD, as written in the alert (i.e. in the alert's own zone). */
   postedOn: string;
+  /** Exact instant (ms) when the alert carried a time + a zone we recognize.
+   *  Lets the caller re-derive the date in the HOUSEHOLD zone — near midnight a
+   *  Chase "12:52 AM ET" is the previous day in Central. Absent → postedOn stands. */
+  instant?: number;
 };
 
 // The gist's main-alert regex, verbatim in spirit — matches anywhere in the text.
@@ -31,8 +37,11 @@ export type ParsedAlert = {
 // Bounding caps the work per offset at a constant, so the scan is linear. The
 // limits are far past any real card alert — a merchant field is ~20 chars, and
 // "September" is the longest month — so nothing that used to parse stops.
+// The trailing "at H:MM AM/PM ET" is OPTIONAL and separately captured (groups
+// 4-7): Chase stamps its clock in Eastern, so when it's present we convert the
+// instant into the household's zone rather than trusting the written date.
 const TXN_RE =
-  /You made a \$([\d,.]{1,20}) transaction with (.{1,120}) on (\w{1,12} \d{1,2}, \d{4})/i;
+  /You made a \$([\d,.]{1,20}) transaction with (.{1,120}) on (\w{1,12} \d{1,2}, \d{4})(?: at (\d{1,2}):(\d{2})\s*([AP]M)\s*([A-Za-z]{2,4}))?/i;
 
 const MONTHS: Record<string, number> = {
   jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6,
@@ -69,7 +78,19 @@ export function parseAlertText(text: string): ParsedAlert | null {
   const amount = parseAmount(main[1]);
   const postedOn = parseAlertDate(main[3]);
   if (!amount || !postedOn) return null;
-  return { amount, merchant: main[2].trim(), postedOn };
+
+  const result: ParsedAlert = { amount, merchant: main[2].trim(), postedOn };
+
+  // Time + a zone we know? Hand back the exact instant so the caller can date
+  // it in the household's zone (12:52 AM ET → the day before, out west).
+  const iana = main[7] ? ianaForAbbrev(main[7]) : null;
+  if (main[4] && main[6] && iana) {
+    const [y, mo, d] = postedOn.split("-").map(Number);
+    let h = Number(main[4]) % 12; // 12 AM → 0
+    if (main[6].toUpperCase() === "PM") h += 12; // 12 PM → 12, 1 PM → 13
+    result.instant = zonedWallToInstant(y, mo, d, h, Number(main[5]), iana);
+  }
+  return result;
 }
 
 // ── Categorization ────────────────────────────────────────────────────────────

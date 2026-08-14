@@ -4,7 +4,7 @@ import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions, recurringExpenses } from "@/lib/db/schema";
 import { parseAlertText, categorizeMerchant, type MerchantRule } from "@/lib/finance/sms";
-import { todayISO } from "@/lib/finance/parse";
+import { todayISO, dateInTz } from "@/lib/finance/parse";
 import { getGroupTimezone } from "@/lib/queries/group";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,6 +82,7 @@ export async function ingestAlert(
     .limit(1);
   if (dupe) return { ok: true, id: dupe.id, deduped: true };
 
+  const tz = await getGroupTimezone(groupId);
   const parsed = parseAlertText(body);
 
   if (!parsed) {
@@ -90,7 +91,7 @@ export async function ingestAlert(
       .values({
         groupId,
         accountId,
-        postedOn: todayISO(await getGroupTimezone(groupId)),
+        postedOn: todayISO(tz),
         merchant: null,
         amount: "0.00",
         originalAmount: "0.00",
@@ -104,7 +105,13 @@ export async function ingestAlert(
     return { ok: true, id: row.id, deduped: false, needsReview: true, category: "review" };
   }
 
-  const rules = await merchantRulesFor(groupId, parsed.postedOn);
+  // Chase clocks its alerts in Eastern; when the alert carried a time we know the
+  // exact instant, so date it in the HOUSEHOLD zone (12:52 AM ET → the day before
+  // out in Central). No time/zone in the text → the written date stands.
+  const postedOn =
+    parsed.instant != null ? dateInTz(parsed.instant, tz) : parsed.postedOn;
+
+  const rules = await merchantRulesFor(groupId, postedOn);
   const { category, recurringExpenseId } = categorizeMerchant(parsed.merchant, rules);
 
   const [row] = await db
@@ -112,7 +119,7 @@ export async function ingestAlert(
     .values({
       groupId,
       accountId,
-      postedOn: parsed.postedOn,
+      postedOn,
       merchant: parsed.merchant,
       amount: parsed.amount,
       originalAmount: parsed.amount,
@@ -126,4 +133,118 @@ export async function ingestAlert(
     .returning({ id: transactions.id });
 
   return { ok: true, id: row.id, deduped: false, needsReview: false, category };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STRUCTURED INGEST — the generic shape for anyone NOT sending a raw Chase text:
+// POST { amount, merchant?, date?, note? }. Only `amount` is required; a missing
+// date defaults to the household's today, and a missing merchant lands the row in
+// review so it's never lost. Same dedupe + merchant categorization as the SMS
+// path, so a structured feed behaves identically once the fields are known.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type StructuredInput = {
+  amount?: unknown;
+  merchant?: unknown;
+  date?: unknown;
+  note?: unknown;
+};
+
+export type StructuredResult =
+  | { ok: true; id: number; deduped: false; needsReview: boolean; category: string }
+  | { ok: true; id: number; deduped: true }
+  | { ok: false; reason: "bad_amount" };
+
+/** "$1,234.5" | "1234.5" | 1234.5 → "1234.50"; null unless a finite, nonzero
+ *  number. Sign is preserved so a caller CAN send a credit as a negative. */
+function parseAmountLoose(raw: unknown): string | null {
+  if (raw == null) return null;
+  const s = String(raw).replace(/[$,\s]/g, "");
+  if (s === "") return null;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n === 0) return null;
+  return n.toFixed(2);
+}
+
+/** Trimmed + length-capped, or null for empty/absent. */
+function cleanStr(raw: unknown, max: number): string | null {
+  if (raw == null) return null;
+  const s = String(raw).trim().slice(0, max);
+  return s === "" ? null : s;
+}
+
+/** Accept "YYYY-MM-DD" (or the date half of an ISO datetime); null otherwise. */
+function normalizeDateLoose(raw: unknown): string | null {
+  if (raw == null) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(raw).trim());
+  if (!m) return null;
+  const mm = Number(m[2]);
+  const dd = Number(m[3]);
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+  return `${m[1]}-${m[2]}-${m[3]}`;
+}
+
+export async function ingestStructured(
+  groupId: number,
+  input: StructuredInput,
+  accountId: number | null,
+): Promise<StructuredResult> {
+  const amount = parseAmountLoose(input.amount);
+  if (amount === null) return { ok: false, reason: "bad_amount" };
+
+  const merchant = cleanStr(input.merchant, 200);
+  const note = cleanStr(input.note, 500);
+  const tz = await getGroupTimezone(groupId);
+  const postedOn = normalizeDateLoose(input.date) ?? todayISO(tz);
+
+  // Dedupe on the canonical (amount|merchant|date), same 10-min window as SMS —
+  // Shortcuts double-fires here too. Versioned prefix so a structured hash can
+  // never collide with a raw-text one.
+  const rawText = JSON.stringify({ amount, merchant, date: postedOn, note });
+  const rawHash = createHash("sha256").update(`v2|${rawText}`).digest("hex");
+  const since = new Date(Date.now() - DEDUPE_WINDOW_MS);
+  const [dupe] = await db
+    .select({ id: transactions.id })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.groupId, groupId),
+        eq(transactions.rawHash, rawHash),
+        gte(transactions.createdAt, since),
+      ),
+    )
+    .orderBy(desc(transactions.id))
+    .limit(1);
+  if (dupe) return { ok: true, id: dupe.id, deduped: true };
+
+  // A merchant lets us categorize (same rules as SMS); without one the row is
+  // valid but uncategorizable, so it surfaces for review rather than hiding.
+  let category = "discretionary";
+  let recurringExpenseId: number | null = null;
+  if (merchant) {
+    const rules = await merchantRulesFor(groupId, postedOn);
+    ({ category, recurringExpenseId } = categorizeMerchant(merchant, rules));
+  }
+  const needsReview = merchant === null;
+
+  const [row] = await db
+    .insert(transactions)
+    .values({
+      groupId,
+      accountId,
+      postedOn,
+      merchant,
+      amount,
+      originalAmount: amount,
+      category,
+      recurringExpenseId,
+      source: "api",
+      rawText,
+      rawHash,
+      needsReview,
+      note,
+    })
+    .returning({ id: transactions.id });
+
+  return { ok: true, id: row.id, deduped: false, needsReview, category };
 }

@@ -65,3 +65,57 @@ export function todayISO(tz: string = DEFAULT_TZ): string {
 export function currentMonthISO(tz: string = DEFAULT_TZ): string {
   return `${todayISO(tz).slice(0, 7)}-01`;
 }
+
+// ── Cross-zone date math (card alerts carry a *source* zone) ──────────────────
+// Chase stamps every alert in Eastern ("… at 12:52 AM ET"). Near midnight that
+// clock date is a day ahead of a Central/Pacific household, so a 12:52 AM ET buy
+// gets logged "tomorrow" and disappears from today. These helpers let the ingest
+// path re-derive the date in the household's OWN zone from the exact instant.
+
+// Common US bank timezone abbreviations → IANA zones. Unknown/absent → we don't
+// convert (the written date stands), so this list is safe to grow later.
+const TZ_ABBREV: Record<string, string> = {
+  et: "America/New_York", est: "America/New_York", edt: "America/New_York",
+  ct: "America/Chicago", cst: "America/Chicago", cdt: "America/Chicago",
+  mt: "America/Denver", mst: "America/Denver", mdt: "America/Denver",
+  pt: "America/Los_Angeles", pst: "America/Los_Angeles", pdt: "America/Los_Angeles",
+};
+
+/** "ET"/"CDT"/… → IANA zone, or null if we don't recognize it. */
+export function ianaForAbbrev(abbrev: string): string | null {
+  return TZ_ABBREV[abbrev.trim().toLowerCase()] ?? null;
+}
+
+/** How far ahead of UTC (ms) `tz` is at a given instant. DST-correct. */
+function tzOffsetMs(utcMs: number, tz: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    hourCycle: "h23",
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+  }).formatToParts(new Date(utcMs));
+  const g: Record<string, number> = {};
+  for (const p of parts) if (p.type !== "literal") g[p.type] = Number(p.value);
+  const asUTC = Date.UTC(g.year, g.month - 1, g.day, g.hour % 24, g.minute, g.second);
+  return asUTC - utcMs;
+}
+
+/**
+ * A wall-clock time *in `tz`* → the UTC instant (ms since epoch). Guess-and-
+ * correct: treat the clock as UTC, then subtract that zone's offset. Exact
+ * except inside the ~1hr/yr DST fold, which never shifts a calendar date.
+ */
+export function zonedWallToInstant(
+  y: number, mo: number, d: number, h: number, mi: number, tz: string,
+): number {
+  const guess = Date.UTC(y, mo - 1, d, h, mi);
+  return guess - tzOffsetMs(guess, tz);
+}
+
+/** An instant (ms) → its calendar date "YYYY-MM-DD" in `tz`. */
+export function dateInTz(instantMs: number, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: tz,
+    year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(instantMs));
+}

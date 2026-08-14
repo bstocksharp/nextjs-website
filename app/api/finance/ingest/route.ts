@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { looksLikeApiToken } from "@/lib/finance/tokens";
 import { resolveApiToken, touchApiToken } from "@/lib/queries/finance-tokens";
-import { ingestAlert } from "@/lib/finance/ingest";
+import {
+  ingestAlert,
+  ingestStructured,
+  type IngestResult,
+  type StructuredResult,
+  type StructuredInput,
+} from "@/lib/finance/ingest";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/finance/ingest — the hub's first machine endpoint. An iOS Shortcut
@@ -27,21 +33,31 @@ export async function POST(req: NextRequest) {
   const auth = await resolveApiToken(token, "ingest");
   if (!auth) return NextResponse.json({ ok: false }, { status: 401 });
 
-  // Body: text/plain is easiest from Shortcuts; JSON {text} also accepted.
-  let text = "";
+  // Three accepted body shapes, so the endpoint works for a dumb Shortcut AND a
+  // structured feed:
+  //   • text/plain            → a raw Chase alert (simplest Shortcut body)
+  //   • JSON { text }         → a raw Chase alert wrapped in JSON
+  //   • JSON { amount, … }    → a generic transaction {amount, merchant?, date?, note?}
+  let result: IngestResult | StructuredResult;
   const type = req.headers.get("content-type") ?? "";
   if (type.includes("application/json")) {
+    let body: Record<string, unknown> = {};
     try {
-      const body = (await req.json()) as { text?: unknown };
-      text = typeof body.text === "string" ? body.text : "";
+      body = (await req.json()) as Record<string, unknown>;
     } catch {
-      text = "";
+      body = {};
+    }
+    if (typeof body.text === "string") {
+      result = await ingestAlert(auth.groupId, body.text, auth.accountId);
+    } else if (body.amount != null || body.merchant != null) {
+      result = await ingestStructured(auth.groupId, body as StructuredInput, auth.accountId);
+    } else {
+      result = { ok: false, reason: "bad_amount" };
     }
   } else {
-    text = await req.text();
+    result = await ingestAlert(auth.groupId, await req.text(), auth.accountId);
   }
 
-  const result = await ingestAlert(auth.groupId, text, auth.accountId);
   void touchApiToken(auth.id);
 
   if (!result.ok) return NextResponse.json({ ok: false }, { status: 400 });
