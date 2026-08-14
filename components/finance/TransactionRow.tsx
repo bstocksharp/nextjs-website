@@ -74,14 +74,21 @@ export default function TransactionRow({
   txn,
   funds,
   onMenu,
+  onEditCategory,
 }: {
   txn: TxnRowData;
   funds: TxnFund[];
   onMenu?: (txn: TxnRowData, anchor: HTMLElement) => void;
+  // Present ⇒ the spend-category chip is tappable to set/change it (explorer).
+  onEditCategory?: (txn: TxnRowData, anchor: HTMLElement) => void;
 }) {
   const adjusted = txn.amount !== txn.originalAmount;
   const fundName = txn.fundId ? funds.find((f) => f.id === txn.fundId)?.name : null;
   const dir = direction(txn.category, txn.amount);
+  // Only spend rows (discretionary) are hand-taggable; the rest carry meaning
+  // from their engine category already.
+  const editCat =
+    onEditCategory && txn.category === "discretionary" ? onEditCategory : undefined;
 
   return (
     <TableRow hover sx={{ bgcolor: txn.needsReview ? "action.hover" : undefined }}>
@@ -139,8 +146,23 @@ export default function TransactionRow({
             color={chipColor(txn.category)}
             label={CATEGORY_LABEL[txn.category] ?? txn.category}
           />
+          {/* Spend-categories are for SPEND — only discretionary rows are
+              taggable. Income/fund/savings/etc. already carry their engine chip. */}
           {txn.spendCategory ? (
-            <Chip size="small" label={txn.spendCategory} sx={{ bgcolor: "action.selected" }} />
+            <Chip
+              size="small"
+              label={txn.spendCategory}
+              onClick={editCat ? (e) => editCat(txn, e.currentTarget) : undefined}
+              sx={{ bgcolor: "action.selected", cursor: editCat ? "pointer" : "default" }}
+            />
+          ) : editCat ? (
+            <Chip
+              size="small"
+              variant="outlined"
+              label="Tag…"
+              onClick={(e) => editCat(txn, e.currentTarget)}
+              sx={{ cursor: "pointer", borderStyle: "dashed" }}
+            />
           ) : null}
         </Stack>
       </TableCell>

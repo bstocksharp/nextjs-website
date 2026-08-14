@@ -12,7 +12,11 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import TransactionRow, { type TxnRowData, type TxnFund } from "./TransactionRow";
-import { loadMoreTransactionsAction } from "@/app/actions/finance-transactions";
+import CategoryEditPopover from "./CategoryEditPopover";
+import {
+  loadMoreTransactionsAction,
+  setSpendCategoryAction,
+} from "@/app/actions/finance-transactions";
 import type { TxnFilters } from "@/lib/queries/finance-transactions";
 
 // The read-only, infinite-scroll results list. The parent keys this by the
@@ -23,17 +27,54 @@ export default function TransactionsExplorer({
   initialRows,
   initialCursor,
   funds,
+  categories,
+  editable,
 }: {
   filters: TxnFilters;
   initialRows: TxnRowData[];
   initialCursor: string | null;
   funds: TxnFund[];
+  categories: string[];
+  editable: boolean;
 }) {
   const [rows, setRows] = React.useState(initialRows);
   const [cursor, setCursor] = React.useState(initialCursor);
   const [loading, setLoading] = React.useState(false);
+  const [editing, setEditing] = React.useState<{ txn: TxnRowData; anchor: HTMLElement } | null>(null);
   const sentinel = React.useRef<HTMLDivElement | null>(null);
   const loadingRef = React.useRef(false); // guards overlapping fetches
+
+  const onEditCategory = editable
+    ? (txn: TxnRowData, anchor: HTMLElement) => setEditing({ txn, anchor })
+    : undefined;
+
+  // Optimistic: update the tapped row now (and its merchant-siblings when
+  // "apply to all"), then persist. Matches the server sweep so the two agree.
+  async function saveCategory(category: string | null, applyToMerchant: boolean) {
+    const target = editing?.txn;
+    setEditing(null);
+    if (!target) return;
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id === target.id) return { ...r, spendCategory: category };
+        if (
+          applyToMerchant &&
+          category &&
+          target.merchant &&
+          r.merchant === target.merchant &&
+          r.category === "discretionary"
+        )
+          return { ...r, spendCategory: category };
+        return r;
+      }),
+    );
+    try {
+      await setSpendCategoryAction(target.id, category, applyToMerchant);
+    } catch {
+      // A failed save just means the optimistic chip is ahead of the server;
+      // the next filter/navigation reloads the truth.
+    }
+  }
 
   const loadMore = React.useCallback(async () => {
     if (loadingRef.current || cursor == null) return;
@@ -86,11 +127,27 @@ export default function TransactionsExplorer({
           </TableHead>
           <TableBody>
             {rows.map((t) => (
-              <TransactionRow key={t.id} txn={t} funds={funds} />
+              <TransactionRow
+                key={t.id}
+                txn={t}
+                funds={funds}
+                onEditCategory={onEditCategory}
+              />
             ))}
           </TableBody>
         </Table>
       </TableContainer>
+
+      {editing ? (
+        <CategoryEditPopover
+          anchorEl={editing.anchor}
+          merchant={editing.txn.merchant}
+          current={editing.txn.spendCategory}
+          categories={categories}
+          onSave={saveCategory}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
 
       <Box ref={sentinel} sx={{ display: "flex", justifyContent: "center", py: 2 }}>
         {loading ? (

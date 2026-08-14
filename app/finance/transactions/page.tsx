@@ -7,6 +7,7 @@ import Button from "@mui/material/Button";
 import Box from "@mui/material/Box";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getSession } from "@/lib/session";
+import { isEditor } from "@/lib/auth";
 import { getGroupTimezone } from "@/lib/queries/group";
 import { todayISO } from "@/lib/finance/parse";
 import { formatMoney } from "@/lib/format";
@@ -95,10 +96,11 @@ export default async function TransactionsPage({
     cat: catParam ?? "",
   };
 
-  const [page, summary, categories] = await Promise.all([
+  const [page, summary, categories, editor] = await Promise.all([
     searchTransactionsForGroup(groupId, filters, null),
     summarizeTransactionsForGroup(groupId, filters),
     listSpendCategoriesForGroup(groupId),
+    isEditor(),
   ]);
 
   return (
@@ -140,6 +142,8 @@ export default async function TransactionsPage({
         initialRows={page.rows}
         initialCursor={page.nextCursor}
         funds={[]}
+        categories={categories}
+        editable={editor}
       />
     </Container>
   );

@@ -4,6 +4,24 @@
 
 export type SpendRule = { pattern: string; category: string };
 
+/** The rule that governs a merchant: longest matching pattern wins (so a
+ *  specific "WM SUPERCENTER #4279" override beats a broad "WALMART"). Null if
+ *  no rule matches — the merchant is "ungrouped". */
+export function longestMatchingRule<T extends SpendRule>(
+  merchant: string,
+  rules: T[],
+): T | null {
+  const m = merchant.toLowerCase();
+  let best: T | null = null;
+  for (const r of rules) {
+    if (!r.pattern) continue;
+    if (m.includes(r.pattern.toLowerCase())) {
+      if (!best || r.pattern.length > best.pattern.length) best = r;
+    }
+  }
+  return best;
+}
+
 /**
  * The analytics spend-category for a transaction:
  *  - fixed / amortized → the linked bill's ATLAS category (inherited for free)
@@ -21,14 +39,5 @@ export function spendCategoryFor(
     return billCategory ?? null;
   }
   if (engineCategory !== "discretionary" || !merchant) return null;
-
-  const m = merchant.toLowerCase();
-  let best: SpendRule | null = null;
-  for (const r of rules) {
-    if (!r.pattern) continue;
-    if (m.includes(r.pattern.toLowerCase())) {
-      if (!best || r.pattern.length > best.pattern.length) best = r;
-    }
-  }
-  return best ? best.category : null;
+  return longestMatchingRule(merchant, rules)?.category ?? null;
 }
