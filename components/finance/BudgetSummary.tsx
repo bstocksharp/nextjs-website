@@ -17,7 +17,39 @@ export type BudgetSummaryData = {
   allowedSoFar: number;
   dayOfMonth: number;
   daysInMonth: number;
+  // The other two spend lanes, shown small beneath the discretionary hero bar —
+  // known/less-actionable at a glance, so they're subordinate, not their own card.
+  fixed: { actual: number; expected: number };
+  amortized: { paid: number; reserved: number };
 };
+
+// A compact secondary lane (Fixed / Amortized): label + actual/plan + a thin,
+// muted bar. Deliberately quieter than the discretionary hero bar above.
+function MiniLane({ label, spent, budget }: { label: string; spent: number; budget: number }) {
+  const pct = budget > 0 ? Math.min(100, (spent / budget) * 100) : 0;
+  const over = spent > budget + 0.005;
+  return (
+    <Box>
+      <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.25 }}>
+        <Typography variant="caption" color="text.secondary">
+          {label}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {formatMoney(spent)} / {formatMoney(budget)}
+        </Typography>
+      </Stack>
+      <Box sx={{ height: 5, borderRadius: 3, bgcolor: "action.hover", overflow: "hidden" }}>
+        <Box
+          sx={{
+            height: "100%",
+            width: `${pct}%`,
+            bgcolor: over ? "warning.main" : "text.disabled",
+          }}
+        />
+      </Box>
+    </Box>
+  );
+}
 
 function Stat({
   label,
@@ -149,6 +181,30 @@ export default function BudgetSummary({
           </Typography>
         ) : null}
       </Stack>
+
+      {/* The quieter lanes — fixed bills & amortized set-asides — folded up here
+          so "Details" isn't a separate card just to hold two bars. */}
+      {d.fixed.expected > 0 || d.amortized.reserved > 0 ? (
+        <Box
+          sx={{
+            mt: 2,
+            display: "grid",
+            gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+            gap: 1.5,
+          }}
+        >
+          {d.fixed.expected > 0 ? (
+            <MiniLane label="Fixed bills" spent={d.fixed.actual} budget={d.fixed.expected} />
+          ) : null}
+          {d.amortized.reserved > 0 ? (
+            <MiniLane
+              label="Amortized (reserved)"
+              spent={d.amortized.paid}
+              budget={d.amortized.reserved}
+            />
+          ) : null}
+        </Box>
+      ) : null}
     </Paper>
   );
 }
