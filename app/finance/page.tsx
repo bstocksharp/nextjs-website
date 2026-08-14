@@ -74,6 +74,7 @@ export default async function BudgetPage({
     amount: Number(t.amount),
     originalAmount: Number(t.originalAmount),
     category: t.category,
+    spendCategory: t.spendCategory,
     fundId: t.fundId,
     recurringExpenseId: t.recurringExpenseId,
     needsReview: t.needsReview,

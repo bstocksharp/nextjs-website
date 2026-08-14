@@ -5,6 +5,7 @@ import TableCell from "@mui/material/TableCell";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Chip from "@mui/material/Chip";
+import Stack from "@mui/material/Stack";
 import Box from "@mui/material/Box";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -19,6 +20,7 @@ export type TxnRowData = {
   amount: number;
   originalAmount: number;
   category: string;
+  spendCategory: string | null;
   fundId: number | null;
   recurringExpenseId: number | null;
   needsReview: boolean;
@@ -130,12 +132,17 @@ export default function TransactionRow({
       </TableCell>
 
       <TableCell>
-        <Chip
-          size="small"
-          variant="outlined"
-          color={chipColor(txn.category)}
-          label={CATEGORY_LABEL[txn.category] ?? txn.category}
-        />
+        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+          <Chip
+            size="small"
+            variant="outlined"
+            color={chipColor(txn.category)}
+            label={CATEGORY_LABEL[txn.category] ?? txn.category}
+          />
+          {txn.spendCategory ? (
+            <Chip size="small" label={txn.spendCategory} sx={{ bgcolor: "action.selected" }} />
+          ) : null}
+        </Stack>
       </TableCell>
 
       {onMenu ? (

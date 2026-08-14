@@ -15,6 +15,7 @@ import {
   summarizeTransactionsForGroup,
   type TxnFilters,
 } from "@/lib/queries/finance-transactions";
+import { listSpendCategoriesForGroup } from "@/lib/queries/finance-categories";
 import TxnFilterBar, { type RawFilters } from "@/components/finance/TxnFilterBar";
 import TransactionsExplorer from "@/components/finance/TransactionsExplorer";
 
@@ -73,12 +74,15 @@ export default async function TransactionsPage({
     from = monthsAgo(today, 12);
   }
 
+  const catParam = str(get("cat"));
   const filters: TxnFilters = {
     q: str(get("q")),
     min: numv(get("min")),
     max: numv(get("max")),
     from,
     to,
+    category: catParam && catParam !== "__none__" ? catParam : undefined,
+    uncategorized: catParam === "__none__",
   };
 
   const raw: RawFilters = {
@@ -88,11 +92,13 @@ export default async function TransactionsPage({
     range,
     from: datev(get("from")) ?? "",
     to: datev(get("to")) ?? "",
+    cat: catParam ?? "",
   };
 
-  const [page, summary] = await Promise.all([
+  const [page, summary, categories] = await Promise.all([
     searchTransactionsForGroup(groupId, filters, null),
     summarizeTransactionsForGroup(groupId, filters),
+    listSpendCategoriesForGroup(groupId),
   ]);
 
   return (
@@ -116,7 +122,7 @@ export default async function TransactionsPage({
         </Typography>
       </Stack>
 
-      <TxnFilterBar raw={raw} />
+      <TxnFilterBar raw={raw} categories={categories} />
 
       <Box sx={{ mb: 2, px: 0.5 }}>
         <Typography variant="body2" color="text.secondary">

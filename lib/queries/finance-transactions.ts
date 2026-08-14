@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gte, ilike, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
@@ -18,6 +18,8 @@ export type TxnFilters = {
   max?: number; // amount <=
   from?: string; // postedOn >= YYYY-MM-DD
   to?: string; // postedOn <= YYYY-MM-DD
+  category?: string; // exact spend-category match
+  uncategorized?: boolean; // spendCategory IS NULL (find rows still to tag)
 };
 
 export type TxnPage = {
@@ -52,6 +54,8 @@ function whereFor(groupId: number, f: TxnFilters, cursor: string | null) {
   if (f.max != null) conds.push(lte(transactions.amount, String(f.max)));
   if (f.from) conds.push(gte(transactions.postedOn, f.from));
   if (f.to) conds.push(lte(transactions.postedOn, f.to));
+  if (f.uncategorized) conds.push(isNull(transactions.spendCategory));
+  else if (f.category) conds.push(eq(transactions.spendCategory, f.category));
   const cc = cursorCond(cursor);
   if (cc) conds.push(cc);
   return and(...conds);
@@ -65,6 +69,7 @@ function toRow(t: typeof transactions.$inferSelect): TxnRowData {
     amount: Number(t.amount),
     originalAmount: Number(t.originalAmount),
     category: t.category,
+    spendCategory: t.spendCategory,
     fundId: t.fundId,
     recurringExpenseId: t.recurringExpenseId,
     needsReview: t.needsReview,

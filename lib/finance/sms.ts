@@ -101,6 +101,9 @@ export type MerchantRule = {
   paymentsPerYear: number;
   /** Substrings as they appear in card alerts (e.g. "PROGRESSIVE INS"). */
   patterns: string[];
+  /** The bill's ATLAS category — a matched fixed/amortized txn inherits it as
+   *  its spend-category (F4c). Null if the bill has no category set. */
+  category: string | null;
 };
 
 export type Categorized = {

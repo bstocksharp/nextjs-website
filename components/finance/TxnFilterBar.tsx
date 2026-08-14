@@ -17,7 +17,10 @@ export type RawFilters = {
   range: string;
   from: string;
   to: string;
+  cat: string; // "" = all, "__none__" = uncategorized, else the category
 };
+
+const UNCATEGORIZED = "__none__";
 
 const RANGES = [
   { value: "all", label: "All time" },
@@ -38,11 +41,18 @@ function buildUrl(pathname: string, v: RawFilters): string {
     if (v.from) p.set("from", v.from);
     if (v.to) p.set("to", v.to);
   }
+  if (v.cat) p.set("cat", v.cat);
   const qs = p.toString();
   return qs ? `${pathname}?${qs}` : pathname;
 }
 
-export default function TxnFilterBar({ raw }: { raw: RawFilters }) {
+export default function TxnFilterBar({
+  raw,
+  categories,
+}: {
+  raw: RawFilters;
+  categories: string[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -52,6 +62,7 @@ export default function TxnFilterBar({ raw }: { raw: RawFilters }) {
   const [range, setRange] = React.useState(raw.range || "all");
   const [from, setFrom] = React.useState(raw.from);
   const [to, setTo] = React.useState(raw.to);
+  const [cat, setCat] = React.useState(raw.cat);
 
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -74,6 +85,7 @@ export default function TxnFilterBar({ raw }: { raw: RawFilters }) {
     range,
     from,
     to,
+    cat,
     ...over,
   });
 
@@ -84,11 +96,12 @@ export default function TxnFilterBar({ raw }: { raw: RawFilters }) {
     setRange("all");
     setFrom("");
     setTo("");
+    setCat("");
     if (timer.current) clearTimeout(timer.current);
     router.push(pathname);
   };
 
-  const hasAny = q || min || max || (range && range !== "all");
+  const hasAny = q || min || max || (range && range !== "all") || cat;
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
@@ -199,6 +212,26 @@ export default function TxnFilterBar({ raw }: { raw: RawFilters }) {
             />
           </>
         ) : null}
+
+        <TextField
+          size="small"
+          select
+          label="Category"
+          value={cat}
+          onChange={(e) => {
+            setCat(e.target.value);
+            commit(vals({ cat: e.target.value }), true);
+          }}
+          sx={{ width: 170 }}
+        >
+          <MenuItem value="">All categories</MenuItem>
+          <MenuItem value={UNCATEGORIZED}>Uncategorized</MenuItem>
+          {categories.map((c) => (
+            <MenuItem key={c} value={c}>
+              {c}
+            </MenuItem>
+          ))}
+        </TextField>
 
         {hasAny ? (
           <Button size="small" color="inherit" onClick={clearAll}>

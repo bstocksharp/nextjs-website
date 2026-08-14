@@ -4,6 +4,8 @@ import { and, desc, eq, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions, recurringExpenses } from "@/lib/db/schema";
 import { parseAlertText, categorizeMerchant, type MerchantRule } from "@/lib/finance/sms";
+import { spendCategoryFor } from "@/lib/finance/categorize";
+import { spendRulesFor } from "@/lib/queries/finance-categories";
 import { todayISO, dateInTz } from "@/lib/finance/parse";
 import { getGroupTimezone } from "@/lib/queries/group";
 
@@ -35,6 +37,7 @@ export async function merchantRulesFor(groupId: number, onDate: string): Promise
       id: recurringExpenses.id,
       paymentsPerYear: recurringExpenses.paymentsPerYear,
       merchantPatterns: recurringExpenses.merchantPatterns,
+      category: recurringExpenses.category,
     })
     .from(recurringExpenses)
     .where(
@@ -48,7 +51,17 @@ export async function merchantRulesFor(groupId: number, onDate: string): Promise
     recurringExpenseId: r.id,
     paymentsPerYear: r.paymentsPerYear,
     patterns: r.merchantPatterns ?? [],
+    category: r.category,
   }));
+}
+
+/** The spend-category a matched bill contributes (for fixed/amortized inherit). */
+function billCategoryOf(
+  recurringExpenseId: number | null,
+  rules: MerchantRule[],
+): string | null {
+  if (recurringExpenseId == null) return null;
+  return rules.find((r) => r.recurringExpenseId === recurringExpenseId)?.category ?? null;
 }
 
 /**
@@ -113,6 +126,12 @@ export async function ingestAlert(
 
   const rules = await merchantRulesFor(groupId, postedOn);
   const { category, recurringExpenseId } = categorizeMerchant(parsed.merchant, rules);
+  const spendCategory = spendCategoryFor(
+    category,
+    parsed.merchant,
+    billCategoryOf(recurringExpenseId, rules),
+    await spendRulesFor(groupId),
+  );
 
   const [row] = await db
     .insert(transactions)
@@ -125,6 +144,7 @@ export async function ingestAlert(
       originalAmount: parsed.amount,
       category,
       recurringExpenseId,
+      spendCategory,
       source: "sms",
       rawText: body,
       rawHash,
@@ -148,6 +168,9 @@ export type StructuredInput = {
   merchant?: unknown;
   date?: unknown;
   note?: unknown;
+  /** Optional explicit spend-category (Groceries/Dining…) — wins over the
+   *  merchant-rule guess when a sender knows it. */
+  category?: unknown;
 };
 
 export type StructuredResult =
@@ -221,11 +244,23 @@ export async function ingestStructured(
   // valid but uncategorizable, so it surfaces for review rather than hiding.
   let category = "discretionary";
   let recurringExpenseId: number | null = null;
+  let rules: MerchantRule[] = [];
   if (merchant) {
-    const rules = await merchantRulesFor(groupId, postedOn);
+    rules = await merchantRulesFor(groupId, postedOn);
     ({ category, recurringExpenseId } = categorizeMerchant(merchant, rules));
   }
   const needsReview = merchant === null;
+
+  // An explicit API category wins; otherwise derive it (bill inherit / rules).
+  let spendCategory = cleanStr(input.category, 40);
+  if (spendCategory == null) {
+    spendCategory = spendCategoryFor(
+      category,
+      merchant,
+      billCategoryOf(recurringExpenseId, rules),
+      await spendRulesFor(groupId),
+    );
+  }
 
   const [row] = await db
     .insert(transactions)
@@ -238,6 +273,7 @@ export async function ingestStructured(
       originalAmount: amount,
       category,
       recurringExpenseId,
+      spendCategory,
       source: "api",
       rawText,
       rawHash,
