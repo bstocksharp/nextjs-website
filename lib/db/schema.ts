@@ -828,6 +828,11 @@ export const merchantCategories = pgTable(
       .references(() => groups.id, { onDelete: "cascade" }),
     pattern: varchar("pattern", { length: 100 }).notNull(),
     category: varchar("category", { length: 40 }).notNull(),
+    // The named merchant GROUP this pattern belongs to (F4d) — several patterns
+    // (WM SUPERCENTER, WAL-MART, WALMART.COM) can share one group name ("Walmart")
+    // and category. Purely organizational: categorization is still longest-pattern
+    // wins. Backfilled to = pattern, so every rule starts as its own group.
+    groupName: varchar("group_name", { length: 60 }),
     createdAt: createdAt(),
   },
   (t) => [index("idx_merchcat_group").on(t.groupId)],
