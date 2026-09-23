@@ -150,7 +150,13 @@ export default function AddTransactionDialog({
                   select
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
-                  helperText={category === "auto" ? "Detected from the merchant name" : undefined}
+                  helperText={
+                    category === "auto"
+                      ? "Detected from the merchant name"
+                      : category === "savings"
+                        ? "Real money out, but never counts against the budget."
+                        : undefined
+                  }
                 >
                   <MenuItem value="auto">Auto (detect from merchant)</MenuItem>
                   {expenseCats.map((c) => (

@@ -19,6 +19,7 @@ import AtlasPersonCard, {
 } from "@/components/finance/AtlasPersonCard";
 import ExpensesSection from "@/components/finance/ExpensesSection";
 import SankeyChart from "@/components/finance/SankeyChart";
+import SavingsGoalCard from "@/components/finance/SavingsGoalCard";
 import { buildAtlasFlows } from "@/lib/finance/atlas-flows";
 import type { ExpenseValues } from "@/components/finance/ExpenseDialog";
 
@@ -143,6 +144,7 @@ export default async function AtlasPage({
       })),
     })),
     byCategory: view.totals.byCategory,
+    savingsGoal: view.totals.savingsGoal,
     discretionLeft: view.totals.discretionLeft,
   });
   // Give every label breathing room: size the chart to its busiest column
@@ -152,7 +154,7 @@ export default async function AtlasPage({
       (n, p) => n + p.deductions.filter((d) => d.source === "payroll").length,
       0,
     ) + 1;
-  const rightCount = view.totals.byCategory.length + 1;
+  const rightCount = view.totals.byCategory.length + (view.totals.savingsGoal > 0 ? 2 : 1);
   const sankeyHeight = Math.max(400, Math.max(middleCount, rightCount) * 48);
 
   return (
@@ -194,6 +196,7 @@ export default async function AtlasPage({
       {/* One long page, three destinations — anchor chips instead of tabs. */}
       <Stack direction="row" spacing={1} sx={{ mb: 3 }}>
         <Chip component="a" href="#income" clickable size="small" label="Income" />
+        <Chip component="a" href="#savings" clickable size="small" label="Savings goal" />
         {flows.links.length > 0 ? (
           <Chip component="a" href="#flow" clickable size="small" label="Money flow" />
         ) : null}
@@ -217,6 +220,14 @@ export default async function AtlasPage({
         </Alert>
       ) : null}
 
+      <SavingsGoalCard
+        goal={view.totals.savingsGoal}
+        since={view.totals.savingsGoalSince}
+        editable={editable}
+        defaultMonth={defaultMonth}
+        yearOptions={yearOptions}
+      />
+
       {flows.links.length > 0 ? (
         <Paper
           id="flow"
@@ -231,8 +242,8 @@ export default async function AtlasPage({
             color="text.secondary"
             sx={{ px: 1, mb: 1.5, display: "block" }}
           >
-            The monthly plan: paycheck → deductions &amp; net → bills &amp;
-            discretionary. Hover a ribbon for the numbers.
+            The monthly plan: paycheck → deductions &amp; net → bills, savings
+            goal &amp; discretionary. Hover a ribbon for the numbers.
           </Typography>
           <SankeyChart nodes={flows.nodes} links={flows.links} height={sankeyHeight} />
         </Paper>

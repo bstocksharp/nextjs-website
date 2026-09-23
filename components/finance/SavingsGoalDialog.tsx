@@ -21,7 +21,8 @@ import {
 } from "@/app/actions/finance-networth";
 import { formatMoney, formatMonth } from "@/lib/format";
 
-// The "Bank saved" monthly goal. Two save flavors, matching the weight app's
+// The monthly savings goal (ATLAS sets it aside before discretionary; Net
+// Worth's "Bank saved" line measures against it). Two save flavors, matching the weight app's
 // plan dialog: ADJUST the current goal in place (typo/tune-up — the whole goal
 // line recomputes) or START a new segment from a month (raise season — history
 // keeps the old goal, the line bends going forward).
@@ -108,8 +109,9 @@ export default function SavingsGoalDialog({
               </>
             ) : (
               <Typography variant="body2" color="text.secondary">
-                How much should land in your bank-saved accounts each month? The
-                dashboard tracks actual growth against this line.
+                How much to keep each month. ATLAS sets it aside before your
+                discretionary budget, and Net Worth tracks your bank-saved
+                accounts against it.
               </Typography>
             )}
             <NumberField

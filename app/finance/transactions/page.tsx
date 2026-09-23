@@ -20,6 +20,7 @@ import {
 import { getMerchantGroupsForGroup } from "@/lib/queries/finance-categories";
 import { UNTAGGED, type Flow } from "@/lib/finance/cashflow";
 import {
+  getMonthReportForGroup,
   listBills,
   listMerchantSuggestions,
   listOpenFunds,
@@ -180,6 +181,7 @@ export default async function HistoryPage({
     bills,
     suggest,
     editor,
+    report,
   ] = await Promise.all([
     searchTransactionsForGroup(groupId, listFilters, null),
     summarizeCashFlow(groupId, listFilters),
@@ -192,6 +194,9 @@ export default async function HistoryPage({
     listBills(),
     listMerchantSuggestions(),
     isEditor(),
+    // The whole month vs its ATLAS plan — the household's, so it ignores the
+    // list filters (a Walmart filter shouldn't restate the month's budget).
+    month ? getMonthReportForGroup(groupId, month, today) : Promise.resolve(null),
   ]);
   const tagLabel = tag === UNTAGGED ? "Untagged" : tag;
   const categories = outGroups.categories;
@@ -235,6 +240,8 @@ export default async function HistoryPage({
         drillIncomeTags={drillIncomeTags}
         tag={tag}
         tagFlow={tagFlow}
+        report={report}
+        reportInProgress={month != null && month.slice(0, 7) === today.slice(0, 7)}
       />
 
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, px: 0.5, flexWrap: "wrap", rowGap: 1 }}>

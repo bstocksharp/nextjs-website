@@ -7,6 +7,7 @@ import {
   recurringExpenses,
   financialAccounts,
   profiles,
+  savingsGoals,
   type CompensationPlan,
   type IncomeDeduction,
   type RecurringExpense,
@@ -15,6 +16,7 @@ import { requireGroupId } from "@/lib/session";
 import { profileInGroup } from "./scope";
 import { getGroupTimezone } from "@/lib/queries/group";
 import { lastDayOfMonth, todayISO } from "@/lib/finance/parse";
+import { goalForMonth } from "@/lib/finance/savings-goal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ATLAS — reads + ALL derived income/spend math (nothing stored; the effective-
@@ -101,13 +103,19 @@ export type AtlasView = {
     byCategory: { category: string; monthly: number }[];
     byNecessity: { necessity: string; monthly: number }[];
     byAccount: { name: string; kind: string | null; monthly: number }[];
-    discretionLeft: number; // monthlyNet − fixedMonthly
+    /** The monthly savings goal in effect (0 = none) — set aside before
+     *  discretionary; it stays in the bank, so it never posts a transaction. */
+    savingsGoal: number;
+    /** When that goal segment started (YYYY-MM-01), or null. */
+    savingsGoalSince: string | null;
+    discretionLeft: number; // monthlyNet − fixedMonthly − savingsGoal
     /**
      * Planned monthly outflow per source: each account's fixed bills, with the
      * discretionary allocation added to the spending card (F3 makes that an
      * explicit flag; today = the first credit_card account). The one carrying
      * discretion IS the budget envelope; the others are the "already
-     * guaranteed" outflows. Sums to monthlyNet when nothing is over-committed.
+     * guaranteed" outflows. Sums to monthlyNet − savingsGoal when nothing is
+     * over-committed (the goal stays in the bank).
      */
     expectedOutflows: {
       name: string;
@@ -144,7 +152,7 @@ export async function getAtlasViewForGroup(
   // current month reads as of today (a raise landing Aug 15 shows from Aug 15).
   const asOf = isCurrentMonth ? today : lastDayOfMonth(month);
 
-  const [groupProfiles, allPlans, allDeductions, allExpenses, accounts] =
+  const [groupProfiles, allPlans, allDeductions, allExpenses, accounts, goals] =
     await Promise.all([
       db
         .select()
@@ -175,6 +183,15 @@ export async function getAtlasViewForGroup(
         })
         .from(financialAccounts)
         .where(eq(financialAccounts.groupId, groupId)),
+      db
+        .select({
+          monthlyGoal: savingsGoals.monthlyGoal,
+          startMonth: savingsGoals.startMonth,
+          endMonth: savingsGoals.endMonth,
+        })
+        .from(savingsGoals)
+        .where(eq(savingsGoals.groupId, groupId))
+        .orderBy(asc(savingsGoals.startMonth), asc(savingsGoals.id)),
     ]);
   const accountById = new Map(accounts.map((a) => [a.id, a]));
 
@@ -292,7 +309,11 @@ export async function getAtlasViewForGroup(
 
   const monthlyNetC = people.reduce((s, p) => s + Math.round(p.monthlyNet * 100), 0);
   const fixedC = sumMonthlyC(expenses);
-  const discretionC = monthlyNetC - fixedC;
+  // The savings goal comes off the top like a bill, but it's its own line —
+  // money kept in the bank, never a transaction.
+  const goal = goalForMonth(goals, month);
+  const savingsGoalC = goal ? cents(goal.monthlyGoal) : 0;
+  const discretionC = monthlyNetC - fixedC - savingsGoalC;
 
   // Per-source planned outflow; discretion rides on the account flagged
   // carriesDiscretion (explicit, user-set — never inferred from kind).
@@ -377,6 +398,8 @@ export async function getAtlasViewForGroup(
         monthly,
       })),
       byAccount: byAccountRaw,
+      savingsGoal: dollars(savingsGoalC),
+      savingsGoalSince: goal?.startMonth ?? null,
       discretionLeft: dollars(discretionC),
       expectedOutflows,
     },

@@ -96,6 +96,11 @@ export default function TransactionDetailDialog({
               select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              helperText={
+                category === "savings"
+                  ? "Real money out, but never counts against the budget."
+                  : undefined
+              }
             >
               {/* Select can't take fragments, so the grouped list is one flat array. */}
               {(["out", "in"] as const).flatMap((flow) => [

@@ -13,6 +13,9 @@ import Divider from "@mui/material/Divider";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import type { Flow } from "@/lib/finance/cashflow";
+import type { MonthReport as MonthReportData } from "@/lib/finance/month-report";
+import MonthReport from "./MonthReport";
+import { MoreDetails } from "./BudgetAnalytics";
 import { formatCashFlow, formatMoney, formatMoneyCompact } from "@/lib/format";
 import SpendByTag, { type TagSpendRow } from "./SpendByTag";
 import { CASHFLOW_COLORS, dimmed } from "./chartColors";
@@ -43,6 +46,8 @@ export default function CashFlowHistory({
   drillIncomeTags,
   tag,
   tagFlow,
+  report,
+  reportInProgress,
 }: {
   months: MonthFlowRow[];
   selected: string | null; // YYYY-MM-01
@@ -53,6 +58,8 @@ export default function CashFlowHistory({
   drillIncomeTags: TagSpendRow[];
   tag: string | null; // the tapped tag key filtering the list
   tagFlow: Flow;
+  report: MonthReportData | null; // the selected month vs its plan
+  reportInProgress: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -213,6 +220,15 @@ export default function CashFlowHistory({
         centerLabel={income ? "came in" : "spent"}
         emptyText={income ? "No income in this period." : "No spending in this period."}
       />
+
+      {/* A selected month's budget report, tucked away like the Budget page's. */}
+      {sel && report ? (
+        <Box sx={{ mt: 1.5 }}>
+          <MoreDetails>
+            <MonthReport report={report} inProgress={reportInProgress} />
+          </MoreDetails>
+        </Box>
+      ) : null}
     </Paper>
   );
 }

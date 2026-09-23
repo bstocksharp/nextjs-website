@@ -47,7 +47,9 @@ export const CATEGORY_OPTIONS: { value: string; label: string; flow: "out" | "in
   { value: "discretionary", label: "Discretionary", flow: "out" },
   { value: "fixed", label: "Fixed bill", flow: "out" },
   { value: "amortized", label: "Amortized", flow: "out" },
-  { value: "savings", label: "Savings", flow: "out" },
+  // Stored as "savings"; shown as Off-budget: real money out (the sofa, the
+  // crowns) that never counts against the budget.
+  { value: "savings", label: "Off-budget", flow: "out" },
   { value: "fund", label: "Fund", flow: "out" },
   { value: "income", label: "Income", flow: "in" },
   { value: "reimbursement", label: "Reimbursement", flow: "in" },

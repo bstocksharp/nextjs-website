@@ -9,6 +9,7 @@ import {
   type SavingsGoal,
 } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
+import { goalForMonth } from "@/lib/finance/savings-goal";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // NET WORTH — reads + ALL derived metrics (nothing here is stored; same spirit
@@ -34,10 +35,6 @@ export const accountOrder = [
   asc(financialAccounts.id),
 ];
 
-/** Does `month` (YYYY-MM-01) fall inside a goal segment? */
-function segmentCovers(g: SavingsGoal, month: string): boolean {
-  return g.startMonth <= month && (g.endMonth === null || month <= g.endMonth);
-}
 
 export type NetWorthStats = {
   currentMonth: string;
@@ -114,8 +111,7 @@ export async function getNetWorthDashboard(year?: number): Promise<NetWorthDashb
     .where(eq(savingsGoals.groupId, groupId))
     .orderBy(asc(savingsGoals.startMonth), asc(savingsGoals.id));
   // Overlaps resolve latest-starting-wins (weightPlans convention).
-  const goalFor = (month: string): SavingsGoal | null =>
-    [...goals].reverse().find((g) => segmentCovers(g, month)) ?? null;
+  const goalFor = (month: string): SavingsGoal | null => goalForMonth(goals, month);
   const activeGoal = goals.findLast((g) => g.endMonth === null) ?? null;
 
   // month → accountId → balance
