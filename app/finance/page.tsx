@@ -81,7 +81,7 @@ export default async function BudgetPage({
       listBudgetMonths(),
       listBillsForMonth(month),
       listProfiles(),
-      listRecentMonths(3),
+      listRecentMonths(month, 3),
       getSpendTrend(month),
       listMerchantSuggestions(),
       listSpendCategories(),
@@ -237,7 +237,7 @@ export default async function BudgetPage({
             today: d(c.analytics.todayC),
             yesterday: d(c.analytics.yesterdayC),
             last7: d(c.analytics.last7C),
-            recentMonths: recentMonths.filter((m) => m.month !== month),
+            recentMonths,
           },
           all: {
             moneyIn: flow.moneyIn,

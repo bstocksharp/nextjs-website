@@ -250,15 +250,15 @@ export type RecentMonth = {
 };
 
 /**
- * The last few COMPLETED months (before the current one), each computed the
- * same way the page does — closed months from their snapshot, open ones live —
- * so history shows up immediately without having to close anything first.
+ * The few months with data just BEFORE `month` (the one being viewed — so a
+ * past month shows its own lead-up, not today's), newest first, each computed
+ * the same way the page does.
  */
-export async function listRecentMonths(limit = 3): Promise<RecentMonth[]> {
+export async function listRecentMonths(month: string, limit = 3): Promise<RecentMonth[]> {
   const groupId = await requireGroupId();
   const tz = await getGroupTimezone(groupId);
-  const current = currentMonthISO(tz);
-  const past = (await listBudgetMonths()).filter((m) => m < current);
+  const viewed = `${month.slice(0, 7)}-01`;
+  const past = (await listBudgetMonths()).filter((m) => m < viewed);
   const recent = past.slice(-limit).reverse(); // newest first
   const dl = (c: number) => Math.round(c) / 100;
 
