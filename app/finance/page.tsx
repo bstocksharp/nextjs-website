@@ -19,8 +19,17 @@ import {
   getSpendTrend,
 } from "@/lib/queries/finance-budget";
 import { listFinancialAccounts } from "@/lib/queries/finance-networth";
+import { listIncomeCategories, listSpendCategories } from "@/lib/queries/finance-categories";
+import { toTxnRow } from "@/lib/queries/finance-transactions";
+import {
+  cashFlowByCategory,
+  cashFlowByMonth,
+  moneyInBySource,
+  spendByTag,
+  summarizeCashFlow,
+} from "@/lib/queries/finance-cashflow";
 import { listProfiles } from "@/lib/queries/profiles";
-import { currentMonthISO } from "@/lib/finance/parse";
+import { currentMonthISO, lastDayOfMonth } from "@/lib/finance/parse";
 import { getGroupTimezone } from "@/lib/queries/group";
 import { formatMonth } from "@/lib/format";
 import AtlasMonthSwitcher from "@/components/finance/AtlasMonthSwitcher";
@@ -28,11 +37,17 @@ import BudgetSummary from "@/components/finance/BudgetSummary";
 import BudgetInsights from "@/components/finance/BudgetInsights";
 import TransactionsTable from "@/components/finance/TransactionsTable";
 import FundsPanel from "@/components/finance/FundsPanel";
-import type { TxnRowData } from "@/components/finance/TransactionRow";
 
 export const metadata = { title: "Budget" };
 
 const d = (c: number) => Math.round(c) / 100;
+
+/** YYYY-MM-01 shifted by whole months. */
+function shiftMonth(month: string, delta: number): string {
+  const dt = new Date(`${month.slice(0, 7)}-01T12:00:00Z`);
+  dt.setUTCMonth(dt.getUTCMonth() + delta);
+  return dt.toISOString().slice(0, 10);
+}
 
 // The Budget tab (F3): this month's transactions + the discretionary pace,
 // computed live from the ledger. Past months render frozen once closed (CP4b).
@@ -51,8 +66,14 @@ export default async function BudgetPage({
       ? `${monthParam.slice(0, 7)}-01`
       : currentMonth;
 
-  const [view, txns, accounts, monthsWithData, bills, groupProfiles, recentMonths, trend, suggest, editor] =
-    await Promise.all([
+  // The All-money lens reads the shared cash-flow definition for this month.
+  const monthRange = { from: month, to: lastDayOfMonth(month) };
+  const groupId = session.groupId;
+  const [
+    [view, txns, accounts, monthsWithData, bills, groupProfiles, recentMonths, trend, suggest, categories, editor],
+    [flow, allTrend, tagSpend, lanes, sources, recentFlows, incomeCategories],
+  ] = await Promise.all([
+    Promise.all([
       getBudgetMonth(month),
       listMonthTransactionsForSession(month),
       listFinancialAccounts(),
@@ -62,25 +83,23 @@ export default async function BudgetPage({
       listRecentMonths(3),
       getSpendTrend(month),
       listMerchantSuggestions(),
+      listSpendCategories(),
       isEditor(),
-    ]);
+    ]),
+    Promise.all([
+      summarizeCashFlow(groupId, monthRange),
+      getSpendTrend(month, "all"),
+      spendByTag(groupId, monthRange),
+      cashFlowByCategory(groupId, monthRange),
+      moneyInBySource(groupId, monthRange),
+      cashFlowByMonth(groupId, { from: shiftMonth(month, -3), to: lastDayOfMonth(shiftMonth(month, -1)) }),
+      listIncomeCategories(),
+    ]),
+  ]);
   const c = view.computation;
   const disc = c.discretionary;
 
-  const rows: TxnRowData[] = txns.map((t) => ({
-    id: t.id,
-    postedOn: t.postedOn,
-    merchant: t.merchant,
-    amount: Number(t.amount),
-    originalAmount: Number(t.originalAmount),
-    category: t.category,
-    spendCategory: t.spendCategory,
-    fundId: t.fundId,
-    recurringExpenseId: t.recurringExpenseId,
-    needsReview: t.needsReview,
-    note: t.note,
-    source: t.source,
-  }));
+  const rows = txns.map(toTxnRow);
 
   const fundPicks = c.funds.map((f) => ({ id: f.id, name: f.name }));
   const fundViews = c.funds.map((f) => ({
@@ -219,24 +238,38 @@ export default async function BudgetPage({
             last7: d(c.analytics.last7C),
             recentMonths: recentMonths.filter((m) => m.month !== month),
           },
+          all: {
+            moneyIn: flow.moneyIn,
+            moneyOut: flow.moneyOut,
+            trend: allTrend,
+            tags: tagSpend,
+            details: { lanes, sources, recent: recentFlows },
+          },
         }}
       />
 
       <Box sx={{ mt: 3 }}>
         <TransactionsTable
-          txns={rows}
+          initialRows={rows}
+          title="Transactions"
+          emptyText={`No transactions yet this month.${
+            editor ? " Add one, or let your card alerts flow in." : ""
+          }`}
           funds={fundPicks}
           bills={bills}
           accounts={accountPicks}
           merchants={suggest.merchants}
           sources={suggest.sources}
+          categories={categories}
+          incomeCategories={incomeCategories}
           editable={editor}
+          allowAdd
         />
         {c.needsReviewCount > 0 && editor ? (
           <Box sx={{ mt: 2 }}>
             <Typography variant="caption" color="text.secondary">
               Tip: the ⚠ rows couldn&apos;t be read automatically — open the ⋮ menu
-              to set their details.
+              (or tap the row on a phone) to set their details.
             </Typography>
           </Box>
         ) : null}

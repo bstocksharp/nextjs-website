@@ -41,6 +41,12 @@ export function formatMoneySigned(value: number | null | undefined): string {
   return `${value >= 0 ? "+" : "−"}${money.format(Math.abs(value))}`;
 }
 
+/** "In $X · Out $Y · Kept +$Z" (cash flow); just "Out $Y" when nothing came in. */
+export function formatCashFlow(moneyIn: number, moneyOut: number): string {
+  if (moneyIn === 0) return `Out ${formatMoney(moneyOut)}`;
+  return `In ${formatMoney(moneyIn)} · Out ${formatMoney(moneyOut)} · Kept ${formatMoneySigned(moneyIn - moneyOut)}`;
+}
+
 /** "$135k" axis labels; falls back to plain currency under $10k. */
 export function formatMoneyCompact(value: number): string {
   if (Math.abs(value) >= 10_000) return `$${Math.round(value / 1000)}k`;

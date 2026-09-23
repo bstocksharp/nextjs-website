@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { LineChart } from "@mui/x-charts/LineChart";
-import { useTheme, alpha } from "@mui/material/styles";
+import { LineChart, lineClasses } from "@mui/x-charts/LineChart";
+import { useTheme } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import { formatMoney, formatMoneyCompact } from "@/lib/format";
 
@@ -32,8 +32,10 @@ export default function SpendTrendChart({
 }) {
   const theme = useTheme();
   const mounted = useMounted();
-  const color = theme.palette.primary.main; // follows the active profile
-  const ghost = alpha(theme.palette.text.secondary, 0.55);
+  // theme.vars = CSS custom properties, so both lines follow light/dark mode
+  // (theme.palette only holds the light scheme's values under cssVariables).
+  const color = theme.vars?.palette.primary.main ?? theme.palette.primary.main; // follows the active profile
+  const ghost = theme.vars?.palette.text.secondary ?? theme.palette.text.secondary;
 
   const fmt = (v: number | null) => (v == null ? "" : formatMoney(v));
   const series = [
@@ -75,13 +77,13 @@ export default function SpendTrendChart({
           tickInterval: days.filter((day) => day === 1 || day % 5 === 0),
         },
       ]}
-      yAxis={[{ valueFormatter: (v: number) => formatMoneyCompact(v), width: 48 }]}
+      yAxis={[{ valueFormatter: (v: number) => formatMoneyCompact(v), width: 60 }]}
       margin={{ top: 10, right: 12, bottom: 4, left: 4 }}
       slotProps={{ tooltip: { trigger: "axis" } }}
       sx={{
-        "& .MuiLineElement-series-lastMonth": { strokeDasharray: "5 4", strokeWidth: 1.5 },
-        "& .MuiLineElement-series-thisMonth": { strokeWidth: 2.5 },
-        "& .MuiAreaElement-series-thisMonth": { fillOpacity: 0.12 },
+        [`& .${lineClasses.line}[data-series="lastMonth"]`]: { strokeDasharray: "5 4", strokeWidth: 1.5 },
+        [`& .${lineClasses.line}[data-series="thisMonth"]`]: { strokeWidth: 2.5 },
+        [`& .${lineClasses.area}[data-series="thisMonth"]`]: { fillOpacity: 0.12 },
       }}
     />
   );

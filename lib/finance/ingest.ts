@@ -55,6 +55,31 @@ export async function merchantRulesFor(groupId: number, onDate: string): Promise
   }));
 }
 
+/**
+ * The spend-category for a row entered or fixed BY HAND — the same resolution
+ * as ingest (bill inherit for fixed/amortized, else the Categories-tab merchant
+ * rules), so a manual "Gas" lands tagged exactly like a texted one would.
+ */
+export async function resolveSpendCategory(
+  groupId: number,
+  category: string,
+  merchant: string | null,
+  recurringExpenseId: number | null,
+): Promise<string | null> {
+  let billCategory: string | null = null;
+  if (recurringExpenseId != null && (category === "fixed" || category === "amortized")) {
+    const [bill] = await db
+      .select({ category: recurringExpenses.category })
+      .from(recurringExpenses)
+      .where(
+        and(eq(recurringExpenses.id, recurringExpenseId), eq(recurringExpenses.groupId, groupId)),
+      )
+      .limit(1);
+    billCategory = bill?.category ?? null;
+  }
+  return spendCategoryFor(category, merchant, billCategory, await spendRulesFor(groupId));
+}
+
 /** The spend-category a matched bill contributes (for fixed/amortized inherit). */
 function billCategoryOf(
   recurringExpenseId: number | null,

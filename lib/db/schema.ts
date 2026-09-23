@@ -833,6 +833,10 @@ export const merchantCategories = pgTable(
     // and category. Purely organizational: categorization is still longest-pattern
     // wins. Backfilled to = pattern, so every rule starts as its own group.
     groupName: varchar("group_name", { length: 60 }),
+    // Which side of the ledger the rule tags: "out" = spending tags, "in" =
+    // income tags. A rule only ever matches rows of its own flow, so a spending
+    // "Venmo" rule can't tag a Venmo payment to you (scripts/migrate-rule-flow).
+    flow: varchar("flow", { length: 3 }).notNull().default("out"),
     createdAt: createdAt(),
   },
   (t) => [index("idx_merchcat_group").on(t.groupId)],

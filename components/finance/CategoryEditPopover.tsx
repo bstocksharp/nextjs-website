@@ -19,6 +19,7 @@ export default function CategoryEditPopover({
   merchant,
   current,
   categories,
+  placeholder = "Groceries, Dining…",
   onSave,
   onClose,
 }: {
@@ -26,6 +27,7 @@ export default function CategoryEditPopover({
   merchant: string | null;
   current: string | null;
   categories: string[];
+  placeholder?: string;
   onSave: (category: string | null, applyToMerchant: boolean) => void;
   onClose: () => void;
 }) {
@@ -49,9 +51,9 @@ export default function CategoryEditPopover({
             <TextField
               {...params}
               size="small"
-              label="Category"
+              label="Tag"
               autoFocus
-              placeholder="Groceries, Dining…"
+              placeholder={placeholder}
             />
           )}
         />

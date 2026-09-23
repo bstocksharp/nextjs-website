@@ -12,15 +12,21 @@ import MerchantGroups from "@/components/finance/MerchantGroups";
 
 export const metadata = { title: "Categories" };
 
-// F4d — the merchant-groups management page. A group is a NAME + a category +
+// F4d — the merchant-groups management page. A group is a NAME + a tag +
 // several match-names; retag a whole group at once, fold names together, and
-// mop up the ungrouped tail.
-export default async function CategoriesPage() {
+// mop up the ungrouped tail. `?flow=in` shows the income side (Paycheck,
+// Interest…), whose groups never touch spending.
+export default async function CategoriesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ flow?: string }>;
+}) {
   const session = await getSession();
   if (session === null) redirect("/login");
 
+  const flow = (await searchParams).flow === "in" ? "in" : "out";
   const [view, editor] = await Promise.all([
-    getMerchantGroupsForGroup(session.groupId),
+    getMerchantGroupsForGroup(session.groupId, flow),
     isEditor(),
   ]);
 
@@ -41,7 +47,7 @@ export default async function CategoriesPage() {
           Categories
         </Typography>
         <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
-          Group your merchants and tag each group
+          Group your merchants and income sources, and tag each group
         </Typography>
       </Stack>
 

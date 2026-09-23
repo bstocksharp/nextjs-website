@@ -1,5 +1,6 @@
 "use client";
 
+import type * as React from "react";
 import TableRow from "@mui/material/TableRow";
 import TableCell from "@mui/material/TableCell";
 import IconButton from "@mui/material/IconButton";
@@ -9,7 +10,20 @@ import Stack from "@mui/material/Stack";
 import Box from "@mui/material/Box";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import type { SxProps, Theme } from "@mui/material/styles";
 import { formatMoney, formatDate } from "@/lib/format";
+import { flowOf } from "@/lib/finance/cashflow";
+
+type StyleObject = Exclude<SxProps<Theme>, ReadonlyArray<unknown> | ((theme: Theme) => unknown)>;
+
+/** Styles applied only below `sm`, leaving the desktop table's defaults untouched. */
+export function onPhone(styles: StyleObject) {
+  return (theme: Theme) => ({ [theme.breakpoints.down("sm")]: styles });
+}
+
+// On a phone each cell becomes a grid item: no table borders or padding.
+const phoneCell = (area: string, extra?: StyleObject) =>
+  onPhone({ display: "block", gridArea: area, border: 0, p: 0, ...extra });
 
 export type TxnFund = { id: number; name: string };
 export type TxnBill = { id: number; name: string; paymentsPerYear: number };
@@ -28,14 +42,15 @@ export type TxnRowData = {
   source: string;
 };
 
-export const CATEGORY_OPTIONS: { value: string; label: string }[] = [
-  { value: "discretionary", label: "Discretionary" },
-  { value: "fixed", label: "Fixed bill" },
-  { value: "amortized", label: "Amortized" },
-  { value: "savings", label: "Savings" },
-  { value: "reimbursement", label: "Reimbursement" },
-  { value: "fund", label: "Fund" },
-  { value: "income", label: "Income" },
+// `flow` groups the pickers: money out vs money in (a reimbursement pays you back).
+export const CATEGORY_OPTIONS: { value: string; label: string; flow: "out" | "in" }[] = [
+  { value: "discretionary", label: "Discretionary", flow: "out" },
+  { value: "fixed", label: "Fixed bill", flow: "out" },
+  { value: "amortized", label: "Amortized", flow: "out" },
+  { value: "savings", label: "Savings", flow: "out" },
+  { value: "fund", label: "Fund", flow: "out" },
+  { value: "income", label: "Income", flow: "in" },
+  { value: "reimbursement", label: "Reimbursement", flow: "in" },
 ];
 // "ignored" still renders if any legacy row has it, but it's no longer offered.
 const CATEGORY_LABEL: Record<string, string> = {
@@ -69,34 +84,81 @@ function chipColor(category: string): "primary" | "success" | "warning" | "defau
 
 // A display-only transaction row. All editing happens behind the ⋮ menu (its
 // dialog), so the table reads cleanly: date · merchant · formatted amount
-// (green in / red out) · category chip. `onMenu` present ⇒ editable.
+// (green in / red out) · category chip. `onMenu` present ⇒ editable. Below
+// `sm` it restacks into two lines — merchant · amount over date · category —
+// so a phone never scrolls sideways; the ⋮ hides and the row itself is the tap.
 export default function TransactionRow({
   txn,
   funds,
   onMenu,
+  onRowClick,
   onEditCategory,
 }: {
   txn: TxnRowData;
   funds: TxnFund[];
   onMenu?: (txn: TxnRowData, anchor: HTMLElement) => void;
-  // Present ⇒ the spend-category chip is tappable to set/change it (explorer).
+  // Present ⇒ tapping anywhere on the row opens its actions (phones).
+  onRowClick?: (txn: TxnRowData, anchor: HTMLElement) => void;
+  // Present ⇒ the spend-category chip is tappable to set/change it.
   onEditCategory?: (txn: TxnRowData, anchor: HTMLElement) => void;
 }) {
   const adjusted = txn.amount !== txn.originalAmount;
   const fundName = txn.fundId ? funds.find((f) => f.id === txn.fundId)?.name : null;
   const dir = direction(txn.category, txn.amount);
-  // Only spend rows (discretionary) are hand-taggable; the rest carry meaning
-  // from their engine category already.
-  const editCat =
-    onEditCategory && txn.category === "discretionary" ? onEditCategory : undefined;
+  // Every counted row is taggable — spending tags on money out, income tags on
+  // money in. Excluded rows are never counted, so never tagged.
+  const editCat = onEditCategory && flowOf(txn.category) ? onEditCategory : undefined;
+  // The chip has its own tap target, so it must not also open the row's actions.
+  const tag = (e: React.MouseEvent<HTMLElement>) => {
+    e.stopPropagation();
+    editCat?.(txn, e.currentTarget);
+  };
 
   return (
-    <TableRow hover sx={{ bgcolor: txn.needsReview ? "action.hover" : undefined }}>
-      <TableCell sx={{ whiteSpace: "nowrap", color: "text.secondary" }}>
+    <TableRow
+      hover
+      onClick={onRowClick ? (e) => onRowClick(txn, e.currentTarget) : undefined}
+      onKeyDown={
+        onRowClick
+          ? (e) => {
+              if (e.target !== e.currentTarget || (e.key !== "Enter" && e.key !== " ")) return;
+              e.preventDefault();
+              onRowClick(txn, e.currentTarget);
+            }
+          : undefined
+      }
+      tabIndex={onRowClick ? 0 : undefined}
+      sx={[
+        {
+          bgcolor: txn.needsReview ? "action.hover" : undefined,
+          cursor: onRowClick ? "pointer" : undefined,
+        },
+        // Date and category get their own columns on line two, so neither
+        // squeezes the merchant name on line one.
+        onPhone({
+          display: "grid",
+          gridTemplateColumns: "auto minmax(0, 1fr) auto",
+          gridTemplateAreas: `"merchant merchant amount" "date category category"`,
+          alignItems: "center",
+          columnGap: 1.5,
+          rowGap: 0.5,
+          px: 0.5,
+          py: 1.25,
+          borderBottom: 1,
+          borderColor: "divider",
+        }),
+      ]}
+    >
+      <TableCell
+        sx={[
+          { whiteSpace: "nowrap", color: "text.secondary" },
+          phoneCell("date", { fontSize: 12 }),
+        ]}
+      >
         {formatDate(txn.postedOn)}
       </TableCell>
 
-      <TableCell sx={{ maxWidth: 240 }}>
+      <TableCell sx={[{ maxWidth: 240 }, phoneCell("merchant", { maxWidth: "none", minWidth: 0 })]}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
           {txn.needsReview ? (
             <Tooltip title="Couldn't read this one — open the ⋮ menu to set its details">
@@ -104,7 +166,12 @@ export default function TransactionRow({
             </Tooltip>
           ) : null}
           <Box sx={{ minWidth: 0 }}>
-            <Box sx={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <Box
+              sx={[
+                { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+                onPhone({ fontWeight: 600 }),
+              ]}
+            >
               {txn.merchant ?? (txn.needsReview ? "Unreadable alert" : "—")}
             </Box>
             {fundName || txn.note ? (
@@ -126,7 +193,13 @@ export default function TransactionRow({
         </Box>
       </TableCell>
 
-      <TableCell align="right" sx={{ whiteSpace: "nowrap", color: amountColor(dir), fontWeight: 600 }}>
+      <TableCell
+        align="right"
+        sx={[
+          { whiteSpace: "nowrap", color: amountColor(dir), fontWeight: 600 },
+          phoneCell("amount"),
+        ]}
+      >
         {dir === "in" ? "+" : ""}
         {formatMoney(Math.abs(txn.amount))}
         {adjusted ? (
@@ -138,21 +211,23 @@ export default function TransactionRow({
         ) : null}
       </TableCell>
 
-      <TableCell>
-        <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", rowGap: 0.5 }}>
+      <TableCell sx={phoneCell("category")}>
+        <Stack
+          direction="row"
+          spacing={0.5}
+          sx={[{ flexWrap: "wrap", rowGap: 0.5 }, onPhone({ justifyContent: "flex-end" })]}
+        >
           <Chip
             size="small"
             variant="outlined"
             color={chipColor(txn.category)}
             label={CATEGORY_LABEL[txn.category] ?? txn.category}
           />
-          {/* Spend-categories are for SPEND — only discretionary rows are
-              taggable. Income/fund/savings/etc. already carry their engine chip. */}
           {txn.spendCategory ? (
             <Chip
               size="small"
               label={txn.spendCategory}
-              onClick={editCat ? (e) => editCat(txn, e.currentTarget) : undefined}
+              onClick={editCat ? tag : undefined}
               sx={{ bgcolor: "action.selected", cursor: editCat ? "pointer" : "default" }}
             />
           ) : editCat ? (
@@ -160,7 +235,7 @@ export default function TransactionRow({
               size="small"
               variant="outlined"
               label="Tag…"
-              onClick={(e) => editCat(txn, e.currentTarget)}
+              onClick={tag}
               sx={{ cursor: "pointer", borderStyle: "dashed" }}
             />
           ) : null}
@@ -168,7 +243,7 @@ export default function TransactionRow({
       </TableCell>
 
       {onMenu ? (
-        <TableCell align="right">
+        <TableCell align="right" sx={onPhone({ display: "none" })}>
           <IconButton
             size="small"
             onClick={(e) => onMenu(txn, e.currentTarget)}

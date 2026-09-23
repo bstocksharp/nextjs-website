@@ -1,7 +1,10 @@
 "use client";
 
 import { createTheme, darken } from "@mui/material/styles";
-import { color, font, radius, spacing } from "./tokens";
+import { chart, color, font, radius, spacing } from "./tokens";
+
+const chartVars = (hues: readonly string[]) =>
+  Object.fromEntries(hues.map((h, i) => [`--chart-${i + 1}`, h]));
 
 // The theme is built from tokens (app/tokens.ts). The PRIMARY accent follows the
 // active profile's picked color (passed down from the root layout), so the whole
@@ -59,6 +62,9 @@ export function createAppTheme(accent?: string | null) {
       MuiCssBaseline: {
         styleOverrides: {
           a: { color: "inherit", textDecoration: "none" },
+          // Chart hues swap with the scheme class, like the --mui-palette-* vars.
+          ":root": { ...chartVars(chart.light), "--chart-other": chart.other },
+          ":root.dark": chartVars(chart.dark),
         },
       },
       MuiButton: {

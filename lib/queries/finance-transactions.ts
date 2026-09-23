@@ -1,15 +1,16 @@
 import "server-only";
-import { and, desc, eq, gte, ilike, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
+import { IN_CATEGORIES, SPEND_CATEGORIES, type Flow } from "@/lib/finance/cashflow";
 import type { TxnRowData } from "@/components/finance/TransactionRow";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TRANSACTIONS EXPLORER (F4b) — an all-time, filterable search over the ledger
 // ("when did I spend at Walmart?"). Keyset-paginated for smooth infinite scroll;
 // group-scoped via requireGroupId so a filter can never reach another household.
-// Read-only: editing still happens on the budget month view.
+// Rows edit through the same TransactionsTable as the budget month view.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type TxnFilters = {
@@ -20,6 +21,7 @@ export type TxnFilters = {
   to?: string; // postedOn <= YYYY-MM-DD
   category?: string; // exact spend-category match
   uncategorized?: boolean; // spendCategory IS NULL (find rows still to tag)
+  flow?: Flow; // only rows that count as money out / money in (a tapped slice)
 };
 
 export type TxnPage = {
@@ -27,8 +29,6 @@ export type TxnPage = {
   /** "YYYY-MM-DD:id" of the last row; pass back to fetch the next page. Null = done. */
   nextCursor: string | null;
 };
-
-export type TxnSummary = { count: number; total: number };
 
 export const EXPLORER_PAGE_SIZE = 50;
 
@@ -47,7 +47,9 @@ function cursorCond(cursor: string | null) {
   );
 }
 
-function whereFor(groupId: number, f: TxnFilters, cursor: string | null) {
+/** The group-scoped filter condition — shared with the cash-flow totals so the
+ *  numbers always describe exactly the rows the list shows. */
+export function txnWhere(groupId: number, f: TxnFilters, cursor: string | null = null) {
   const conds = [eq(transactions.groupId, groupId)];
   if (f.q) conds.push(ilike(transactions.merchant, `%${f.q}%`));
   if (f.min != null) conds.push(gte(transactions.amount, String(f.min)));
@@ -56,12 +58,26 @@ function whereFor(groupId: number, f: TxnFilters, cursor: string | null) {
   if (f.to) conds.push(lte(transactions.postedOn, f.to));
   if (f.uncategorized) conds.push(isNull(transactions.spendCategory));
   else if (f.category) conds.push(eq(transactions.spendCategory, f.category));
+  // Mirrors the cash-flow sums, so a slice's list adds up to the slice.
+  if (f.flow === "out") {
+    conds.push(eq(transactions.needsReview, false));
+    conds.push(
+      or(
+        inArray(transactions.category, [...SPEND_CATEGORIES]),
+        and(eq(transactions.category, "fund"), gt(transactions.amount, "0")),
+      )!,
+    );
+  } else if (f.flow === "in") {
+    conds.push(eq(transactions.needsReview, false));
+    conds.push(inArray(transactions.category, [...IN_CATEGORIES]));
+  }
   const cc = cursorCond(cursor);
   if (cc) conds.push(cc);
   return and(...conds);
 }
 
-function toRow(t: typeof transactions.$inferSelect): TxnRowData {
+/** DB row → the client row shape, shared by every transaction list and edit. */
+export function toTxnRow(t: typeof transactions.$inferSelect): TxnRowData {
   return {
     id: t.id,
     postedOn: t.postedOn,
@@ -88,28 +104,14 @@ export async function searchTransactionsForGroup(
   const rows = await db
     .select()
     .from(transactions)
-    .where(whereFor(groupId, f, cursor))
+    .where(txnWhere(groupId, f, cursor))
     .orderBy(desc(transactions.postedOn), desc(transactions.id))
     .limit(limit + 1);
   const hasMore = rows.length > limit;
   const page = rows.slice(0, limit);
   const last = page[page.length - 1];
   const nextCursor = hasMore && last ? `${last.postedOn}:${last.id}` : null;
-  return { rows: page.map(toRow), nextCursor };
-}
-
-export async function summarizeTransactionsForGroup(
-  groupId: number,
-  f: TxnFilters,
-): Promise<TxnSummary> {
-  const [row] = await db
-    .select({
-      count: sql<number>`count(*)::int`,
-      total: sql<string>`coalesce(sum(${transactions.amount}), 0)`,
-    })
-    .from(transactions)
-    .where(whereFor(groupId, f, null));
-  return { count: Number(row?.count ?? 0), total: Number(row?.total ?? 0) };
+  return { rows: page.map(toTxnRow), nextCursor };
 }
 
 // ── Session wrappers ──────────────────────────────────────────────────────────
@@ -118,8 +120,4 @@ export async function searchTransactions(
   cursor: string | null,
 ): Promise<TxnPage> {
   return searchTransactionsForGroup(await requireGroupId(), f, cursor);
-}
-
-export async function summarizeTransactions(f: TxnFilters): Promise<TxnSummary> {
-  return summarizeTransactionsForGroup(await requireGroupId(), f);
 }

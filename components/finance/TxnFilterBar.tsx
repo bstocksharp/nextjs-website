@@ -21,10 +21,13 @@ export type RawFilters = {
 };
 
 const UNCATEGORIZED = "__none__";
+// History opens on this year; any other range (All time included) goes in the URL.
+const DEFAULT_RANGE = "year";
 
 const RANGES = [
   { value: "all", label: "All time" },
   { value: "year", label: "This year" },
+  { value: "6mo", label: "Past 6 months" },
   { value: "12mo", label: "Past 12 months" },
   { value: "custom", label: "Custom range" },
 ];
@@ -36,7 +39,7 @@ function buildUrl(pathname: string, v: RawFilters): string {
   if (v.q) p.set("q", v.q);
   if (v.min) p.set("min", v.min);
   if (v.max) p.set("max", v.max);
-  if (v.range && v.range !== "all") p.set("range", v.range);
+  if (v.range && v.range !== DEFAULT_RANGE) p.set("range", v.range);
   if (v.range === "custom") {
     if (v.from) p.set("from", v.from);
     if (v.to) p.set("to", v.to);
@@ -59,7 +62,7 @@ export default function TxnFilterBar({
   const [q, setQ] = React.useState(raw.q);
   const [min, setMin] = React.useState(raw.min);
   const [max, setMax] = React.useState(raw.max);
-  const [range, setRange] = React.useState(raw.range || "all");
+  const [range, setRange] = React.useState(raw.range || DEFAULT_RANGE);
   const [from, setFrom] = React.useState(raw.from);
   const [to, setTo] = React.useState(raw.to);
   const [cat, setCat] = React.useState(raw.cat);
@@ -93,7 +96,7 @@ export default function TxnFilterBar({
     setQ("");
     setMin("");
     setMax("");
-    setRange("all");
+    setRange(DEFAULT_RANGE);
     setFrom("");
     setTo("");
     setCat("");
@@ -101,7 +104,7 @@ export default function TxnFilterBar({
     router.push(pathname);
   };
 
-  const hasAny = q || min || max || (range && range !== "all") || cat;
+  const hasAny = q || min || max || (range && range !== DEFAULT_RANGE) || cat;
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
@@ -216,7 +219,7 @@ export default function TxnFilterBar({
         <TextField
           size="small"
           select
-          label="Category"
+          label="Tag"
           value={cat}
           onChange={(e) => {
             setCat(e.target.value);
@@ -224,8 +227,8 @@ export default function TxnFilterBar({
           }}
           sx={{ width: 170 }}
         >
-          <MenuItem value="">All categories</MenuItem>
-          <MenuItem value={UNCATEGORIZED}>Uncategorized</MenuItem>
+          <MenuItem value="">All tags</MenuItem>
+          <MenuItem value={UNCATEGORIZED}>Untagged</MenuItem>
           {categories.map((c) => (
             <MenuItem key={c} value={c}>
               {c}

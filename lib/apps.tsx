@@ -65,7 +65,7 @@ export const APPS: AppDef[] = [
     accent: "#3fa796",
     nav: [
       { label: "Budget", href: "/finance" },
-      { label: "Transactions", href: "/finance/transactions" },
+      { label: "History", href: "/finance/transactions" },
       { label: "Categories", href: "/finance/categories" },
       { label: "ATLAS", href: "/finance/atlas" },
       { label: "Net Worth", href: "/finance/net-worth" },
