@@ -21,6 +21,7 @@ import { getMerchantGroupsForGroup } from "@/lib/queries/finance-categories";
 import { UNTAGGED, type Flow } from "@/lib/finance/cashflow";
 import {
   getMonthReportForGroup,
+  getRangeReportForGroup,
   listBills,
   listMerchantSuggestions,
   listOpenFunds,
@@ -153,6 +154,8 @@ export default async function HistoryPage({
       }
     : scoped;
 
+  const narrowed = Boolean(filters.q || filters.min != null || filters.max != null || catParam || groupName);
+
   const raw: RawFilters = {
     q: str(get("q")) ?? "",
     min: str(get("min")) ?? "",
@@ -194,9 +197,14 @@ export default async function HistoryPage({
     listBills(),
     listMerchantSuggestions(),
     isEditor(),
-    // The whole month vs its ATLAS plan — the household's, so it ignores the
-    // list filters (a Walmart filter shouldn't restate the month's budget).
-    month ? getMonthReportForGroup(groupId, month, today) : Promise.resolve(null),
+    // The household's budget vs its ATLAS plan — for the drilled month, else
+    // the whole timeframe. It can't honor narrowing filters (a Walmart filter
+    // has no "plan"), so it's left out while one is active.
+    narrowed
+      ? Promise.resolve(null)
+      : month
+        ? getMonthReportForGroup(groupId, month, today)
+        : getRangeReportForGroup(groupId, from, to, today),
   ]);
   const tagLabel = tag === UNTAGGED ? "Untagged" : tag;
   const categories = outGroups.categories;
@@ -240,8 +248,13 @@ export default async function HistoryPage({
         drillIncomeTags={drillIncomeTags}
         tag={tag}
         tagFlow={tagFlow}
-        report={report}
+        report={report && "report" in report ? report.report : report}
         reportInProgress={month != null && month.slice(0, 7) === today.slice(0, 7)}
+        reportCaption={
+          report && "report" in report
+            ? `${report.months === 1 ? formatMonth(report.first) : `${formatMonth(report.first)} – ${formatMonth(report.last)}`} · ${report.months} ${report.months === 1 ? "month" : "months"} summed${report.skippedCurrent ? ` · ${formatMonth(today)} is still in progress, so it isn't included` : ""}`
+            : undefined
+        }
       />
 
       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, px: 0.5, flexWrap: "wrap", rowGap: 1 }}>

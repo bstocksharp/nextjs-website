@@ -115,6 +115,7 @@ export default function CashFlowHistory({
   tagFlow,
   report,
   reportInProgress,
+  reportCaption,
 }: {
   months: MonthFlowRow[];
   selected: string | null; // YYYY-MM-01
@@ -125,8 +126,9 @@ export default function CashFlowHistory({
   drillIncomeTags: TagSpendRow[];
   tag: string | null; // the tapped tag key filtering the list
   tagFlow: Flow;
-  report: MonthReportData | null; // the selected month vs its plan
+  report: MonthReportData | null; // the selected month (or the timeframe) vs its plan
   reportInProgress: boolean;
+  reportCaption?: string; // what a timeframe report covers
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -289,11 +291,17 @@ export default function CashFlowHistory({
         emptyText={income ? "No income in this period." : "No spending in this period."}
       />
 
-      {/* A selected month's budget report, tucked away like the Budget page's. */}
-      {sel && report ? (
+      {/* The budget report — the selected month's, else the whole timeframe
+          summed — tucked away like the Budget page's. */}
+      {report ? (
         <Box sx={{ mt: 1.5 }}>
           <MoreDetails>
-            <MonthReport report={report} inProgress={reportInProgress} />
+            {reportCaption && !sel ? (
+              <Typography variant="caption" color="text.secondary">
+                {reportCaption}
+              </Typography>
+            ) : null}
+            <MonthReport report={report} inProgress={sel ? reportInProgress : false} />
           </MoreDetails>
         </Box>
       ) : null}
