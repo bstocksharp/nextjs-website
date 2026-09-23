@@ -1,5 +1,5 @@
 import "server-only";
-import { and, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or } from "drizzle-orm";
+import { and, desc, eq, gt, gte, ilike, inArray, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { transactions } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
@@ -22,6 +22,7 @@ export type TxnFilters = {
   category?: string; // exact spend-category match
   uncategorized?: boolean; // spendCategory IS NULL (find rows still to tag)
   flow?: Flow; // only rows that count as money out / money in (a tapped slice)
+  merchants?: string[]; // exact merchant names (a merchant group's catch); [] = none
 };
 
 export type TxnPage = {
@@ -52,6 +53,9 @@ function cursorCond(cursor: string | null) {
 export function txnWhere(groupId: number, f: TxnFilters, cursor: string | null = null) {
   const conds = [eq(transactions.groupId, groupId)];
   if (f.q) conds.push(ilike(transactions.merchant, `%${f.q}%`));
+  if (f.merchants) {
+    conds.push(f.merchants.length ? inArray(transactions.merchant, f.merchants) : sql`false`);
+  }
   if (f.min != null) conds.push(gte(transactions.amount, String(f.min)));
   if (f.max != null) conds.push(lte(transactions.amount, String(f.max)));
   if (f.from) conds.push(gte(transactions.postedOn, f.from));

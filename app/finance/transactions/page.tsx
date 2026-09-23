@@ -17,10 +17,7 @@ import {
   spendByTag,
   summarizeCashFlow,
 } from "@/lib/queries/finance-cashflow";
-import {
-  listIncomeCategoriesForGroup,
-  listSpendCategoriesForGroup,
-} from "@/lib/queries/finance-categories";
+import { getMerchantGroupsForGroup } from "@/lib/queries/finance-categories";
 import { UNTAGGED, type Flow } from "@/lib/finance/cashflow";
 import {
   listBills,
@@ -58,6 +55,7 @@ function monthStartAgo(iso: string, n: number): string {
 const RANGE_LABELS: Record<string, string> = {
   all: "All time",
   year: "This year",
+  lastyear: "Last year",
   "6mo": "Past 6 months",
   "12mo": "Past 12 months",
   custom: "Custom range",
@@ -68,7 +66,9 @@ const RANGE_LABELS: Record<string, string> = {
 // year; presets resolve against the HOUSEHOLD's today and start on a month
 // boundary so every bar is a whole month. `m` (YYYY-MM) drills into one month:
 // the tag breakdown and the list follow it, while the bars keep the whole
-// range. `tag` + `tagflow` narrow just the list to one tapped slice.
+// range. `tag` + `tagflow` narrow just the list to one tapped slice. `group`
+// (+ `groupflow`) narrows everything to one merchant group — resolved to its
+// merchants exactly as the Categories page lists them, so the two agree.
 export default async function HistoryPage({
   searchParams,
 }: {
@@ -95,11 +95,26 @@ export default async function HistoryPage({
     to = datev(get("to"));
   } else if (range === "year") {
     from = `${today.slice(0, 4)}-01-01`;
+  } else if (range === "lastyear") {
+    const last = Number(today.slice(0, 4)) - 1;
+    from = `${last}-01-01`;
+    to = `${last}-12-31`;
   } else if (range === "6mo") {
     from = monthStartAgo(today, 6);
   } else if (range === "12mo") {
     from = monthStartAgo(today, 12);
   }
+
+  // Both sides' groups feed the Group picker (and carry each side's tag list).
+  const [outGroups, inGroups] = await Promise.all([
+    getMerchantGroupsForGroup(groupId, "out"),
+    getMerchantGroupsForGroup(groupId, "in"),
+  ]);
+  const groupName = str(get("group"));
+  const groupFlow: Flow = get("groupflow") === "in" ? "in" : "out";
+  const picked = groupName
+    ? (groupFlow === "in" ? inGroups : outGroups).groups.find((g) => g.name === groupName)
+    : undefined;
 
   const catParam = str(get("cat"));
   const filters: TxnFilters = {
@@ -110,6 +125,8 @@ export default async function HistoryPage({
     to,
     category: catParam && catParam !== "__none__" ? catParam : undefined,
     uncategorized: catParam === "__none__",
+    // A group that no longer exists matches nothing rather than everything.
+    merchants: groupName ? (picked?.merchants.map((m) => m.merchant) ?? []) : undefined,
   };
 
   // The drilled month, clipped to the range so a custom partial month stays honest.
@@ -143,7 +160,13 @@ export default async function HistoryPage({
     from: datev(get("from")) ?? "",
     to: datev(get("to")) ?? "",
     cat: catParam ?? "",
+    group: groupName ?? "",
+    groupflow: groupFlow,
   };
+  const groupOptions = [
+    ...outGroups.groups.map((g) => ({ name: g.name, flow: "out" as const })),
+    ...inGroups.groups.map((g) => ({ name: g.name, flow: "in" as const })),
+  ].sort((a, b) => (a.flow === b.flow ? a.name.localeCompare(b.name) : a.flow === "out" ? -1 : 1));
 
   const [
     page,
@@ -153,8 +176,6 @@ export default async function HistoryPage({
     drillTags,
     rangeIncomeTags,
     drillIncomeTags,
-    categories,
-    incomeCategories,
     funds,
     bills,
     suggest,
@@ -167,14 +188,15 @@ export default async function HistoryPage({
     month ? spendByTag(groupId, scoped) : Promise.resolve([]),
     incomeByTag(groupId, filters),
     month ? incomeByTag(groupId, scoped) : Promise.resolve([]),
-    listSpendCategoriesForGroup(groupId),
-    listIncomeCategoriesForGroup(groupId),
     listOpenFunds(),
     listBills(),
     listMerchantSuggestions(),
     isEditor(),
   ]);
   const tagLabel = tag === UNTAGGED ? "Untagged" : tag;
+  const categories = outGroups.categories;
+  const incomeCategories = inGroups.categories;
+  const scopeLabel = `${RANGE_LABELS[range] ?? "This year"}${groupName ? ` · ${groupName}` : ""}`;
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -200,12 +222,13 @@ export default async function HistoryPage({
       <TxnFilterBar
         raw={raw}
         categories={[...new Set([...categories, ...incomeCategories])].sort()}
+        groups={groupOptions}
       />
 
       <CashFlowHistory
         months={months}
         selected={month}
-        rangeLabel={RANGE_LABELS[range] ?? "This year"}
+        rangeLabel={scopeLabel}
         rangeTags={rangeTags}
         drillTags={drillTags}
         rangeIncomeTags={rangeIncomeTags}
