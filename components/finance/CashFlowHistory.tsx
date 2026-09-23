@@ -3,6 +3,17 @@
 import * as React from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { BarChart } from "@mui/x-charts/BarChart";
+import {
+  ChartsTooltipCell,
+  ChartsTooltipContainer,
+  ChartsTooltipPaper,
+  ChartsTooltipRow,
+  ChartsTooltipTable,
+  chartsTooltipClasses as tc,
+  useAxesTooltip,
+  type ChartsTooltipProps,
+} from "@mui/x-charts/ChartsTooltip";
+import { ChartsLabelMark } from "@mui/x-charts/ChartsLabel";
 import Paper from "@mui/material/Paper";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -16,7 +27,7 @@ import type { Flow } from "@/lib/finance/cashflow";
 import type { MonthReport as MonthReportData } from "@/lib/finance/month-report";
 import MonthReport from "./MonthReport";
 import { MoreDetails } from "./BudgetAnalytics";
-import { formatCashFlow, formatMoney, formatMoneyCompact } from "@/lib/format";
+import { formatCashFlow, formatMoney, formatMoneyCompact, formatMoneySigned } from "@/lib/format";
 import SpendByTag, { type TagSpendRow } from "./SpendByTag";
 import { CASHFLOW_COLORS, dimmed } from "./chartColors";
 
@@ -28,6 +39,62 @@ function useMounted() {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+// The month's hover card: income and spending exactly as the default axis
+// tooltip draws them, plus what the month kept (in − out) underneath, so the
+// shape of each month reads at a glance.
+function MonthTooltipContent() {
+  const month = useAxesTooltip({ directions: ["x"] })?.[0];
+  if (!month) return null;
+  const value = (id: string) => Number(month.seriesItems.find((s) => s.seriesId === id)?.value ?? 0);
+  const kept = value("in") - value("out");
+  return (
+    <ChartsTooltipPaper className={tc.paper}>
+      <ChartsTooltipTable className={tc.table}>
+        <Typography component="caption">{month.axisFormattedValue}</Typography>
+        <tbody>
+          {month.seriesItems.map((s) => (
+            <ChartsTooltipRow key={s.seriesId} className={tc.row}>
+              <ChartsTooltipCell component="th" className={`${tc.labelCell} ${tc.cell}`}>
+                <div className={tc.markContainer}>
+                  <ChartsLabelMark type={s.markType} color={s.color} className={tc.mark} />
+                </div>
+                {s.formattedLabel}
+              </ChartsTooltipCell>
+              <ChartsTooltipCell component="td" className={`${tc.valueCell} ${tc.cell}`}>{s.formattedValue}</ChartsTooltipCell>
+            </ChartsTooltipRow>
+          ))}
+          <ChartsTooltipRow className={tc.row}>
+            <ChartsTooltipCell
+              component="th"
+              className={`${tc.labelCell} ${tc.cell}`}
+              sx={{ borderTop: 1, borderColor: "divider", fontWeight: 600 }}
+            >
+              Kept
+            </ChartsTooltipCell>
+            <ChartsTooltipCell
+              component="td"
+              className={`${tc.valueCell} ${tc.cell}`}
+              // "&&" outranks the tooltip table's own value-cell color rule.
+              sx={{ borderTop: 1, borderColor: "divider", fontWeight: 600, "&&": { color: kept < 0 ? "warning.main" : undefined } }}
+            >
+              {formatMoneySigned(kept)}
+            </ChartsTooltipCell>
+          </ChartsTooltipRow>
+        </tbody>
+      </ChartsTooltipTable>
+    </ChartsTooltipPaper>
+  );
+}
+
+function MonthTooltip(props: ChartsTooltipProps) {
+  return (
+    <ChartsTooltipContainer {...props} trigger="axis">
+      <MonthTooltipContent />
+    </ChartsTooltipContainer>
+  );
+}
+
 const monthName = (iso: string, withYear: boolean) =>
   `${MONTHS[Number(iso.slice(5, 7)) - 1]}${withYear ? ` ${iso.slice(0, 4)}` : ""}`;
 
@@ -152,6 +219,7 @@ export default function CashFlowHistory({
           onAxisClick={(_, d) => {
             if (d) select(months[d.dataIndex]?.month ?? null);
           }}
+          slots={{ tooltip: MonthTooltip }}
           margin={{ top: 8, right: 8, bottom: 4, left: 4 }}
           sx={{ cursor: "pointer" }}
         />
