@@ -43,6 +43,18 @@ export type MonthReport = {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
+/** Several months as one: plans and actuals summed field by field. Each month
+ *  balances on its own, so the sum balances too (Σ differences = Σ kept − Σ goals). */
+export function sumReportInputs(inputs: MonthReportInput[]): MonthReportInput {
+  const plan = { moneyIn: 0, bills: 0, discretionary: 0, savingsGoal: 0, estimateAdjustment: 0 };
+  const actual = { income: 0, reimbursed: 0, discretionary: 0, bills: 0, offBudget: 0, funds: 0 };
+  for (const i of inputs) {
+    for (const k of Object.keys(plan) as (keyof typeof plan)[]) plan[k] = r2(plan[k] + i.plan[k]);
+    for (const k of Object.keys(actual) as (keyof typeof actual)[]) actual[k] = r2(actual[k] + i.actual[k]);
+  }
+  return { plan, actual };
+}
+
 // How each line reads when it helped / hurt, for the verdict.
 const PHRASE: Record<ReportLineKey, { hurt: string; helped: string }> = {
   in: { hurt: "money in was {x} under plan", helped: "money in was {x} over plan" },
@@ -62,7 +74,15 @@ export function buildMonthReport(
   const billsPlanned = r2(plan.bills - plan.estimateAdjustment);
   const discActual = r2(actual.discretionary - actual.reimbursed);
   const lines: ReportLine[] = [
-    { key: "in", label: "Money in", planned: plan.moneyIn, actual: actual.income, effect: r2(actual.income - plan.moneyIn) },
+    {
+      key: "in",
+      label: "Money in",
+      // Reimbursements pay back purchases, so they net inside Discretionary.
+      note: actual.reimbursed > 0 ? `excl. ${formatMoney(actual.reimbursed)} reimbursed (in Discretionary)` : undefined,
+      planned: plan.moneyIn,
+      actual: actual.income,
+      effect: r2(actual.income - plan.moneyIn),
+    },
     { key: "bills", label: "Bills", note: "fixed + amortized", planned: billsPlanned, actual: r2(actual.bills), effect: r2(billsPlanned - actual.bills) },
     {
       key: "disc",
@@ -89,11 +109,16 @@ export function buildMonthReport(
     // is the discretionary pace.
     verdict = `So far this month, discretionary is ${formatMoney(Math.abs(disc.effect))} ${disc.effect >= 0 ? "under" : "over"} budget.`;
   } else if (plan.savingsGoal > 0 && diff < 0 && worst) {
-    verdict = `${cap(phrase(worst, "hurt"))}, the main reason you kept ${formatMoney(keptActual)} instead of ${formatMoney(plan.savingsGoal)}.`;
+    const outcome =
+      keptActual >= 0
+        ? `kept ${formatMoney(keptActual)} instead of ${formatMoney(plan.savingsGoal)}`
+        : `ended ${formatMoney(-keptActual)} down instead of keeping ${formatMoney(plan.savingsGoal)}`;
+    verdict = `${cap(phrase(worst, "hurt"))}, the main reason you ${outcome}.`;
   } else if (plan.savingsGoal > 0 && diff >= 0) {
     verdict = `You kept ${formatMoney(diff)} more than your goal${best && PHRASE[best.key].helped ? `, mostly because ${phrase(best, "helped")}` : ""}.`;
   } else {
-    verdict = `You kept ${formatMoney(keptActual)} this month${worst ? `; ${phrase(worst, "hurt")}` : ""}.`;
+    const outcome = keptActual >= 0 ? `kept ${formatMoney(keptActual)}` : `ended ${formatMoney(-keptActual)} down`;
+    verdict = `You ${outcome}${worst ? `; ${phrase(worst, "hurt")}` : ""}.`;
   }
 
   return { lines, kept: { goal: plan.savingsGoal, actual: keptActual, diff }, verdict };

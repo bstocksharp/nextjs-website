@@ -126,6 +126,25 @@ export async function cashFlowByCategory(groupId: number, f: TxnFilters): Promis
   }));
 }
 
+/** Money in/out per month (YYYY-MM-01) per engine category — a range's lanes in one query. */
+export async function cashFlowByMonthAndCategory(
+  groupId: number,
+  f: TxnFilters,
+): Promise<(CategoryFlow & { month: string })[]> {
+  const month = sql<string>`to_char(${t.postedOn}, 'YYYY-MM')`;
+  const rows = await db
+    .select({ month, category: t.category, moneyIn: moneyIn(), moneyOut: moneyOut() })
+    .from(t)
+    .where(txnWhere(groupId, f))
+    .groupBy(month, t.category);
+  return rows.map((r) => ({
+    month: `${r.month}-01`,
+    category: r.category,
+    moneyIn: dollars(r.moneyIn),
+    moneyOut: dollars(r.moneyOut),
+  }));
+}
+
 /** Money in by source (the merchant field on income/reimbursement rows). */
 export async function moneyInBySource(groupId: number, f: TxnFilters): Promise<SourceIn[]> {
   const amount = sql<string>`coalesce(sum(${t.amount}), 0)`;

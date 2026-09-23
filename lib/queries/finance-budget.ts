@@ -13,8 +13,18 @@ import { getAtlasViewForGroup } from "@/lib/queries/finance-atlas";
 import { lastDayOfMonth, todayISO, currentMonthISO } from "@/lib/finance/parse";
 import { requireGroupId } from "@/lib/session";
 import { getGroupTimezone } from "@/lib/queries/group";
-import { cashFlowByCategory, dailyMoneyOut, type CategoryFlow } from "@/lib/queries/finance-cashflow";
-import { buildMonthReport, type MonthReport } from "@/lib/finance/month-report";
+import {
+  cashFlowByCategory,
+  cashFlowByMonthAndCategory,
+  dailyMoneyOut,
+  type CategoryFlow,
+} from "@/lib/queries/finance-cashflow";
+import {
+  buildMonthReport,
+  sumReportInputs,
+  type MonthReport,
+  type MonthReportInput,
+} from "@/lib/finance/month-report";
 import { formatMonth } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -189,15 +199,14 @@ export async function getBudgetMonthForGroup(
   };
 }
 
-/** The month report from a computed month + its cash-flow lanes (null = no plan).
- *  A month is in progress while its pace day is short of its last day. */
-export function monthReportFrom(view: BudgetView, lanes: CategoryFlow[]): MonthReport | null {
+/** A month's report inputs from its computation + cash-flow lanes (null = no plan). */
+function monthReportInput(view: BudgetView, lanes: CategoryFlow[]): MonthReportInput | null {
   if (!view.hasIncome) return null;
   const dl = (c: number) => Math.round(c) / 100;
   const out = (c: string) => lanes.find((l) => l.category === c)?.moneyOut ?? 0;
   const inn = (c: string) => lanes.find((l) => l.category === c)?.moneyIn ?? 0;
   const disc = view.computation.discretionary;
-  return buildMonthReport({
+  return {
     plan: {
       moneyIn: dl(view.plan.monthlyNetC),
       bills: dl(view.plan.billsC),
@@ -213,7 +222,70 @@ export function monthReportFrom(view: BudgetView, lanes: CategoryFlow[]): MonthR
       offBudget: out("savings"),
       funds: out("fund"),
     },
-  }, { inProgress: view.computation.dayOfMonth < view.computation.daysInMonth });
+  };
+}
+
+/** The month report from a computed month + its cash-flow lanes (null = no plan).
+ *  A month is in progress while its pace day is short of its last day. */
+export function monthReportFrom(view: BudgetView, lanes: CategoryFlow[]): MonthReport | null {
+  const input = monthReportInput(view, lanes);
+  if (!input) return null;
+  return buildMonthReport(input, {
+    inProgress: view.computation.dayOfMonth < view.computation.daysInMonth,
+  });
+}
+
+export type RangeReport = {
+  report: MonthReport;
+  /** First/last month covered (YYYY-MM-01) and how many months that is. */
+  first: string;
+  last: string;
+  months: number;
+  /** The current month sat inside the range but was left out (in progress). */
+  skippedCurrent: boolean;
+};
+
+/**
+ * The plan-vs-actual report summed across a range: every WHOLE, finished month
+ * inside [from, to] that has transactions and an ATLAS plan. The month in
+ * progress is left out (its unposted bills and paychecks would read as misses),
+ * as are partial months at a custom range's edges.
+ */
+export async function getRangeReportForGroup(
+  groupId: number,
+  from: string | undefined,
+  to: string | undefined,
+  today: string,
+): Promise<RangeReport | null> {
+  const current = `${today.slice(0, 7)}-01`;
+  const inRange = (m: string) =>
+    (!from || m >= from) && (!to || lastDayOfMonth(m) <= to);
+  const withData = (await listBudgetMonthsForGroup(groupId)).filter(inRange);
+  const months = withData.filter((m) => m < current);
+  if (months.length === 0) return null;
+
+  const [views, lanes] = await Promise.all([
+    Promise.all(months.map((m) => getBudgetMonthForGroup(groupId, m, today))),
+    cashFlowByMonthAndCategory(groupId, { from: months[0], to: lastDayOfMonth(months.at(-1)!) }),
+  ]);
+  const covered: string[] = [];
+  const inputs: MonthReportInput[] = [];
+  months.forEach((m, i) => {
+    const input = monthReportInput(views[i], lanes.filter((l) => l.month === m));
+    if (input) {
+      inputs.push(input);
+      covered.push(m);
+    }
+  });
+  if (inputs.length === 0) return null;
+
+  return {
+    report: buildMonthReport(sumReportInputs(inputs)),
+    first: covered[0],
+    last: covered.at(-1)!,
+    months: covered.length,
+    skippedCurrent: withData.includes(current),
+  };
 }
 
 /** One month's plan-vs-actual report for a group (History's drill-down). */
@@ -250,15 +322,15 @@ export type RecentMonth = {
 };
 
 /**
- * The last few COMPLETED months (before the current one), each computed the
- * same way the page does — closed months from their snapshot, open ones live —
- * so history shows up immediately without having to close anything first.
+ * The few months with data just BEFORE `month` (the one being viewed — so a
+ * past month shows its own lead-up, not today's), newest first, each computed
+ * the same way the page does.
  */
-export async function listRecentMonths(limit = 3): Promise<RecentMonth[]> {
+export async function listRecentMonths(month: string, limit = 3): Promise<RecentMonth[]> {
   const groupId = await requireGroupId();
   const tz = await getGroupTimezone(groupId);
-  const current = currentMonthISO(tz);
-  const past = (await listBudgetMonths()).filter((m) => m < current);
+  const viewed = `${month.slice(0, 7)}-01`;
+  const past = (await listBudgetMonths()).filter((m) => m < viewed);
   const recent = past.slice(-limit).reverse(); // newest first
   const dl = (c: number) => Math.round(c) / 100;
 
