@@ -3,7 +3,7 @@
 // it and the client SankeyChart just draws. Layers:
 //
 //   gross paycheck(s) → payroll deductions + net income
-//   net income        → expense categories + discretionary
+//   net income        → expense categories + savings goal + discretionary
 //
 // Employer-paid benefits are deliberately absent: they never pass through the
 // paycheck, and drawing them as income inflates the picture. (F4's actuals
@@ -26,11 +26,13 @@ export type AtlasFlowPerson = {
 export type AtlasFlowInput = {
   people: AtlasFlowPerson[];
   byCategory: { category: string; monthly: number }[];
+  savingsGoal: number;
   discretionLeft: number;
 };
 
 const NET_COLOR = "#3fa796"; // the finance accent
 const DISCRETION_COLOR = "#e0864f";
+const SAVINGS_COLOR = "#4caf7d";
 const DEDUCTION_COLORS: Record<string, string> = {
   tax: "#d45d7a",
   insurance: "#c9a227",
@@ -93,6 +95,11 @@ export function buildAtlasFlows(input: AtlasFlowInput): {
       color: CATEGORY_PALETTE[i % CATEGORY_PALETTE.length],
     });
     links.push({ source: net.id, target: id, value: c.monthly });
+  }
+
+  if (input.savingsGoal > 0) {
+    nodes.push({ id: "savings", label: "Savings goal", color: SAVINGS_COLOR });
+    links.push({ source: net.id, target: "savings", value: input.savingsGoal });
   }
 
   if (input.discretionLeft > 0) {

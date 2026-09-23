@@ -497,7 +497,6 @@ export async function reseedDemoGroup(groupId: number): Promise<void> {
     { groupId, name: "Spotify", category: "Subscriptions", necessity: "lifestyle", amount: "11.99", paymentsPerYear: 12, paidFromAccountId: cardId, dueDay: "8th", merchantPatterns: ["SPOTIFY"], startDate: finStart },
     { groupId, name: "Car Insurance", category: "Car", necessity: "essential", amount: "1180.00", paymentsPerYear: 2, dueMonths: [3, 9], dueDay: "Mar / Sep", paidFromAccountId: cardId, startDate: finStart },
     { groupId, name: "Amazon Prime", category: "Subscriptions", necessity: "lifestyle", amount: "139.00", paymentsPerYear: 1, dueMonths: [2], dueDay: "Feb", paidFromAccountId: cardId, startDate: finStart },
-    { groupId, name: "Savings transfer", category: "Financial Commitment", necessity: "commitment", amount: "1000.00", paymentsPerYear: 12, paidFromAccountId: checkingId, dueDay: "1st", startDate: finStart },
     { groupId, name: "Giving", category: "Financial Commitment", necessity: "commitment", amount: "400.00", paymentsPerYear: 12, paidFromAccountId: checkingId, dueDay: "1st", startDate: finStart },
   ]);
 }

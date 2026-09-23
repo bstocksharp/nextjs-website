@@ -17,6 +17,7 @@ import {
   listRecentMonths,
   listMerchantSuggestions,
   getSpendTrend,
+  monthReportFrom,
 } from "@/lib/queries/finance-budget";
 import { listFinancialAccounts } from "@/lib/queries/finance-networth";
 import { listIncomeCategories, listSpendCategories } from "@/lib/queries/finance-categories";
@@ -243,7 +244,12 @@ export default async function BudgetPage({
             moneyOut: flow.moneyOut,
             trend: allTrend,
             tags: tagSpend,
-            details: { lanes, sources, recent: recentFlows },
+            details: {
+              report: monthReportFrom(view, lanes),
+              inProgress: month === currentMonth,
+              sources,
+              recent: recentFlows,
+            },
           },
         }}
       />

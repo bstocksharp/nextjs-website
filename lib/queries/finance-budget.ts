@@ -13,7 +13,8 @@ import { getAtlasViewForGroup } from "@/lib/queries/finance-atlas";
 import { lastDayOfMonth, todayISO, currentMonthISO } from "@/lib/finance/parse";
 import { requireGroupId } from "@/lib/session";
 import { getGroupTimezone } from "@/lib/queries/group";
-import { dailyMoneyOut } from "@/lib/queries/finance-cashflow";
+import { cashFlowByCategory, dailyMoneyOut, type CategoryFlow } from "@/lib/queries/finance-cashflow";
+import { buildMonthReport, type MonthReport } from "@/lib/finance/month-report";
 import { formatMonth } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -37,6 +38,8 @@ export type BudgetView = {
   /** Is any compensation effective this month? False → budget is "unconfigured"
    *  (income 0 − bills = a misleading negative), so the page shows a note. */
   hasIncome: boolean;
+  /** The ATLAS plan behind the budget, in cents (the month report's "planned"). */
+  plan: { monthlyNetC: number; billsC: number; savingsGoalC: number };
 };
 
 /**
@@ -174,7 +177,57 @@ export async function getBudgetMonthForGroup(
     funds: engineFunds,
   });
 
-  return { computation, month: start, hasIncome };
+  return {
+    computation,
+    month: start,
+    hasIncome,
+    plan: {
+      monthlyNetC: cents(atlas.totals.monthlyNet),
+      billsC: cents(atlas.totals.fixedMonthly),
+      savingsGoalC: cents(atlas.totals.savingsGoal),
+    },
+  };
+}
+
+/** The month report from a computed month + its cash-flow lanes (null = no plan).
+ *  A month is in progress while its pace day is short of its last day. */
+export function monthReportFrom(view: BudgetView, lanes: CategoryFlow[]): MonthReport | null {
+  if (!view.hasIncome) return null;
+  const dl = (c: number) => Math.round(c) / 100;
+  const out = (c: string) => lanes.find((l) => l.category === c)?.moneyOut ?? 0;
+  const inn = (c: string) => lanes.find((l) => l.category === c)?.moneyIn ?? 0;
+  const disc = view.computation.discretionary;
+  return buildMonthReport({
+    plan: {
+      moneyIn: dl(view.plan.monthlyNetC),
+      bills: dl(view.plan.billsC),
+      discretionary: dl(disc.budgetC),
+      savingsGoal: dl(view.plan.savingsGoalC),
+      estimateAdjustment: dl(disc.estimateAdjustmentC),
+    },
+    actual: {
+      income: inn("income"),
+      reimbursed: inn("reimbursement"),
+      discretionary: out("discretionary"),
+      bills: out("fixed") + out("amortized"),
+      offBudget: out("savings"),
+      funds: out("fund"),
+    },
+  }, { inProgress: view.computation.dayOfMonth < view.computation.daysInMonth });
+}
+
+/** One month's plan-vs-actual report for a group (History's drill-down). */
+export async function getMonthReportForGroup(
+  groupId: number,
+  month: string,
+  today: string,
+): Promise<MonthReport | null> {
+  const { start, end } = monthBounds(month);
+  const [view, lanes] = await Promise.all([
+    getBudgetMonthForGroup(groupId, start, today),
+    cashFlowByCategory(groupId, { from: start, to: end }),
+  ]);
+  return monthReportFrom(view, lanes);
 }
 
 // ── Session wrappers (the budget page; the API routes use the …ForGroup core) ─

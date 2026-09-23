@@ -8,6 +8,8 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import { formatCashFlow, formatMoney, formatMonth } from "@/lib/format";
+import type { MonthReport as MonthReportData } from "@/lib/finance/month-report";
+import MonthReport from "./MonthReport";
 
 // The deep numbers, now an INLINE expander inside the Insights card (not its own
 // card). The spend lanes + pace moved up to the Summary; what's left is the
@@ -54,7 +56,8 @@ function Row({ label, value, color }: { label: string; value: string; color?: st
   );
 }
 
-function MoreDetails({ children }: { children: React.ReactNode }) {
+/** The inline "More details" expander (Budget Insights, History's month drill). */
+export function MoreDetails({ children }: { children: React.ReactNode }) {
   return (
     <Accordion
       disableGutters
@@ -81,23 +84,16 @@ function MoreDetails({ children }: { children: React.ReactNode }) {
 }
 
 export type CashFlowDetailsData = {
-  lanes: { category: string; moneyIn: number; moneyOut: number }[];
+  report: MonthReportData | null; // null = no ATLAS plan this month
+  inProgress: boolean;
   sources: { source: string | null; category: string; amount: number }[];
   recent: { month: string; moneyIn: number; moneyOut: number }[];
 };
 
-const LANES: [category: string, label: string][] = [
-  ["discretionary", "Discretionary"],
-  ["fixed", "Fixed bills"],
-  ["amortized", "Amortized bills paid"],
-  ["savings", "Paid from savings"],
-  ["fund", "Fund purchases"],
-];
-
-// The All-money counterpart: money out by engine lane, money in by source
-// (reimbursements pooled on one line), and the last few months' in/out.
+// The All-money counterpart: how the month went against the plan (the same
+// report History shows), money in by source (reimbursements pooled on one
+// line), and the last few months' in/out.
 export function CashFlowDetails({ d }: { d: CashFlowDetailsData }) {
-  const outByLane = new Map(d.lanes.map((l) => [l.category, l.moneyOut]));
   const income = d.sources.filter((s) => s.category === "income");
   const reimbursed = d.sources
     .filter((s) => s.category === "reimbursement")
@@ -105,11 +101,11 @@ export function CashFlowDetails({ d }: { d: CashFlowDetailsData }) {
 
   return (
     <MoreDetails>
-      <Section title="Money out by type">
-        {LANES.filter(([c]) => (outByLane.get(c) ?? 0) !== 0).map(([c, label]) => (
-          <Row key={c} label={label} value={formatMoney(outByLane.get(c) ?? 0)} />
-        ))}
-      </Section>
+      {d.report ? (
+        <Section title="How the month went">
+          <MonthReport report={d.report} inProgress={d.inProgress} />
+        </Section>
+      ) : null}
 
       {income.length > 0 || reimbursed !== 0 ? (
         <Section title="Money in">
@@ -161,7 +157,7 @@ export default function BudgetAnalytics({ d }: { d: BudgetAnalyticsData }) {
           {d.reimbursed > 0 ? (
             <Row label="Reimbursed back" value={formatMoney(d.reimbursed)} color="success.main" />
           ) : null}
-          {d.savings > 0 ? <Row label="Paid from savings" value={formatMoney(d.savings)} /> : null}
+          {d.savings > 0 ? <Row label="Off-budget purchases" value={formatMoney(d.savings)} /> : null}
         </Section>
       ) : null}
 
