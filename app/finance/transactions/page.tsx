@@ -4,23 +4,35 @@ import Container from "@mui/material/Container";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
-import Box from "@mui/material/Box";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { getSession } from "@/lib/session";
 import { isEditor } from "@/lib/auth";
 import { getGroupTimezone } from "@/lib/queries/group";
-import { todayISO } from "@/lib/finance/parse";
-import { formatMoney } from "@/lib/format";
+import { lastDayOfMonth, todayISO } from "@/lib/finance/parse";
+import { formatMoney, formatMonth } from "@/lib/format";
+import { searchTransactionsForGroup, type TxnFilters } from "@/lib/queries/finance-transactions";
 import {
-  searchTransactionsForGroup,
-  summarizeTransactionsForGroup,
-  type TxnFilters,
-} from "@/lib/queries/finance-transactions";
-import { listSpendCategoriesForGroup } from "@/lib/queries/finance-categories";
+  cashFlowByMonth,
+  incomeByTag,
+  spendByTag,
+  summarizeCashFlow,
+} from "@/lib/queries/finance-cashflow";
+import {
+  listIncomeCategoriesForGroup,
+  listSpendCategoriesForGroup,
+} from "@/lib/queries/finance-categories";
+import { UNTAGGED, type Flow } from "@/lib/finance/cashflow";
+import {
+  listBills,
+  listMerchantSuggestions,
+  listOpenFunds,
+} from "@/lib/queries/finance-budget";
 import TxnFilterBar, { type RawFilters } from "@/components/finance/TxnFilterBar";
-import TransactionsExplorer from "@/components/finance/TransactionsExplorer";
+import TransactionsTable from "@/components/finance/TransactionsTable";
+import CashFlowHistory from "@/components/finance/CashFlowHistory";
+import ListFilterChip from "@/components/finance/ListFilterChip";
 
-export const metadata = { title: "Transactions" };
+export const metadata = { title: "History" };
 
 const str = (v: string | undefined) => {
   const s = (v ?? "").trim();
@@ -36,16 +48,28 @@ const datev = (v: string | undefined) => {
   const s = (v ?? "").trim();
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : undefined;
 };
-function monthsAgo(iso: string, n: number): string {
-  const d = new Date(`${iso}T12:00:00Z`);
-  d.setUTCMonth(d.getUTCMonth() - n);
+/** First day of the month `n - 1` months before `iso`'s — n whole months incl. this one. */
+function monthStartAgo(iso: string, n: number): string {
+  const d = new Date(`${iso.slice(0, 7)}-01T12:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - (n - 1));
   return d.toISOString().slice(0, 10);
 }
 
-// F4b — the all-time transactions explorer. Presets ("this year", "past 12
-// months") resolve against the HOUSEHOLD's today, then everything flows through
-// the same group-scoped keyset search the infinite scroll uses.
-export default async function TransactionsPage({
+const RANGE_LABELS: Record<string, string> = {
+  all: "All time",
+  year: "This year",
+  "6mo": "Past 6 months",
+  "12mo": "Past 12 months",
+  custom: "Custom range",
+};
+
+// History (F4b + cash flow) — money in & out by month for the filtered range,
+// where it went by tag, and the searchable ledger beneath. Defaults to this
+// year; presets resolve against the HOUSEHOLD's today and start on a month
+// boundary so every bar is a whole month. `m` (YYYY-MM) drills into one month:
+// the tag breakdown and the list follow it, while the bars keep the whole
+// range. `tag` + `tagflow` narrow just the list to one tapped slice.
+export default async function HistoryPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -63,7 +87,7 @@ export default async function TransactionsPage({
   const tz = await getGroupTimezone(groupId);
   const today = todayISO(tz);
 
-  const range = str(get("range")) ?? "all";
+  const range = str(get("range")) ?? "year";
   let from: string | undefined;
   let to: string | undefined;
   if (range === "custom") {
@@ -71,8 +95,10 @@ export default async function TransactionsPage({
     to = datev(get("to"));
   } else if (range === "year") {
     from = `${today.slice(0, 4)}-01-01`;
+  } else if (range === "6mo") {
+    from = monthStartAgo(today, 6);
   } else if (range === "12mo") {
-    from = monthsAgo(today, 12);
+    from = monthStartAgo(today, 12);
   }
 
   const catParam = str(get("cat"));
@@ -86,6 +112,29 @@ export default async function TransactionsPage({
     uncategorized: catParam === "__none__",
   };
 
+  // The drilled month, clipped to the range so a custom partial month stays honest.
+  const mParam = str(get("m"));
+  const month = mParam && /^\d{4}-\d{2}$/.test(mParam) ? `${mParam}-01` : null;
+  const scoped: TxnFilters = month
+    ? {
+        ...filters,
+        from: from && from > month ? from : month,
+        to: to && to < lastDayOfMonth(month) ? to : lastDayOfMonth(month),
+      }
+    : filters;
+
+  // A tapped slice: only the rows that make up that slice (same flow + tag).
+  const tag = str(get("tag")) ?? null;
+  const tagFlow: Flow = get("tagflow") === "in" ? "in" : "out";
+  const listFilters: TxnFilters = tag
+    ? {
+        ...scoped,
+        category: tag === UNTAGGED ? undefined : tag,
+        uncategorized: tag === UNTAGGED,
+        flow: tagFlow,
+      }
+    : scoped;
+
   const raw: RawFilters = {
     q: str(get("q")) ?? "",
     min: str(get("min")) ?? "",
@@ -96,12 +145,36 @@ export default async function TransactionsPage({
     cat: catParam ?? "",
   };
 
-  const [page, summary, categories, editor] = await Promise.all([
-    searchTransactionsForGroup(groupId, filters, null),
-    summarizeTransactionsForGroup(groupId, filters),
+  const [
+    page,
+    listSummary,
+    months,
+    rangeTags,
+    drillTags,
+    rangeIncomeTags,
+    drillIncomeTags,
+    categories,
+    incomeCategories,
+    funds,
+    bills,
+    suggest,
+    editor,
+  ] = await Promise.all([
+    searchTransactionsForGroup(groupId, listFilters, null),
+    summarizeCashFlow(groupId, listFilters),
+    cashFlowByMonth(groupId, filters),
+    spendByTag(groupId, filters),
+    month ? spendByTag(groupId, scoped) : Promise.resolve([]),
+    incomeByTag(groupId, filters),
+    month ? incomeByTag(groupId, scoped) : Promise.resolve([]),
     listSpendCategoriesForGroup(groupId),
+    listIncomeCategoriesForGroup(groupId),
+    listOpenFunds(),
+    listBills(),
+    listMerchantSuggestions(),
     isEditor(),
   ]);
+  const tagLabel = tag === UNTAGGED ? "Untagged" : tag;
 
   return (
     <Container maxWidth="md" sx={{ py: { xs: 4, md: 6 } }}>
@@ -117,32 +190,60 @@ export default async function TransactionsPage({
 
       <Stack spacing={0.5} sx={{ mb: 3 }}>
         <Typography variant="h3" component="h1">
-          Transactions
+          History
         </Typography>
         <Typography variant="h6" component="p" color="text.secondary" fontWeight={400}>
-          Search everything you&apos;ve spent
+          Everything that came in and went out
         </Typography>
       </Stack>
 
-      <TxnFilterBar raw={raw} categories={categories} />
+      <TxnFilterBar
+        raw={raw}
+        categories={[...new Set([...categories, ...incomeCategories])].sort()}
+      />
 
-      <Box sx={{ mb: 2, px: 0.5 }}>
+      <CashFlowHistory
+        months={months}
+        selected={month}
+        rangeLabel={RANGE_LABELS[range] ?? "This year"}
+        rangeTags={rangeTags}
+        drillTags={drillTags}
+        rangeIncomeTags={rangeIncomeTags}
+        drillIncomeTags={drillIncomeTags}
+        tag={tag}
+        tagFlow={tagFlow}
+      />
+
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, px: 0.5, flexWrap: "wrap", rowGap: 1 }}>
         <Typography variant="body2" color="text.secondary">
-          {summary.count === 0
+          {listSummary.count === 0
             ? "No matches"
-            : `${summary.count.toLocaleString()} ${
-                summary.count === 1 ? "match" : "matches"
-              } · ${formatMoney(summary.total)} total`}
+            : `${listSummary.count.toLocaleString()} ${
+                listSummary.count === 1 ? "transaction" : "transactions"
+              }${month ? ` in ${formatMonth(month)}` : ""}`}
         </Typography>
-      </Box>
+        {tagLabel ? (
+          <ListFilterChip
+            label={`${tagLabel} ${tagFlow === "in" ? "income" : "spending"} · ${formatMoney(
+              tagFlow === "in" ? listSummary.moneyIn : listSummary.moneyOut,
+            )}`}
+            params={["tag", "tagflow"]}
+          />
+        ) : null}
+      </Stack>
 
-      <TransactionsExplorer
-        key={JSON.stringify(filters)}
-        filters={filters}
+      <TransactionsTable
+        key={JSON.stringify(listFilters)}
+        filters={listFilters}
         initialRows={page.rows}
         initialCursor={page.nextCursor}
-        funds={[]}
+        emptyText="No transactions match these filters."
+        funds={funds}
+        bills={bills}
+        merchants={suggest.merchants}
+        sources={suggest.sources}
         categories={categories}
+        incomeCategories={incomeCategories}
         editable={editor}
       />
     </Container>

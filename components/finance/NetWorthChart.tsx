@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LineChart } from "@mui/x-charts/LineChart";
+import { LineChart, lineClasses } from "@mui/x-charts/LineChart";
 import Box from "@mui/material/Box";
 import { formatMoney, formatMoneyCompact } from "@/lib/format";
 
@@ -115,7 +115,7 @@ export default function NetWorthChart({
             },
           ]}
           margin={{ top: 8, right: 12, bottom: 4, left: 4 }}
-          sx={{ "& .MuiAreaElement-root": { opacity: 0.55 } }}
+          sx={{ [`& .${lineClasses.area}`]: { opacity: 0.55 } }}
         />
       ) : (
         <Box sx={{ height: 360 }} aria-hidden />

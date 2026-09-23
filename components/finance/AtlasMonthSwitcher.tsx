@@ -1,11 +1,10 @@
 import Link from "@/components/shared/AppLink";
 import Stack from "@mui/material/Stack";
 import IconButton from "@mui/material/IconButton";
-import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import { formatMonth } from "@/lib/format";
+import MonthPickerButton from "./MonthPickerButton";
 
 /** "YYYY-MM-01" ± n months. */
 function shiftMonth(month: string, delta: number): string {
@@ -16,7 +15,8 @@ function shiftMonth(month: string, delta: number): string {
 
 // Month stepper shared by ATLAS (config time-travel) and Budget (past ledgers).
 // Each ?month= is a full server render. Bounded by the earliest data and the
-// current month; a "back to now" chip appears when viewing the past.
+// current month; the label opens a jump-to-month picker, and a "back to now"
+// chip appears when viewing the past.
 export default function AtlasMonthSwitcher({
   month,
   earliestMonth,
@@ -45,9 +45,12 @@ export default function AtlasMonthSwitcher({
       >
         <ChevronLeftIcon fontSize="small" />
       </IconButton>
-      <Typography variant="body2" fontWeight={600} sx={{ minWidth: 76, textAlign: "center" }}>
-        {formatMonth(month)}
-      </Typography>
+      <MonthPickerButton
+        month={month}
+        earliestMonth={earliestMonth}
+        currentMonth={currentMonth}
+        basePath={basePath}
+      />
       <IconButton
         size="small"
         component={Link}

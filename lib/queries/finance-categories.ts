@@ -4,10 +4,18 @@ import { db } from "@/lib/db";
 import { merchantCategories, transactions } from "@/lib/db/schema";
 import { requireGroupId } from "@/lib/session";
 import { longestMatchingRule, type SpendRule } from "@/lib/finance/categorize";
+import {
+  IN_CATEGORIES,
+  OUT_CATEGORIES,
+  RULE_CATEGORIES,
+  flowOf,
+  type Flow,
+} from "@/lib/finance/cashflow";
 
-// Discretionary starters offered in the tag dropdown even before any exist; the
-// group's actually-used categories (incl. inherited bill categories) get merged
-// in. Kept short + generic so a new household grows its own from here.
+// Starters offered in the tag dropdowns even before any exist; the group's
+// actually-used tags (incl. inherited bill categories) get merged in. Kept
+// short + generic so a new household grows its own from here. Spending and
+// income keep separate lists — a paycheck is never "Groceries".
 export const STARTER_SPEND_CATEGORIES = [
   "Groceries",
   "Dining",
@@ -19,39 +27,81 @@ export const STARTER_SPEND_CATEGORIES = [
   "Car",
   "Entertainment",
 ];
+export const STARTER_INCOME_CATEGORIES = [
+  "Paycheck",
+  "Interest",
+  "Side income",
+  "Tax refund",
+  "Gift",
+  "Refund",
+];
 
-/** A group's merchant → spend-category rules, for ingest + the backfill. */
+const FLOW_CATEGORIES: Record<Flow, readonly string[]> = { out: OUT_CATEGORIES, in: IN_CATEGORIES };
+
+/** A group's merchant → tag rules (both flows), for ingest + the backfill. */
 export async function spendRulesFor(groupId: number): Promise<SpendRule[]> {
-  return db
-    .select({ pattern: merchantCategories.pattern, category: merchantCategories.category })
+  const rows = await db
+    .select({
+      pattern: merchantCategories.pattern,
+      category: merchantCategories.category,
+      flow: merchantCategories.flow,
+    })
     .from(merchantCategories)
     .where(eq(merchantCategories.groupId, groupId));
+  return rows.map((r) => ({ ...r, flow: r.flow === "in" ? "in" : "out" }));
 }
 
-/** Categories in use on this group's transactions, plus the starters, sorted. */
-export async function listSpendCategoriesForGroup(groupId: number): Promise<string[]> {
-  const rows = await db
-    .selectDistinct({ c: transactions.spendCategory })
-    .from(transactions)
-    .where(and(eq(transactions.groupId, groupId), isNotNull(transactions.spendCategory)));
-  const set = new Set<string>(STARTER_SPEND_CATEGORIES);
-  for (const r of rows) if (r.c) set.add(r.c);
+/** Tags in use for one flow — on its transactions and its rules — plus starters. */
+async function tagsForFlow(groupId: number, flow: Flow): Promise<string[]> {
+  const [used, ruled] = await Promise.all([
+    db
+      .selectDistinct({ c: transactions.spendCategory })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.groupId, groupId),
+          isNotNull(transactions.spendCategory),
+          inArray(transactions.category, [...FLOW_CATEGORIES[flow]]),
+        ),
+      ),
+    db
+      .selectDistinct({ c: merchantCategories.category })
+      .from(merchantCategories)
+      .where(and(eq(merchantCategories.groupId, groupId), eq(merchantCategories.flow, flow))),
+  ]);
+  const set = new Set<string>(flow === "in" ? STARTER_INCOME_CATEGORIES : STARTER_SPEND_CATEGORIES);
+  for (const r of [...used, ...ruled]) if (r.c) set.add(r.c);
   return [...set].sort();
+}
+
+/** Spending tags (money-out rows), sorted. */
+export async function listSpendCategoriesForGroup(groupId: number): Promise<string[]> {
+  return tagsForFlow(groupId, "out");
+}
+
+/** Income tags (money-in rows), sorted. */
+export async function listIncomeCategoriesForGroup(groupId: number): Promise<string[]> {
+  return tagsForFlow(groupId, "in");
 }
 
 export async function listSpendCategories(): Promise<string[]> {
   return listSpendCategoriesForGroup(await requireGroupId());
 }
 
+export async function listIncomeCategories(): Promise<string[]> {
+  return listIncomeCategoriesForGroup(await requireGroupId());
+}
+
 export type SetCategoryResult = { merchant: string | null; affected: number };
 
 /**
- * Set (or clear, with null) a transaction's spend-category. When `applyToMerchant`
- * and the row has a merchant, ALSO: (1) upsert an exact-merchant rule so future
- * txns from it inherit the category — the "learns from you" behavior — and
- * (2) sweep every existing discretionary txn from that merchant to match. The
- * exact-merchant pattern is the most specific, so longest-match lets it override
- * any broader group rule (e.g. a `WM SUPERCENTER #4279` override beats `WALMART`).
+ * Set (or clear, with null) a transaction's tag. When `applyToMerchant` and the
+ * row has a merchant, ALSO: (1) upsert an exact-merchant rule for the row's
+ * flow so future txns from it inherit the tag — the "learns from you" behavior
+ * — and (2) sweep every existing row from that merchant on the same side of
+ * the ledger. The exact-merchant pattern is the most specific, so longest-match
+ * lets it override any broader group rule (e.g. `WM SUPERCENTER #4279` beats
+ * `WALMART`). Excluded rows are never tagged.
  */
 export async function setSpendCategoryForGroup(
   groupId: number,
@@ -60,15 +110,16 @@ export async function setSpendCategoryForGroup(
   applyToMerchant: boolean,
 ): Promise<SetCategoryResult> {
   const [txn] = await db
-    .select({ merchant: transactions.merchant })
+    .select({ merchant: transactions.merchant, category: transactions.category })
     .from(transactions)
     .where(and(eq(transactions.id, txnId), eq(transactions.groupId, groupId)))
     .limit(1);
   if (!txn) return { merchant: null, affected: 0 };
+  const flow = flowOf(txn.category);
+  if (!flow) return { merchant: txn.merchant, affected: 0 };
 
-  // ALWAYS tag the tapped row first — whatever its engine category, and even
-  // when the merchant sweep below matches nothing. (Bug fix: an income row's
-  // "apply to all" swept only discretionary siblings and skipped the row itself.)
+  // ALWAYS tag the tapped row first, even when the merchant sweep below
+  // matches nothing.
   await db
     .update(transactions)
     .set({ spendCategory: category })
@@ -82,6 +133,7 @@ export async function setSpendCategoryForGroup(
         and(
           eq(merchantCategories.groupId, groupId),
           eq(merchantCategories.pattern, txn.merchant),
+          eq(merchantCategories.flow, flow),
         ),
       )
       .limit(1);
@@ -94,13 +146,14 @@ export async function setSpendCategoryForGroup(
         pattern: txn.merchant,
         category,
         groupName: txn.merchant,
+        flow,
       });
     }
 
     const scope = and(
       eq(transactions.groupId, groupId),
       eq(transactions.merchant, txn.merchant),
-      eq(transactions.category, "discretionary"),
+      inArray(transactions.category, [...FLOW_CATEGORIES[flow]]),
     );
     await db.update(transactions).set({ spendCategory: category }).where(scope);
     const [c] = await db.select({ n: sql<number>`count(*)::int` }).from(transactions).where(scope);
@@ -111,10 +164,11 @@ export async function setSpendCategoryForGroup(
 }
 
 // ── The Categories management page (F4d): named merchant GROUPS ───────────────
-// A group = a name + a shared category + several match-name patterns. Several
-// rules (WM SUPERCENTER, WAL-MART, WALMART.COM) can share one group_name
-// ("Walmart"). Categorization is unchanged (longest pattern wins → its
-// category); group_name is purely how the page organizes them.
+// A group = a name + a shared tag + several match-name patterns. Several rules
+// (WM SUPERCENTER, WAL-MART, WALMART.COM) can share one group_name ("Walmart").
+// Categorization is unchanged (longest pattern wins → its tag); group_name is
+// purely how the page organizes them. Spending and income groups live apart
+// (the page's Spending | Income toggle) — every call here takes a flow.
 
 export type MerchantGroup = {
   name: string;
@@ -124,21 +178,25 @@ export type MerchantGroup = {
   txns: number;
 };
 export type MerchantGroupsView = {
+  flow: Flow;
   groups: MerchantGroup[];
   ungrouped: { merchant: string; count: number }[];
   categories: string[];
 };
 
-// A group is identified by its name; be defensive about legacy null group_name
-// rows (fall back to the pattern being the name).
-function groupMatch(name: string) {
-  return or(
-    eq(merchantCategories.groupName, name),
-    and(isNull(merchantCategories.groupName), eq(merchantCategories.pattern, name)),
+// A group is identified by its name within a flow; be defensive about legacy
+// null group_name rows (fall back to the pattern being the name).
+function groupMatch(name: string, flow: Flow) {
+  return and(
+    eq(merchantCategories.flow, flow),
+    or(
+      eq(merchantCategories.groupName, name),
+      and(isNull(merchantCategories.groupName), eq(merchantCategories.pattern, name)),
+    ),
   );
 }
 
-async function allRules(groupId: number) {
+async function allRules(groupId: number, flow: Flow) {
   const rows = await db
     .select({
       id: merchantCategories.id,
@@ -147,18 +205,19 @@ async function allRules(groupId: number) {
       groupName: merchantCategories.groupName,
     })
     .from(merchantCategories)
-    .where(eq(merchantCategories.groupId, groupId));
+    .where(and(eq(merchantCategories.groupId, groupId), eq(merchantCategories.flow, flow)));
   return rows.map((r) => ({ ...r, groupName: r.groupName ?? r.pattern }));
 }
 
-// Re-tag only the discretionary transactions whose merchant is touched by the
-// given patterns — recompute each via longest-match over ALL current rules, and
-// update the ones that changed. Scoped so unrelated (incl. manual) tags are left
-// alone; longest-match-aware so a more-specific override still wins.
-async function sweepForPatterns(groupId: number, patterns: string[]): Promise<void> {
+// Re-tag only the rule-governed rows (bills keep their inherited tag) whose
+// merchant is touched by the given patterns — recompute each via longest-match
+// over ALL current rules of the flow, and update the ones that changed. Scoped
+// so unrelated (incl. manual) tags are left alone; longest-match-aware so a
+// more-specific override still wins.
+async function sweepForPatterns(groupId: number, patterns: string[], flow: Flow): Promise<void> {
   const lows = patterns.map((p) => p.toLowerCase()).filter(Boolean);
   if (!lows.length) return;
-  const rules = await allRules(groupId);
+  const rules = await allRules(groupId, flow);
   const txns = await db
     .select({
       id: transactions.id,
@@ -169,7 +228,7 @@ async function sweepForPatterns(groupId: number, patterns: string[]): Promise<vo
     .where(
       and(
         eq(transactions.groupId, groupId),
-        eq(transactions.category, "discretionary"),
+        inArray(transactions.category, [...RULE_CATEGORIES[flow]]),
         isNotNull(transactions.merchant),
       ),
     );
@@ -192,15 +251,18 @@ async function sweepForPatterns(groupId: number, patterns: string[]): Promise<vo
 }
 
 /** Groups that actually catch a merchant, biggest first, + the ungrouped tail. */
-export async function getMerchantGroupsForGroup(groupId: number): Promise<MerchantGroupsView> {
-  const rules = await allRules(groupId);
+export async function getMerchantGroupsForGroup(
+  groupId: number,
+  flow: Flow = "out",
+): Promise<MerchantGroupsView> {
+  const rules = await allRules(groupId, flow);
   const merchants = await db
     .select({ merchant: transactions.merchant, n: sql<number>`count(*)::int` })
     .from(transactions)
     .where(
       and(
         eq(transactions.groupId, groupId),
-        eq(transactions.category, "discretionary"),
+        inArray(transactions.category, [...RULE_CATEGORIES[flow]]),
         isNotNull(transactions.merchant),
       ),
     )
@@ -237,28 +299,34 @@ export async function getMerchantGroupsForGroup(groupId: number): Promise<Mercha
   for (const g of groups) g.merchants.sort((a, b) => b.count - a.count);
   ungrouped.sort((a, b) => b.count - a.count);
 
-  return { groups, ungrouped, categories: await listSpendCategoriesForGroup(groupId) };
+  return { flow, groups, ungrouped, categories: await tagsForFlow(groupId, flow) };
 }
 
 /** Retag a whole group (all its names) and sweep its merchants. */
-export async function retagGroupForGroup(groupId: number, name: string, category: string): Promise<void> {
+export async function retagGroupForGroup(
+  groupId: number,
+  flow: Flow,
+  name: string,
+  category: string,
+): Promise<void> {
   const cat = category.trim().slice(0, 40);
   if (!cat) return;
   const rows = await db
     .select({ pattern: merchantCategories.pattern })
     .from(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name)));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name, flow)));
   await db
     .update(merchantCategories)
     .set({ category: cat })
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name)));
-  await sweepForPatterns(groupId, rows.map((r) => r.pattern));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name, flow)));
+  await sweepForPatterns(groupId, rows.map((r) => r.pattern), flow);
 }
 
 /** Add/move a match-name into a group (also: adopt a merchant, or create a
  *  group when `name` is new). Upserts by pattern, then sweeps that pattern. */
 export async function upsertNameForGroup(
   groupId: number,
+  flow: Flow,
   name: string,
   category: string,
   pattern: string,
@@ -270,7 +338,13 @@ export async function upsertNameForGroup(
   const [existing] = await db
     .select({ id: merchantCategories.id })
     .from(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), eq(merchantCategories.pattern, pat)))
+    .where(
+      and(
+        eq(merchantCategories.groupId, groupId),
+        eq(merchantCategories.pattern, pat),
+        eq(merchantCategories.flow, flow),
+      ),
+    )
     .limit(1);
   if (existing) {
     await db
@@ -278,15 +352,17 @@ export async function upsertNameForGroup(
       .set({ groupName: nm, category: cat })
       .where(eq(merchantCategories.id, existing.id));
   } else {
-    await db.insert(merchantCategories).values({ groupId, pattern: pat, category: cat, groupName: nm });
+    await db
+      .insert(merchantCategories)
+      .values({ groupId, pattern: pat, category: cat, groupName: nm, flow });
   }
-  await sweepForPatterns(groupId, [pat]);
+  await sweepForPatterns(groupId, [pat], flow);
 }
 
 /** Remove a single match-name; its merchants re-fall to whatever now matches. */
 export async function removeNameForGroup(groupId: number, ruleId: number): Promise<void> {
   const [rule] = await db
-    .select({ pattern: merchantCategories.pattern })
+    .select({ pattern: merchantCategories.pattern, flow: merchantCategories.flow })
     .from(merchantCategories)
     .where(and(eq(merchantCategories.id, ruleId), eq(merchantCategories.groupId, groupId)))
     .limit(1);
@@ -294,38 +370,43 @@ export async function removeNameForGroup(groupId: number, ruleId: number): Promi
   await db
     .delete(merchantCategories)
     .where(and(eq(merchantCategories.id, ruleId), eq(merchantCategories.groupId, groupId)));
-  await sweepForPatterns(groupId, [rule.pattern]);
+  await sweepForPatterns(groupId, [rule.pattern], rule.flow === "in" ? "in" : "out");
 }
 
 /** Rename a group. If `newName` already exists, the two MERGE (moved names adopt
- *  the target's category, which sweeps their merchants). */
-export async function renameGroupForGroup(groupId: number, oldName: string, newName: string): Promise<void> {
+ *  the target's tag, which sweeps their merchants). */
+export async function renameGroupForGroup(
+  groupId: number,
+  flow: Flow,
+  oldName: string,
+  newName: string,
+): Promise<void> {
   const nm = newName.trim().slice(0, 60);
   if (!nm || nm === oldName) return;
   const [target] = await db
     .select({ category: merchantCategories.category })
     .from(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(nm)))
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(nm, flow)))
     .limit(1);
   const rows = await db
     .select({ pattern: merchantCategories.pattern })
     .from(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(oldName)));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(oldName, flow)));
   await db
     .update(merchantCategories)
     .set(target ? { groupName: nm, category: target.category } : { groupName: nm })
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(oldName)));
-  if (target) await sweepForPatterns(groupId, rows.map((r) => r.pattern));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(oldName, flow)));
+  if (target) await sweepForPatterns(groupId, rows.map((r) => r.pattern), flow);
 }
 
 /** Delete a whole group (all its names); its merchants re-fall or go ungrouped. */
-export async function deleteGroupForGroup(groupId: number, name: string): Promise<void> {
+export async function deleteGroupForGroup(groupId: number, flow: Flow, name: string): Promise<void> {
   const rows = await db
     .select({ pattern: merchantCategories.pattern })
     .from(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name)));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name, flow)));
   await db
     .delete(merchantCategories)
-    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name)));
-  await sweepForPatterns(groupId, rows.map((r) => r.pattern));
+    .where(and(eq(merchantCategories.groupId, groupId), groupMatch(name, flow)));
+  await sweepForPatterns(groupId, rows.map((r) => r.pattern), flow);
 }

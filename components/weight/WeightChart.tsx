@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { LineChart } from "@mui/x-charts/LineChart";
+import { LineChart, lineClasses } from "@mui/x-charts/LineChart";
 import { useTheme, alpha } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -75,9 +75,11 @@ export default function WeightChart({
     };
   }, [actual, target, trend, bandLow, bandHigh, ghost]);
 
-  const referenceColor = theme.palette.text.secondary; // Target (the plan): neutral gray, dotted
+  // theme.vars = CSS custom properties, so theme colors follow light/dark mode
+  // (theme.palette only holds the light scheme's values under cssVariables).
+  const referenceColor = theme.vars?.palette.text.secondary ?? theme.palette.text.secondary; // Target (the plan): neutral gray, dotted
   const trendColor = alpha(color, 0.5); // Trend: a lighter shade of the actual line, dashed
-  const avgColor = theme.palette.secondary.main;
+  const avgColor = theme.vars?.palette.secondary.main ?? theme.palette.secondary.main;
 
   const series = [
     ...(ghost && ghost.some((v) => v != null)
@@ -191,22 +193,22 @@ export default function WeightChart({
         margin={{ top: 8, right: 12, bottom: 4, left: 4 }}
         sx={{
           // Target = fine dots (the plan); Trend = long dashes (the projection).
-          "& .MuiLineElement-series-target": {
+          [`& .${lineClasses.line}[data-series="target"]`]: {
             strokeDasharray: "2 5",
             strokeWidth: 1.5,
           },
-          "& .MuiLineElement-series-trend": {
+          [`& .${lineClasses.line}[data-series="trend"]`]: {
             strokeDasharray: "9 6",
             strokeWidth: 1.5,
           },
-          "& .MuiLineElement-series-actual": { strokeWidth: 2.5 },
-          "& .MuiLineElement-series-movingAvg": { strokeWidth: 2 },
-          "& .MuiLineElement-series-bandLow, & .MuiLineElement-series-bandHigh": {
+          [`& .${lineClasses.line}[data-series="actual"]`]: { strokeWidth: 2.5 },
+          [`& .${lineClasses.line}[data-series="movingAvg"]`]: { strokeWidth: 2 },
+          [`& .${lineClasses.line}[data-series="bandLow"], & .${lineClasses.line}[data-series="bandHigh"]`]: {
             strokeDasharray: "1 4",
             strokeWidth: 1,
             opacity: 0.6,
           },
-          "& .MuiLineElement-series-ghost": { strokeDasharray: "4 4", strokeWidth: 1.5 },
+          [`& .${lineClasses.line}[data-series="ghost"]`]: { strokeDasharray: "4 4", strokeWidth: 1.5 },
         }}
       />
       ) : (

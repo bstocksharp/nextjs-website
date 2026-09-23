@@ -9,6 +9,7 @@ import Stack from "@mui/material/Stack";
 import Box from "@mui/material/Box";
 import TextField from "@mui/material/TextField";
 import MenuItem from "@mui/material/MenuItem";
+import ListSubheader from "@mui/material/ListSubheader";
 import Button from "@mui/material/Button";
 import Alert from "@mui/material/Alert";
 import SubmitButton from "@/components/shared/SubmitButton";
@@ -21,7 +22,6 @@ import {
   type TxnFund,
   type TxnBill,
 } from "./TransactionRow";
-import type { TxnAccount } from "./TransactionsTable";
 
 // The fuller edit for a transaction (the ⋮ → Edit details): everything the
 // inline row doesn't cover — merchant, date, note, fund, category, amount — in
@@ -31,17 +31,17 @@ export default function TransactionDetailDialog({
   txn,
   funds,
   bills,
-  accounts,
   merchants,
   sources,
+  onSaved,
   onClose,
 }: {
   txn: TxnRowData;
   funds: TxnFund[];
   bills: TxnBill[];
-  accounts: TxnAccount[];
   merchants: string[];
   sources: string[];
+  onSaved: (row: TxnRowData) => void;
   onClose: () => void;
 }) {
   const [category, setCategory] = React.useState(txn.category);
@@ -53,7 +53,7 @@ export default function TransactionDetailDialog({
   async function handle(formData: FormData) {
     setError(null);
     try {
-      await updateTransactionAction(txn.id, formData);
+      onSaved(await updateTransactionAction(txn.id, formData));
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't save.");
@@ -97,11 +97,15 @@ export default function TransactionDetailDialog({
               value={category}
               onChange={(e) => setCategory(e.target.value)}
             >
-              {CATEGORY_OPTIONS.map((c) => (
-                <MenuItem key={c.value} value={c.value}>
-                  {c.label}
-                </MenuItem>
-              ))}
+              {/* Select can't take fragments, so the grouped list is one flat array. */}
+              {(["out", "in"] as const).flatMap((flow) => [
+                <ListSubheader key={flow}>{flow === "out" ? "Money out" : "Money in"}</ListSubheader>,
+                ...CATEGORY_OPTIONS.filter((c) => c.flow === flow).map((c) => (
+                  <MenuItem key={c.value} value={c.value}>
+                    {c.label}
+                  </MenuItem>
+                )),
+              ])}
             </TextField>
             {category === "fund" ? (
               <TextField

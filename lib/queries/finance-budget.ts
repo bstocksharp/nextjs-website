@@ -13,6 +13,7 @@ import { getAtlasViewForGroup } from "@/lib/queries/finance-atlas";
 import { lastDayOfMonth, todayISO, currentMonthISO } from "@/lib/finance/parse";
 import { requireGroupId } from "@/lib/session";
 import { getGroupTimezone } from "@/lib/queries/group";
+import { dailyMoneyOut } from "@/lib/queries/finance-cashflow";
 import { formatMonth } from "@/lib/format";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +245,32 @@ export async function listBillsForMonth(
     .orderBy(asc(recurringExpenses.name));
 }
 
+/** Every recurring bill, for the explorer's bill-picker (its rows span all months). */
+export async function listBills(): Promise<
+  { id: number; name: string; paymentsPerYear: number }[]
+> {
+  const groupId = await requireGroupId();
+  return db
+    .select({
+      id: recurringExpenses.id,
+      name: recurringExpenses.name,
+      paymentsPerYear: recurringExpenses.paymentsPerYear,
+    })
+    .from(recurringExpenses)
+    .where(eq(recurringExpenses.groupId, groupId))
+    .orderBy(asc(recurringExpenses.name));
+}
+
+/** Open funds, for the explorer's fund-picker and "→ fund" row labels. */
+export async function listOpenFunds(): Promise<{ id: number; name: string }[]> {
+  const groupId = await requireGroupId();
+  return db
+    .select({ id: funds.id, name: funds.name })
+    .from(funds)
+    .where(and(eq(funds.groupId, groupId), isNull(funds.closedAt)))
+    .orderBy(asc(funds.name));
+}
+
 /**
  * Distinct merchant labels used before, most-used first, for the add/edit
  * type-ahead: expense MERCHANTS and income SOURCES kept separate so grandma
@@ -329,12 +356,16 @@ export type SpendTrend = {
 };
 
 /**
- * Cumulative DISCRETIONARY net spend by day-of-month for the viewed month and
- * the one before it — the "how am I tracking vs last month" curve. Net = spend
- * minus reimbursements (matches the pace headline). The current month's line
- * stops at today (nulls after) so the gap is read at the same day-of-month.
+ * Cumulative spend by day-of-month for the viewed month and the one before it —
+ * the "how am I tracking vs last month" curve. `discretionary` = net of
+ * reimbursements (matches the pace headline); `all` = every dollar out, per the
+ * cash-flow definition. The current month's line stops at today (nulls after)
+ * so the gap is read at the same day-of-month.
  */
-export async function getSpendTrend(month: string): Promise<SpendTrend> {
+export async function getSpendTrend(
+  month: string,
+  lane: "discretionary" | "all" = "discretionary",
+): Promise<SpendTrend> {
   const groupId = await requireGroupId();
   const tz = await getGroupTimezone(groupId);
   const today = todayISO(tz);
@@ -348,34 +379,44 @@ export async function getSpendTrend(month: string): Promise<SpendTrend> {
   const curPrefix = cur.slice(0, 7);
   const prevPrefix = prev.slice(0, 7);
 
-  const rows = await db
-    .select({
-      postedOn: transactions.postedOn,
-      amount: transactions.amount,
-      category: transactions.category,
-    })
-    .from(transactions)
-    .where(
-      and(
-        eq(transactions.groupId, groupId),
-        gte(transactions.postedOn, prev),
-        lte(transactions.postedOn, lastDayOfMonth(cur)),
-        or(
-          eq(transactions.category, "discretionary"),
-          eq(transactions.category, "reimbursement"),
-        ),
-      ),
-    );
+  // Per-day signed cents; for discretionary, reimbursements pull the total down.
+  const signedRows =
+    lane === "all"
+      ? (await dailyMoneyOut(groupId, prev, lastDayOfMonth(cur))).map((r) => ({
+          postedOn: r.postedOn,
+          signed: cents(r.amount),
+        }))
+      : (
+          await db
+            .select({
+              postedOn: transactions.postedOn,
+              amount: transactions.amount,
+              category: transactions.category,
+            })
+            .from(transactions)
+            .where(
+              and(
+                eq(transactions.groupId, groupId),
+                gte(transactions.postedOn, prev),
+                lte(transactions.postedOn, lastDayOfMonth(cur)),
+                or(
+                  eq(transactions.category, "discretionary"),
+                  eq(transactions.category, "reimbursement"),
+                ),
+              ),
+            )
+        ).map((r) => ({
+          postedOn: r.postedOn,
+          signed: r.category === "reimbursement" ? -cents(r.amount) : cents(r.amount),
+        }));
 
-  // Per-day net cents; reimbursements pull the running total back down.
   const curDaily = new Array<number>(curDays + 1).fill(0);
   const prevDaily = new Array<number>(prevDays + 1).fill(0);
-  for (const r of rows) {
+  for (const r of signedRows) {
     const day = Number(r.postedOn.slice(8, 10));
-    const signed = r.category === "reimbursement" ? -cents(r.amount) : cents(r.amount);
     const prefix = r.postedOn.slice(0, 7);
-    if (prefix === curPrefix && day >= 1 && day <= curDays) curDaily[day] += signed;
-    else if (prefix === prevPrefix && day >= 1 && day <= prevDays) prevDaily[day] += signed;
+    if (prefix === curPrefix && day >= 1 && day <= curDays) curDaily[day] += r.signed;
+    else if (prefix === prevPrefix && day >= 1 && day <= prevDays) prevDaily[day] += r.signed;
   }
 
   // Only cap at "today" when the viewed month IS the current one.

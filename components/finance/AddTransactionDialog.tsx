@@ -44,7 +44,8 @@ export default function AddTransactionDialog({
   // only pick a category to override for the special lanes.
   const [category, setCategory] = React.useState("auto");
   // Income destination: "track" = recorded, no budget effect; "spend" = adds to
-  // this month's Left-to-Spend. (A fund bump is separate + optional, below.)
+  // this month's Left-to-Spend; "reimbursement" = pays back a purchase (also
+  // credits Left-to-Spend). (A fund bump is separate + optional, below.)
   const [destination, setDestination] = React.useState("track");
   const [error, setError] = React.useState<string | null>(null);
   const billChoices = bills.filter((b) =>
@@ -61,7 +62,7 @@ export default function AddTransactionDialog({
     }
   }
 
-  const expenseCats = CATEGORY_OPTIONS.filter((c) => c.value !== "income");
+  const expenseCats = CATEGORY_OPTIONS.filter((c) => c.flow === "out");
 
   return (
     <Dialog open onClose={onClose} fullWidth maxWidth="xs">
@@ -111,11 +112,14 @@ export default function AddTransactionDialog({
                   helperText={
                     destination === "spend"
                       ? "Adds to this month's Left-to-Spend."
-                      : "Just recorded — no effect on the budget."
+                      : destination === "reimbursement"
+                        ? "Pays you back for a purchase — credits this month's Left-to-Spend."
+                        : "Just recorded — no effect on the budget."
                   }
                 >
                   <MenuItem value="track">Just track it</MenuItem>
                   <MenuItem value="spend">Spend it this month</MenuItem>
+                  <MenuItem value="reimbursement">It&apos;s a reimbursement</MenuItem>
                 </TextField>
                 {funds.length > 0 ? (
                   <TextField

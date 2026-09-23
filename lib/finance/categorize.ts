@@ -2,7 +2,10 @@
 // case-insensitive substring, longest pattern wins. Dependency-free so it's
 // shared by ingest, the backfill, manual "apply to all", and tests.
 
-export type SpendRule = { pattern: string; category: string };
+import { flowOf, type Flow } from "@/lib/finance/cashflow";
+
+/** A merchant → tag rule; `flow` says which side of the ledger it tags. */
+export type SpendRule = { pattern: string; category: string; flow?: Flow };
 
 /** The rule that governs a merchant: longest matching pattern wins (so a
  *  specific "WM SUPERCENTER #4279" override beats a broad "WALMART"). Null if
@@ -22,12 +25,17 @@ export function longestMatchingRule<T extends SpendRule>(
   return best;
 }
 
+/** Only the rules for one side of the ledger (legacy rules without a flow are spending). */
+export function rulesForFlow<T extends SpendRule>(rules: T[], flow: Flow): T[] {
+  return rules.filter((r) => (r.flow ?? "out") === flow);
+}
+
 /**
- * The analytics spend-category for a transaction:
- *  - fixed / amortized → the linked bill's ATLAS category (inherited for free)
- *  - discretionary     → the longest matching merchant rule, else null
- *  - anything else (income / fund / savings / reimbursement / ignored) → null,
- *    since those aren't "spend" and would pollute the category breakdown.
+ * The tag for a transaction:
+ *  - fixed / amortized → the linked bill's ATLAS category, else a spending rule
+ *  - other money out (discretionary, savings, fund) → the longest spending rule
+ *  - money in (income, reimbursement) → the longest income rule
+ *  - Excluded → null (never counted, so never tagged)
  */
 export function spendCategoryFor(
   engineCategory: string,
@@ -35,9 +43,11 @@ export function spendCategoryFor(
   billCategory: string | null,
   rules: SpendRule[],
 ): string | null {
-  if (engineCategory === "fixed" || engineCategory === "amortized") {
-    return billCategory ?? null;
+  const flow = flowOf(engineCategory);
+  if (!flow) return null;
+  if ((engineCategory === "fixed" || engineCategory === "amortized") && billCategory) {
+    return billCategory;
   }
-  if (engineCategory !== "discretionary" || !merchant) return null;
-  return longestMatchingRule(merchant, rules)?.category ?? null;
+  if (!merchant) return null;
+  return longestMatchingRule(merchant, rulesForFlow(rules, flow))?.category ?? null;
 }

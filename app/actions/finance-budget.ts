@@ -15,12 +15,15 @@ import { requireGroupId } from "@/lib/session";
 import { getGroupTimezone } from "@/lib/queries/group";
 import { parseMoney, parseStr, parseInt as parseBoundedInt, todayISO } from "@/lib/finance/parse";
 import { categorizeMerchant } from "@/lib/finance/sms";
-import { merchantRulesFor } from "@/lib/finance/ingest";
+import { merchantRulesFor, resolveSpendCategory } from "@/lib/finance/ingest";
+import { toTxnRow } from "@/lib/queries/finance-transactions";
+import type { TxnRowData } from "@/components/finance/TransactionRow";
 
 // Budget writes — HOUSEHOLD data (requireEditor). The transaction TABLE is the
 // point of the whole app: SMS seeds a row, then anyone edits the row freely.
 
 const BUDGET = "/finance"; // the Budget tab is the finance app's landing page
+const EXPLORER = "/finance/transactions";
 
 const TXN_CATEGORIES = new Set([
   "discretionary",
@@ -71,11 +74,12 @@ async function validBill(groupId: number, id: number | null): Promise<number | n
  * Edit a transaction — the Lauren-proof path. PARTIAL: only fields present in
  * the form are touched, so an inline one-field save (tap a new category) never
  * blanks the note. Any edit clears needsReview (a human has looked at it now).
+ * Returns the saved row so a paged list can patch it in place.
  */
 export async function updateTransactionAction(
   id: number,
   formData: FormData,
-): Promise<void> {
+): Promise<TxnRowData> {
   await requireEditor();
   const { row, groupId } = await scopedTxn(id);
   const has = (k: string) => formData.has(k);
@@ -118,8 +122,27 @@ export async function updateTransactionAction(
     set.recurringExpenseId = null;
   }
 
-  await db.update(transactions).set(set).where(eq(transactions.id, id));
+  // An untagged row picks up its tag from the merchant rules (e.g. fixing an
+  // unreadable alert's merchant); an existing tag is never overwritten here.
+  if (row.spendCategory == null) {
+    set.spendCategory = await resolveSpendCategory(
+      groupId,
+      effectiveCategory,
+      "merchant" in set ? (set.merchant as string | null) : row.merchant,
+      "recurringExpenseId" in set
+        ? (set.recurringExpenseId as number | null)
+        : row.recurringExpenseId,
+    );
+  }
+
+  const [saved] = await db
+    .update(transactions)
+    .set(set)
+    .where(eq(transactions.id, id))
+    .returning();
   revalidatePath(BUDGET);
+  revalidatePath(EXPLORER);
+  return toTxnRow(saved);
 }
 
 /** Quick-add a transaction the bank didn't text (gas), or income (paycheck,
@@ -143,11 +166,15 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
   let storeAmount = amount; // the signed value actually stored
   if (kind === "income") {
     // Money in picks a budget destination: "spend" credits Left-to-Spend (a
-    // negative discretionary row — reads green "+", raises the budget); anything
-    // else is just tracked with no budget effect.
-    if (String(formData.get("destination")) === "spend") {
+    // negative discretionary row — reads green "+", raises the budget);
+    // "reimbursement" is a payback (credits the budget, tracked on its own);
+    // anything else is just tracked with no budget effect.
+    const destination = String(formData.get("destination"));
+    if (destination === "spend") {
       category = "discretionary";
       storeAmount = (-Number(amount)).toFixed(2);
+    } else if (destination === "reimbursement") {
+      category = "reimbursement";
     } else {
       category = "income";
     }
@@ -193,6 +220,7 @@ export async function addManualTransactionAction(formData: FormData): Promise<vo
     category,
     fundId,
     recurringExpenseId,
+    spendCategory: await resolveSpendCategory(groupId, category, merchant, recurringExpenseId),
     source: "manual",
     note: parseStr(formData.get("note")),
   });
@@ -230,6 +258,7 @@ export async function deleteTransactionAction(
   await scopedTxn(id); // group-scope check
   await db.delete(transactions).where(eq(transactions.id, id));
   revalidatePath(BUDGET);
+  revalidatePath(EXPLORER);
 }
 
 // ── Funds — imaginary envelopes (balance disconnected from real accounts) ─────
