@@ -8,7 +8,9 @@ import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import MenuItem from "@mui/material/MenuItem";
 import Button from "@mui/material/Button";
+import Autocomplete from "@mui/material/Autocomplete";
 import SearchIcon from "@mui/icons-material/Search";
+import type { Flow } from "@/lib/finance/cashflow";
 
 export type RawFilters = {
   q: string;
@@ -18,7 +20,12 @@ export type RawFilters = {
   from: string;
   to: string;
   cat: string; // "" = all, "__none__" = uncategorized, else the category
+  group: string; // "" = all, else a merchant group's name
+  groupflow: Flow; // which side that group lives on
 };
+
+/** A merchant group offered by the Group filter (from the Categories page). */
+export type GroupOption = { name: string; flow: Flow };
 
 const UNCATEGORIZED = "__none__";
 // History opens on this year; any other range (All time included) goes in the URL.
@@ -27,6 +34,7 @@ const DEFAULT_RANGE = "year";
 const RANGES = [
   { value: "all", label: "All time" },
   { value: "year", label: "This year" },
+  { value: "lastyear", label: "Last year" },
   { value: "6mo", label: "Past 6 months" },
   { value: "12mo", label: "Past 12 months" },
   { value: "custom", label: "Custom range" },
@@ -45,6 +53,10 @@ function buildUrl(pathname: string, v: RawFilters): string {
     if (v.to) p.set("to", v.to);
   }
   if (v.cat) p.set("cat", v.cat);
+  if (v.group) {
+    p.set("group", v.group);
+    if (v.groupflow === "in") p.set("groupflow", "in");
+  }
   const qs = p.toString();
   return qs ? `${pathname}?${qs}` : pathname;
 }
@@ -52,9 +64,11 @@ function buildUrl(pathname: string, v: RawFilters): string {
 export default function TxnFilterBar({
   raw,
   categories,
+  groups,
 }: {
   raw: RawFilters;
   categories: string[];
+  groups: GroupOption[]; // sorted spending-first, so the picker's headings group cleanly
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -66,6 +80,9 @@ export default function TxnFilterBar({
   const [from, setFrom] = React.useState(raw.from);
   const [to, setTo] = React.useState(raw.to);
   const [cat, setCat] = React.useState(raw.cat);
+  const [group, setGroup] = React.useState<GroupOption | null>(
+    raw.group ? { name: raw.group, flow: raw.groupflow } : null,
+  );
 
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,6 +106,8 @@ export default function TxnFilterBar({
     from,
     to,
     cat,
+    group: group?.name ?? "",
+    groupflow: group?.flow ?? "out",
     ...over,
   });
 
@@ -100,11 +119,12 @@ export default function TxnFilterBar({
     setFrom("");
     setTo("");
     setCat("");
+    setGroup(null);
     if (timer.current) clearTimeout(timer.current);
     router.push(pathname);
   };
 
-  const hasAny = q || min || max || (range && range !== DEFAULT_RANGE) || cat;
+  const hasAny = q || min || max || (range && range !== DEFAULT_RANGE) || cat || group;
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2 }, mb: 2 }}>
@@ -235,6 +255,23 @@ export default function TxnFilterBar({
             </MenuItem>
           ))}
         </TextField>
+
+        {/* A merchant group covers every spelling it catches (WAL-MART #4279,
+            WM SUPERCENTER #284…), which one merchant search can't. */}
+        <Autocomplete
+          size="small"
+          options={groups}
+          groupBy={(g) => (g.flow === "in" ? "Income groups" : "Spending groups")}
+          getOptionLabel={(g) => g.name}
+          isOptionEqualToValue={(a, b) => a.name === b.name && a.flow === b.flow}
+          value={group}
+          onChange={(_, g) => {
+            setGroup(g);
+            commit(vals({ group: g?.name ?? "", groupflow: g?.flow ?? "out" }), true);
+          }}
+          renderInput={(params) => <TextField {...params} label="Group" placeholder="Walmart…" />}
+          sx={{ width: 220 }}
+        />
 
         {hasAny ? (
           <Button size="small" color="inherit" onClick={clearAll}>

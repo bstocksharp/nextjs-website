@@ -20,6 +20,8 @@ import AccordionDetails from "@mui/material/AccordionDetails";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import AddIcon from "@mui/icons-material/Add";
+import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import Link from "@/components/shared/AppLink";
 import {
   retagGroupAction,
   upsertNameAction,
@@ -117,15 +119,26 @@ function GroupCard({
       </AccordionSummary>
       <AccordionDetails>
         <Stack spacing={2}>
-          {editable ? (
-            <CategorySelect
-              label="Category"
-              value={group.category}
-              categories={categories}
-              disabled={busy}
-              onPick={(cat) => run(() => retagGroupAction(flow, group.name, cat))}
-            />
-          ) : null}
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ flexWrap: "wrap", rowGap: 1 }}>
+            {editable ? (
+              <CategorySelect
+                label="Category"
+                value={group.category}
+                categories={categories}
+                disabled={busy}
+                onPick={(cat) => run(() => retagGroupAction(flow, group.name, cat))}
+              />
+            ) : null}
+            {/* Every merchant this group catches, across all its spellings. */}
+            <Button
+              size="small"
+              component={Link}
+              href={`/finance/transactions?group=${encodeURIComponent(group.name)}${flow === "in" ? "&groupflow=in" : ""}`}
+              endIcon={<ArrowForwardIcon fontSize="small" />}
+            >
+              See in History
+            </Button>
+          </Stack>
 
           {/* Match-names */}
           <Box>
